@@ -1,3 +1,14 @@
+"""\
+  Init   module.
+
+Classes:
+- None
+
+Functions:
+- None
+
+Created: 2025-05-03
+"""
 
 import types, sys, importlib, pathlib
 _src_pkg = importlib.import_module('src.algorithms')

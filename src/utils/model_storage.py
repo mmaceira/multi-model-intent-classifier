@@ -1,4 +1,17 @@
-"""Utility functions for storing and loading trained models."""
+"""\
+Model Storage module.
+
+Classes:
+- None
+
+Functions:
+- save_model
+- load_model
+- list_available_models
+
+Created: 2025-05-03
+"""
+
 import os
 import joblib
 from pathlib import Path

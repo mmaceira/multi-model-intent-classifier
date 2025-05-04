@@ -1,5 +1,15 @@
+"""\
+Classifier Base module.
 
-"""Abstract base class for RAG classifiers."""
+Classes:
+- RagClassifierBase
+
+Functions:
+- None
+
+Created: 2025-05-03
+"""
+
 from abc import ABC, abstractmethod
 from typing import Sequence
 import numpy as np

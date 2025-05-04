@@ -1,5 +1,15 @@
+"""\
+Centroid Nn module.
 
-"""Nearest centroid classifier."""
+Classes:
+- CentroidNN
+
+Functions:
+- None
+
+Created: 2025-05-03
+"""
+
 from typing import Sequence
 import numpy as np
 from .classifier_base import RagClassifierBase
@@ -12,8 +22,8 @@ class CentroidNN(RagClassifierBase):
         self.centroids = {k: v/np.linalg.norm(v) for k, v in centroids.items()}
 
     @classmethod
-    def load_default(cls):
-        retriever = Retriever.from_default()
+    def load_default(cls, use_openai: bool = False, **kwargs):
+        retriever = Retriever.from_default(use_openai=use_openai)
         by_lbl: dict[str, list[np.ndarray]] = {}
         for m in retriever.store.meta:
             by_lbl.setdefault(m['label'], []).append(np.array(m['vector']))

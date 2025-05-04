@@ -1,41 +1,96 @@
+"""\
+Model results comparison module.
+
+This module provides tools for comparing and visualizing the performance
+of different text classification models. It includes functions for loading
+evaluation results and creating visualizations to compare model metrics.
+
+Functions:
+- load_results: Load and aggregate model evaluation results
+- plot_macro_f1: Create bar plot of model F1 scores
+
+Created: 2025-05-03
+"""
+
 # model_results_comparison.py
 
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import List, Dict, Any
 
-def load_results(results_dir='results'):
+def load_results(results_dir: str = 'results') -> pd.DataFrame:
+    """Load and aggregate model evaluation results.
+    
+    This function loads evaluation results from CSV files in the
+    specified directory and aggregates them into a single DataFrame.
+    It assumes each model's results are stored in a separate CSV file.
+    
+    Args:
+        results_dir: Directory containing result files (default: 'results')
+        
+    Returns:
+        DataFrame containing aggregated evaluation metrics
+        
+    Example:
+        >>> df = load_results('results')
+        >>> print(f"Number of models: {len(df)}")
     """
-    Reads all *_report.csv files in the results_dir and extracts accuracy, macro_precision, macro_recall, macro_f1.
-    Returns a DataFrame with one row per model.
-    """
-    records = []
-    for fname in os.listdir(results_dir):
-        if fname.endswith('_report.csv'):
-            model_name = fname.replace('_report.csv', '').replace('_', ' ')
-            path = os.path.join(results_dir, fname)
-            report = pd.read_csv(path, index_col=0)
-            macro = report.loc['macro avg']
-            accuracy = report.loc['accuracy', 'precision']  # accuracy is stored in the 'precision' column
-            records.append({
-                'model': model_name,
-                'accuracy': accuracy,
-                'macro_precision': macro['precision'],
-                'macro_recall': macro['recall'],
-                'macro_f1': macro['f1-score'],
-            })
-    df = pd.DataFrame(records).set_index('model')
-    return df
+    results = []
+    
+    # Load each model's results
+    for filename in os.listdir(results_dir):
+        if filename.endswith('_report.csv'):
+            model_name = filename.replace('_report.csv', '')
+            df = pd.read_csv(os.path.join(results_dir, filename))
+            df['model'] = model_name
+            results.append(df)
+    
+    # Combine all results
+    if not results:
+        return pd.DataFrame()
+        
+    return pd.concat(results, ignore_index=True)
 
-def plot_macro_f1(df):
+def plot_macro_f1(df: pd.DataFrame, save_path: str = None) -> None:
+    """Create bar plot of model macro-F1 scores.
+    
+    This function creates a bar plot comparing the macro-F1 scores
+    of different models. The models are sorted by F1 score in
+    descending order.
+    
+    Args:
+        df: DataFrame containing model evaluation results
+        save_path: Path to save the plot (default: None)
+        
+    Example:
+        >>> df = load_results()
+        >>> plot_macro_f1(df, save_path='results/f1_comparison.png')
     """
-    Plots a bar chart of macro-F1 scores for each model.
-    """
-    df_sorted = df.sort_values('macro_f1', ascending=False)
-    plt.figure(figsize=(6,3))
-    plt.bar(df_sorted.index, df_sorted['macro_f1'])
-    plt.ylabel('Macro‑F1')
-    plt.title('Model performance comparison')
-    plt.xticks(rotation=15)
-    plt.ylim(0, 1.0)
-    plt.show()
+    if df.empty:
+        return
+        
+    # Extract macro-F1 scores
+    f1_scores = df[df['Unnamed: 0'] == 'macro avg']['f1-score']
+    models = df[df['Unnamed: 0'] == 'macro avg']['model']
+    
+    # Sort by F1 score
+    order = f1_scores.argsort()[::-1]
+    f1_scores = f1_scores.iloc[order]
+    models = models.iloc[order]
+    
+    # Create visualization
+    plt.figure(figsize=(10, 6))
+    sns.barplot(x=models, y=f1_scores)
+    plt.title('Model Comparison (Macro-F1 Score)')
+    plt.xlabel('Model')
+    plt.ylabel('Macro-F1 Score')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()

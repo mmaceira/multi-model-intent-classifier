@@ -1,13 +1,17 @@
-"""dataset.py – Load and filter the Reuters‑21578 corpus.
+"""\
+Dataset module.
 
-This utility provides two helpers:
+Classes:
+- None
 
-* **load_data(n_classes=None)** – standard train/test split.
-* **load_data_temporal(cutoff_year=1996, n_classes=None)** – temporal split.
+Functions:
+- _extract_year
+- load_data
+- load_data_temporal
 
-Both return:
-    X_train, y_train, X_test, y_test, class_labels
+Created: 2025-05-03
 """
+
 from __future__ import annotations
 from typing import List, Tuple, Optional
 import nltk

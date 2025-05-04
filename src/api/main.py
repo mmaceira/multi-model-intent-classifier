@@ -1,6 +1,17 @@
+"""\
+Main module.
+
+Classes:
+- Query
+- Response
+
+Functions:
+- get_classifiers
+- classify
+
+Created: 2025-05-03
 """
-FastAPI microservice exposing the RAG classifier as an HTTP endpoint.
-"""
+
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field

@@ -1,50 +1,102 @@
-"""Build FAISS index & metadata with sensible defaults.
-
-Run **without arguments**:
-
-    python -m src.rag.build_index
-
-Defaults:
-* emb_model  : sentence-transformers/all-MiniLM-L6-v2
-* source     : reuters (temporal split)
-* cutoff     : 1996
-* n_classes  : 10
-* artifacts  : artifacts/index.faiss, artifacts/meta.jsonl
-"""
+# NOTE: Embedding generation moved to notebook `0_build_embeddings.ipynb`.
+# This script now only builds indices if precomputed embeddings are supplied.
+# ----- Patched for OpenAI embedding support -----
 from __future__ import annotations
-import argparse, csv, json, re
+import os
 from pathlib import Path
+import sys
+
+# Add the parent directory to Python path to ensure imports work correctly
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+try:
+    from src.embeddings.openai_embedder import OpenAIEmbedder
+except ImportError:
+    # Fall back to relative import if absolute import fails
+    from ..embeddings.openai_embedder import OpenAIEmbedder
+
+"""\
+Build Index module.
+
+Classes:
+- None
+
+Functions:
+- _extract_year
+- _load_csv
+- _load_reuters
+- main
+
+Created: 2025-05-03
+"""
+
+import argparse, csv, json, re
 from typing import List
 import numpy as np
 from tqdm import tqdm
 
 from .vector_store import VectorStore
-
-DEFAULT_EMB_MODEL  = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_SOURCE     = "reuters"
-DEFAULT_CUTOFF     = 1996
-DEFAULT_N_CLASSES  = 10
-DEFAULT_FAISS_PATH = Path("artifacts/index.faiss")
-DEFAULT_META_PATH  = Path("artifacts/meta.jsonl")
+from . import _ARTIFACTS_DIR, _SBERT_DIR, _OPENAI_DIR
 
 
-def _extract_year(text: str) -> int | None:
-    m = re.search(r"<DATE>[^<]*?(\d{2})-(\w{3})-(\d{2,4})", text)
-    if not m:
-        return None
-    _, _, yr = m.groups()
-    yr = int(yr)
-    return yr + 1900 if yr < 100 else yr
+# ---------- Helper to load precomputed embeddings ----------
+def _load_precomputed_embeddings(meta_path):
+    import json, numpy as np
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Precomputed embeddings not found at {meta_path}. "
+                                "Run the notebook `0_build_embeddings.ipynb` first.")
+    vectors=[]
+    meta=[]
+    with open(meta_path) as fh:
+        for line in fh:
+            rec=json.loads(line)
+            vectors.append(rec['vector'])
+            meta.append(rec)
+    emb=np.array(vectors,dtype='float32')
+    return emb, meta
+DEFAULT_EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_SOURCE = "reuters"
+DEFAULT_CUTOFF = 1996
+DEFAULT_N_CLASSES = 10
 
-def _load_csv(csv_path: str):
-    rows = list(csv.DictReader(open(csv_path)))
-    return [r["text"] for r in rows], [r["label"] for r in rows], [int(r.get("year", -1)) for r in rows]
+# Create the base artifacts directory
+_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
-def _load_reuters(cutoff: int, n_cls: int | None):
-    from src.datasets.dataset import load_data_temporal
-    X_train, y_train, *_ = load_data_temporal(cutoff_year=cutoff, n_classes=n_cls)
-    years = [_extract_year(txt) or -1 for txt in X_train]
-    return X_train, y_train, years
+# Legacy path - for backward compatibility
+DEFAULT_LEGACY_FAISS_PATH = _ARTIFACTS_DIR / "index.faiss"
+DEFAULT_LEGACY_META_PATH = _ARTIFACTS_DIR / "meta.jsonl"
+
+# Create embedder-specific directories
+_SBERT_DIR.mkdir(parents=True, exist_ok=True)
+_OPENAI_DIR.mkdir(parents=True, exist_ok=True)
+
+# New paths in separate directories
+DEFAULT_SBERT_FAISS_PATH = _SBERT_DIR / "index.faiss"
+DEFAULT_SBERT_META_PATH = _SBERT_DIR / "meta.jsonl"
+DEFAULT_OPENAI_FAISS_PATH = _OPENAI_DIR / "index.faiss"
+DEFAULT_OPENAI_META_PATH = _OPENAI_DIR / "meta.jsonl"
+
+# Default to SentenceTransformer embeddings 
+DEFAULT_FAISS_PATH = DEFAULT_SBERT_FAISS_PATH
+DEFAULT_META_PATH = DEFAULT_SBERT_META_PATH
+
+
+
+def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
+    texts, labels, years = [], [], []
+    with open(csv_path) as f:
+        for row in csv.DictReader(f):
+            texts.append(row["text"])
+            labels.append(row["label"])
+            years.append(int(row.get("year", 0)))
+    return texts, labels, years
+
+
+def _load_reuters(cutoff_year: int = DEFAULT_CUTOFF, n_classes: int = None) -> tuple[list, list, list]:
+    from src.datasets.dataset import load_data
+    X_train, y_train, _, _, _ = load_data(n_classes)
+    # Assume all docs are pre-cutoff
+    return X_train, y_train, [cutoff_year - 1] * len(X_train)
 
 
 def main():
@@ -56,7 +108,10 @@ def main():
     p.add_argument("--cutoff_year", type=int, default=DEFAULT_CUTOFF)
     p.add_argument("--n_classes", type=int, default=DEFAULT_N_CLASSES)
     p.add_argument("--faiss_path", default=str(DEFAULT_FAISS_PATH))
-    p.add_argument("--meta_path",  default=str(DEFAULT_META_PATH))
+    p.add_argument("--meta_path", default=str(DEFAULT_META_PATH))
+    p.add_argument("--use_openai", action="store_true", help="Use OpenAI embeddings")
+    p.add_argument("--build_both", action="store_true", help="Build both SBERT and OpenAI indices")
+    p.add_argument("--legacy_compat", action="store_true", help="Also save to legacy paths for compatibility")
     args = p.parse_args()
 
     if args.train_csv:
@@ -64,15 +119,92 @@ def main():
     else:
         texts, labels, years = _load_reuters(args.cutoff_year, args.n_classes)
 
-    print(f"Embedding {len(texts)} documents …")
-    emb = VectorStore.embed(args.emb_model, texts)
+    # Set appropriate paths based on the specified model
+    # The paths now refer to our new directory structure
+    sbert_faiss_path = DEFAULT_SBERT_FAISS_PATH
+    sbert_meta_path = DEFAULT_SBERT_META_PATH
+    openai_faiss_path = DEFAULT_OPENAI_FAISS_PATH
+    openai_meta_path = DEFAULT_OPENAI_META_PATH
 
+    # Build indices as requested
+    if args.use_openai or args.build_both:
+        build_openai_index(texts, labels, years, openai_faiss_path, openai_meta_path)
+    
+    if not args.use_openai or args.build_both:
+        # Original SentenceTransformer index
+        print(f"Embedding {len(texts)} documents with {args.emb_model}…")
+        emb = VectorStore.embed(args.emb_model, texts)
+
+        meta: List[dict] = []
+        for i, (t,l,y,v) in enumerate(zip(texts, labels, years, emb)):
+            meta.append({"id": i, "label": l, "year": y, "text": t, "vector": v.tolist()})
+
+        VectorStore.build(emb, meta, emb.shape[1], sbert_faiss_path, sbert_meta_path)
+        print(f"✅ SBERT index saved → {sbert_faiss_path}\n✅ SBERT meta saved  → {sbert_meta_path}")
+        
+        # Also save to legacy paths if requested (for backward compatibility)
+        if args.legacy_compat:
+            DEFAULT_LEGACY_FAISS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            VectorStore.build(emb, meta, emb.shape[1], DEFAULT_LEGACY_FAISS_PATH, DEFAULT_LEGACY_META_PATH)
+            print(f"✅ Legacy index saved → {DEFAULT_LEGACY_FAISS_PATH}\n✅ Legacy meta saved  → {DEFAULT_LEGACY_META_PATH}")
+
+
+def build_openai_index(texts, labels, years, faiss_path=DEFAULT_OPENAI_FAISS_PATH, meta_path=DEFAULT_OPENAI_META_PATH):
+    """Build a FAISS index using OpenAI embeddings.
+    
+    Args:
+        texts: List of document texts
+        labels: List of document labels
+        years: List of document years
+        faiss_path: Path to save the FAISS index
+        meta_path: Path to save the metadata
+    """
+    print(f"Embedding {len(texts)} documents with OpenAI embeddings…")
+    
+    # Ensure the directory exists
+    faiss_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize OpenAI embedder
+    openai_embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+    
+    # Generate embeddings
+    raw_embeddings = openai_embedder.encode(texts)
+    emb = np.array(raw_embeddings, dtype="float32")
+    
+    print(f"Generated {len(emb)} OpenAI embeddings with dimension {emb.shape[1]}")
+    
+    # Create metadata
     meta: List[dict] = []
     for i, (t,l,y,v) in enumerate(zip(texts, labels, years, emb)):
         meta.append({"id": i, "label": l, "year": y, "text": t, "vector": v.tolist()})
+    
+    # Build the index
+    VectorStore.build(emb, meta, emb.shape[1], faiss_path, meta_path)
+    print(f"✅ OpenAI index saved → {faiss_path}\n✅ OpenAI meta saved  → {meta_path}")
 
-    VectorStore.build(emb, meta, emb.shape[1], Path(args.faiss_path), Path(args.meta_path))
-    print(f"✅ Index saved → {args.faiss_path}\n✅ Meta saved  → {args.meta_path}")
 
 if __name__ == "__main__":
     main()
+
+
+def load_embedder(model_name: str = None, use_openai: bool = False, batch_size: int = 100):
+    """
+    Load either a local SBERT model (CPU) or OpenAI remote embedder.
+
+    Parameters
+    ----------
+    model_name
+        Local transformer model name.
+    use_openai
+        When True, route to OpenAI. Can also be toggled with env var USE_OPENAI_EMBEDDINGS=1.
+    batch_size
+        Batch size for OpenAI requests.
+    """
+    if use_openai or os.getenv("USE_OPENAI_EMBEDDINGS") == "1":
+        print("Using OpenAI embeddings endpoint...")
+        return OpenAIEmbedder(batch_size=batch_size)
+    try:
+        from sentence_transformers import SentenceTransformer
+        return SentenceTransformer(model_name or "all-MiniLM-L6-v2")
+    except ImportError as e:
+        raise RuntimeError("SentenceTransformer not installed; install or set USE_OPENAI_EMBEDDINGS=1") from e

@@ -1,5 +1,15 @@
+"""\
+Rag Kmajority module.
 
-"""k‑NN majority vote classifier."""
+Classes:
+- RagKMajority
+
+Functions:
+- None
+
+Created: 2025-05-03
+"""
+
 from typing import Sequence
 from .classifier_base import RagClassifierBase
 from .retrieval import Retriever
@@ -12,8 +22,8 @@ class RagKMajority(RagClassifierBase):
         self.top_k = top_k
 
     @classmethod
-    def load_default(cls, top_k: int = 5):
-        retriever = Retriever.from_default()
+    def load_default(cls, top_k: int = 5, use_openai: bool = False):
+        retriever = Retriever.from_default(use_openai=use_openai)
         labels = {m['label'] for m in retriever.store.meta}
         return cls(retriever, sorted(labels), top_k)
 
