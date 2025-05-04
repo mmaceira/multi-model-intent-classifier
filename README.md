@@ -20,7 +20,28 @@ Why stakeholders should care:
 * **Analyst productivity** – 94% auto‑tag accuracy frees editorial staff to focus on high‑value insight.  
 * **Downstream ML** – Cleanly‑labeled corpora improve trend‑detection, summarisation, and recommendation engines.
 
-## 3. Approach  
+## 3. Project Structure
+
+```
+reuters-rag-classifier/
+├── config/              # Configuration files
+├── notebooks/           # Jupyter notebooks for analysis
+├── output/             # Model outputs and results
+├── scripts/            # Utility scripts
+├── src/                # Main source code
+│   ├── algorithms/     # ML algorithms implementation
+│   ├── analysis/       # Data analysis modules
+│   ├── datasets/       # Dataset handling
+│   ├── embeddings/     # Embedding generation
+│   ├── rag/           # RAG implementation
+│   └── utils/         # Utility functions
+├── venv/              # Virtual environment
+├── .env              # Environment variables
+├── requirements.txt  # Project dependencies
+└── README.md        # This file
+```
+
+## 4. Approach  
 We compare **three model families** to balance speed, interpretability, and accuracy:
 
 | Model | Representation | Pros | Cons |
@@ -31,12 +52,11 @@ We compare **three model families** to balance speed, interpretability, and accu
 
 The pipeline stages:
 
-1. **Ingest** → load corpus via `nltk.corpus.reuters`.  
-2. **Pre‑process** → tokenise, remove stop‑words, TF‑IDF for classical models.  
-3. **Vectorise / Embed** → TF‑IDF or MiniLM sentence embeddings.  
-4. **Train** → fit classifier (`sklearn` or custom wrapper).  
-5. **Evaluate** → accuracy, macro‑F1, confusion matrix.  
-6. **Retrieve** → demo semantic search with cosine similarity.
+1. **Data Loading** → Load and preprocess Reuters corpus
+2. **Feature Engineering** → TF-IDF or transformer embeddings
+3. **Model Training** → Train and validate models
+4. **Evaluation** → Comprehensive metrics and analysis
+5. **RAG Implementation** → Semantic search capabilities
 
 ### 3.1 How do our numbers compare to the literature?
 A **quick benchmarking survey** on the *Reuters‑21578* corpus (top‑10 topics variant) drawn from recent publications:
@@ -47,10 +67,17 @@ A **quick benchmarking survey** on the *Reuters‑21578* corpus (top‑10 topics
 | ResearchGate table (2022) – Transformer (UG‑MLP) | 0.92 |
 | **Our baseline (MiniLM + LogReg)** | ~0.87 |
 
-*Take‑away:* while classical baselines sit in the **0.80–0.85** band, *state‑of‑the‑art fine‑tuned transformers* reach **≥ 0.90**.  
-That sets a *north‑star* for the improvements we implement next.
+### Core Features
+- ✅ Reuters-21578 dataset integration
+- ✅ Classical ML models (Naive Bayes, SVM)
+- ✅ Transformer-based embeddings
+- ✅ RAG implementation with FAISS
+- ✅ Comprehensive evaluation suite
 
----
+### In Progress (scripts folder)
+- 🔄 Hyperparameter optimization
+- 🔄 Cross-encoder re-ranking
+- 🔄 API deployment
 
 ## ⚙️ Model Zoo
 
@@ -104,20 +131,41 @@ That sets a *north‑star* for the improvements we implement next.
 ## 🚀 Quick Start
 
 ```bash
-# 1. create env
+# 1. Create and activate virtual environment
 python -m venv venv/reuters-rag-classifier
 source venv/reuters-rag-classifier/bin/activate
+
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 2. baseline run
-python cli.py fit --config configs/config.yaml --model nb_tfidf
+# 3. Run analysis, training, evaluation and analysis notebooks
+jupyter notebook notebooks/
 
-# 3. hyper‑parameter sweep (30 trials)
-python scripts/tune_hyperparams.py --config configs/config.yaml
-
-# 4. launch the Gradio demo
-python scripts/gradio_demo.py
 ```
+
+## 7. Development Guidelines
+
+### Code Style
+- Follow PEP 8 guidelines
+- Use type hints for better code maintainability
+- Document all public functions and classes
+
+### Testing
+- Unit tests for core functionality
+- Integration tests for pipeline components
+- Performance benchmarks for critical paths
+
+### Documentation
+- Keep README up to date
+- Document all configuration options
+- Maintain clear API documentation
+
+## 8. Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ---
 
