@@ -39,7 +39,9 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise EnvironmentError("OPENAI_API_KEY not set in environment")
 
-_PROMPT_SYSTEM = "You are a news‑topic classifier. Respond with a JSON list of labels."
+_PROMPT_SYSTEM = """You are a news-topic classifier. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
+For example: {"labels": ["earn", "acq", "grain"]}
+Do NOT use code blocks, markdown, or explanations. Return ONLY valid JSON."""
 
 
 def _exponential_backoff(attempt: int) -> float:
@@ -60,9 +62,9 @@ class RagLLM(RagClassifierBase):
         *,
         model: str = "gpt-4o-mini",
         top_k: int = 5,
-        batch_size: int = 16,
-        max_concurrency: int = 4,
-        rate_limit_per_minute: int = 240,
+        batch_size: int = 8,
+        max_concurrency: int = 2,
+        rate_limit_per_minute: int = 120,
         embedder: Callable[[Sequence[str]], Iterable[Sequence[float]]] | None = None,
         max_retries: int = 5,
     ):
@@ -92,19 +94,35 @@ class RagLLM(RagClassifierBase):
         return np.array(self.embedder(list(docs)), dtype="float32")
 
     async def _chat_with_retry(self, messages) -> openai.chat.completion.ChatCompletion:
+        last_request_time = time.time()
         for attempt in range(self.max_retries):
             try:
-                # rate limit sleep
-                await asyncio.sleep(self._min_interval)
+                # Calculate time since last request and wait if needed
+                now = time.time()
+                time_since_last = now - last_request_time
+                if time_since_last < self._min_interval:
+                    wait_time = max(0, self._min_interval - time_since_last)
+                    await asyncio.sleep(wait_time)
+                
+                # Update last request time
+                last_request_time = time.time()
+                
+                # Make the API call with JSON response format
                 return await self._client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     temperature=0.0,
+                    response_format={"type": "json_object"},
                 )
             except RateLimitError as exc:
                 wait = _exponential_backoff(attempt)
                 logger.warning("Rate‑limit hit: waiting %.1fs (attempt %d/%d)", wait, attempt+1, self.max_retries)
                 await asyncio.sleep(wait)
+            except Exception as e:
+                wait = _exponential_backoff(attempt)
+                logger.error(f"API error: {str(e)} - waiting {wait:.1f}s (attempt {attempt+1}/{self.max_retries})")
+                await asyncio.sleep(wait)
+                
         raise RuntimeError("OpenAI API failed after retries")
 
     async def _classify_batch(
@@ -122,33 +140,82 @@ class RagLLM(RagClassifierBase):
         for i,(doc,ctx) in enumerate(zip(docs, contexts), start=1):
             lines.append(f"{i}. Article: {doc}\nContext:\n{ctx}")
         user_content = (
-            f"Allowed labels: {allowed}\n\n"
+            f"Classify these news articles into ONE of these categories: {allowed}\n\n"
             + "\n\n".join(lines)
-            + "\n\nRespond with a JSON array of labels in order."
+            + "\n\nRespond with a JSON object that has a 'labels' property containing an array of labels: {'labels': ['label1', 'label2']}. "
+            + "No explanation, no formatting, just JSON."
         )
         messages = [
             {"role": "system", "content": _PROMPT_SYSTEM},
             {"role": "user", "content": user_content},
         ]
 
+        # Add a specific response format instruction
+        messages.append({
+            "role": "assistant", 
+            "content": "I'll respond with only a JSON object: {\"labels\": [\"label1\", \"label2\"]}"
+        })
+
         resp = await self._chat_with_retry(messages)
         text = resp.choices[0].message.content.strip()
+        
+        # Improved JSON parsing with better error handling
         try:
-            labels_out = __import__('json').loads(text)
-            if isinstance(labels_out, list) and len(labels_out)==len(docs):
+            import json
+            response_data = json.loads(text)
+            
+            # Check if the response has a 'labels' property
+            if isinstance(response_data, dict) and 'labels' in response_data:
+                labels_out = response_data['labels']
+            # Fallback to assuming the entire object is the array
+            elif isinstance(response_data, list):
+                labels_out = response_data
+            # Handle case when response doesn't match expected format
+            else:
+                # Try to find any array in the response
+                for key, value in response_data.items():
+                    if isinstance(value, list) and len(value) > 0:
+                        labels_out = value
+                        logger.warning(f"Using array found at key '{key}' instead of 'labels'")
+                        break
+                else:
+                    logger.error(f"No array found in response: {response_data}")
+                    return [self.labels[0]] * len(docs)
+            
+            if isinstance(labels_out, list):
+                # Handle case where number of labels doesn't match docs
+                if len(labels_out) != len(docs):
+                    logger.warning(f"Expected {len(docs)} labels but got {len(labels_out)}. Adjusting...")
+                    # Extend with first label if too short
+                    if len(labels_out) < len(docs):
+                        labels_out.extend([labels_out[0] if labels_out else self.labels[0]] * (len(docs) - len(labels_out)))
+                    # Truncate if too long
+                    else:
+                        labels_out = labels_out[:len(docs)]
+                
+                # Validate that all labels are in allowed list
                 return [lab if lab in self.labels else self.labels[0] for lab in labels_out]
-        except Exception:
-            logger.error("Failed parsing JSON batch response: %s", text)
+            else:
+                logger.error(f"Expected list but got {type(labels_out)}: {labels_out}")
+                return [self.labels[0]] * len(docs)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed parsing JSON batch response: {text} | Error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error handling batch response: {text} | Error: {e}")
+            
         # fallback: label all with first
         return [self.labels[0]] * len(docs)
 
     def predict(self, docs: Sequence[str]) -> List[str]:
         async def _run_all() -> List[str]:
+            logger.info(f"Starting prediction for {len(docs)} documents with batch size {self.batch_size}")
             embeddings = self._embed(docs)
             batches = [docs[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
             vec_batches = [embeddings[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
+            logger.info(f"Split into {len(batches)} batches")
             results: List[str] = []
-            for docs_batch,vec_batch in zip(batches,vec_batches):
+            for i, (docs_batch,vec_batch) in enumerate(zip(batches,vec_batches), 1):
+                logger.info(f"Processing batch {i}/{len(batches)} with {len(docs_batch)} documents")
                 async with self._sem:
                     preds = await self._classify_batch(docs_batch, list(vec_batch))
                 results.extend(preds)
