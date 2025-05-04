@@ -22,6 +22,7 @@ import logging
 from src.model import TextClassifier
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 class TransformerLogReg(TextClassifier):
     """Transformer embeddings + Logistic Regression classifier.

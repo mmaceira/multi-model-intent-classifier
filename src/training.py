@@ -1,149 +1,110 @@
-"""Training module for text classification models.
+"""Unified training workflow for text classification models.
 
-This module provides a *single-entry* helper ``run_trainings`` that
-makes it easy to train **one or many** models in a consistent way and
-persist them to disk so that the evaluation stage can later reload
-them.
+This module defines a *single* `run_training` function that:
+1. trains one or more estimators,
+2. optionally persists them,
+3. persists their predictions on the *test* split so that the evaluation
+   stage can run **without touching the models again**.
 
-Typical usage
--------------
->>> from src.training import run_trainings
->>> from sklearn.linear_model import LogisticRegression
->>> from sklearn.svm import LinearSVC
->>> models = {
-...     "logreg": Pipeline([
-...         ("tfidf", TfidfVectorizer()),
-...         ("clf", LogisticRegression(max_iter=1000))
-...     ]),
-...     "svm": Pipeline([
-...         ("tfidf", TfidfVectorizer()),
-...         ("clf", LinearSVC())
-...     ])
-... }
->>> trained = run_trainings(models, X_train, y_train,
-...                         output_dir="artifacts/models")
-
-The dictionary ``trained`` maps model names to the *fitted* model
-objects (so the notebook can keep working interactively), while—under
-the hood—each model is serialised to
-``{output_dir}/{model_name}.joblib`` via :pyfunc:`utils.model_storage.save_model`.
+The API is intentionally symmetric with `src.evaluation.run_evaluations`.
 """
 
 from __future__ import annotations
+from pathlib import Path
+from typing import Dict, Sequence, Any
 
-import os
 import joblib
-from typing import Dict, Any, List, Union
-import copy
-import logging
-
 import numpy as np
-from sklearn.base import clone, BaseEstimator
-from tqdm.auto import tqdm   # nice progress bars in notebooks
+import pandas as pd
+from sklearn.base import clone as safe_clone
 
-from src.utils.model_storage import save_model
+def _ensure_dir(path: str | Path) -> Path:
+    """Create *path* (including parents) if it does not exist and return a `Path`."""
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-# Set up logging
-logger = logging.getLogger(__name__)
-
-
-def _ensure_dir(path: str) -> None:
-    """Create *path* (recursively) if it does not already exist."""
-    os.makedirs(path, exist_ok=True)
-
-
-# Define a simple save function to match what run_trainings expects
-def _simple_save_model(model: Any, path: str) -> None:
-    """Simple wrapper to save a model to a file using joblib."""
-    try:
-        joblib.dump(model, path)
-        print(f"Saved model to {path}")
-    except Exception as e:
-        print(f"Warning: Failed to save model to {path}: {e}")
-        # Try to save a reduced version of the model
-        try:
-            # For RAG models, we might need special handling
-            if hasattr(model, 'rag'):
-                # Store only the class name and parameters
-                simplified = {
-                    'model_type': model.__class__.__name__,
-                    'rag_type': model.rag.__class__.__name__,
-                    'params': model.get_params(deep=False)
-                }
-                joblib.dump(simplified, path)
-                print(f"Saved simplified model description to {path}")
-        except Exception as e2:
-            print(f"Failed to save even simplified model: {e2}")
-
-
-def safe_clone(model):
-    """Safely clone a model, handling cases where standard clone fails."""
-    if hasattr(model, "__sklearn_clone__"):
-        # Use custom clone method if available
-        return model.__sklearn_clone__()
-    
-    try:
-        # Try standard sklearn clone
-        return clone(model)
-    except (TypeError, AttributeError) as e:
-        # Fallback for models that don't support cloning
-        logger.warning(f"Could not clone model using sklearn.base.clone: {e}")
-        logger.warning("Using direct model instance instead of cloning")
-        return model
-
-
-def run_trainings(
+def run_training(
     models: Dict[str, Any],
-    X_train: List[str],
-    y_train: Union[np.ndarray, List[int]],
     *,
-    output_dir: str = "models",
-    save: bool = True,
+    X_train: Sequence[str],
+    y_train: Sequence[Any],
+    X_test: Sequence[str] | None = None,
+    y_test: Sequence[Any] | None = None,
+    output_dir: str | Path = "artefacts",
+    save_models: bool = True,
+    save_train_predictions: bool = True,
     verbose: bool = True,
 ) -> Dict[str, Any]:
-    """Fit *one or many* models and (optionally) persist them to disk.
+    """Fit *models* and persist artefacts.
 
     Parameters
     ----------
     models
-        Mapping of **model name → *unfitted* estimator or Pipeline**.  Each
-        estimator **must** implement ``fit`` and ``predict_proba`` or
-        ``decision_function``.
+        Mapping ``name → unfitted estimator``. Estimators **must** implement
+        `fit`, `predict`, and, if ROC curves are required, `predict_proba`.
     X_train, y_train
         Training data.
+    X_test, y_test
+        Test data – pass these **once** here so that downstream evaluation
+        notebooks can operate purely on saved artefacts.
     output_dir
-        Directory were the trained models will be stored.  One ``.joblib``
-        file is created per model, named ``{name}.joblib``.
-    save
-        If *False* the models are *not* serialised (useful for quick
-        experiments).
+        Root directory that will contain one sub‑folder per model.
+    save_models
+        Persist fitted estimators to disk.
+    save_train_predictions
+        Save training predictions and probabilities (for evaluating train metrics).
     verbose
-        If *True* a progress‑bar is shown; otherwise, silent operation.
+        Emit progress to stdout.
 
     Returns
     -------
     Dict[str, Any]
-        Mapping of **model name → *fitted* model instance**.
+        Mapping ``name → fitted estimator``.
     """
+    output_dir = _ensure_dir(output_dir)
+    fitted: Dict[str, Any] = {}
 
-    _ensure_dir(output_dir)
-    iterator = tqdm(models.items(), disable=not verbose, desc="Training")
+    for name, model in models.items():
+        if verbose:
+            print(f"[run_training] Fitting {name}…", flush=True)
 
-    trained: Dict[str, Any] = {}
-    for name, model in iterator:
-        try:
-            # Try to use our safe clone
-            estimator = safe_clone(model)
-            estimator.fit(X_train, y_train)
-            trained[name] = estimator
+        estimator = safe_clone(model)
+        estimator.fit(X_train, y_train)
+        fitted[name] = estimator
 
-            if save:
-                # Use a simple save function instead of the more complex save_model
-                model_path = os.path.join(output_dir, f"{name}.joblib")
-                _simple_save_model(estimator, model_path)
-        except Exception as e:
-            logger.error(f"Error training model {name}: {e}")
-            # Skip this model but continue with others
-            continue
+        model_dir = _ensure_dir(output_dir / name)
 
-    return trained
+        # --- persist model ---------------------------------------------------
+        if save_models:
+            joblib.dump(estimator, model_dir / "model.joblib")
+
+        # --- persist training predictions -----------------------------------
+        if save_train_predictions:
+            y_train_pred = estimator.predict(X_train)
+            df_train = pd.DataFrame({"y_true": y_train, "y_pred": y_train_pred})
+            df_train.to_csv(model_dir / "train_predictions.csv", index=False)
+
+            if hasattr(estimator, "predict_proba"):
+                try:
+                    y_train_prob = estimator.predict_proba(X_train)
+                    np.save(model_dir / "train_prob.npy", y_train_prob)
+                except Exception as e:
+                    if verbose:
+                        print(f"Warning: Could not save train probabilities for {name}: {e}", flush=True)
+        
+        # --- persist test predictions ---------------------------------------
+        if X_test is not None and y_test is not None:
+            y_pred = estimator.predict(X_test)
+            df = pd.DataFrame({"y_true": y_test, "y_pred": y_pred})
+            df.to_csv(model_dir / "test_predictions.csv", index=False)
+
+            if hasattr(estimator, "predict_proba"):
+                try:
+                    y_prob = estimator.predict_proba(X_test)
+                    np.save(model_dir / "test_prob.npy", y_prob)
+                except Exception as e:
+                    if verbose:
+                        print(f"Warning: Could not save test probabilities for {name}: {e}", flush=True)
+
+    return fitted

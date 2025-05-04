@@ -27,20 +27,42 @@ logger = logging.getLogger(__name__)
 _CACHED_MODELS = {}
 
 class VectorStore:
-    def __init__(self, faiss_path: Path, meta_path: Path):
-        start_time = time.time()
-        logger.info(f"Loading FAISS index from {faiss_path}")
-        self.index = faiss.read_index(str(faiss_path))
-        logger.info(f"Loading metadata from {meta_path}")
-        self.meta: List[dict] = [json.loads(l) for l in Path(meta_path).read_text().splitlines()]
-        logger.info(f"VectorStore initialized with {len(self.meta)} documents in {time.time() - start_time:.2f} seconds")
+    def __init__(self, faiss_path, meta_path):
+        """Initialize VectorStore by loading FAISS index and metadata.
         
-        # Store paths for reference
-        self.index_path = faiss_path
-        self.meta_path = meta_path
+        Args:
+            faiss_path: Path to FAISS index file
+            meta_path: Path to metadata JSONL file
+        """
+        start_time = time.time()
+        
+        # Ensure paths are Path objects
+        self.index_path = Path(faiss_path) if not isinstance(faiss_path, Path) else faiss_path
+        self.meta_path = Path(meta_path) if not isinstance(meta_path, Path) else meta_path
+        
+        logger.info(f"Loading FAISS index from {self.index_path}")
+        self.index = faiss.read_index(str(self.index_path))
+        
+        logger.info(f"Loading metadata from {self.meta_path}")
+        self.meta: List[dict] = [json.loads(l) for l in Path(self.meta_path).read_text().splitlines()]
+        
+        logger.info(f"VectorStore initialized with {len(self.meta)} documents in {time.time() - start_time:.2f} seconds")
 
     @staticmethod
-    def build(emb: np.ndarray, meta: List[dict], dim: int, faiss_path: Path, meta_path: Path):
+    def build(emb: np.ndarray, meta: List[dict], dim: int, faiss_path, meta_path):
+        """Build and save a FAISS index with metadata.
+        
+        Args:
+            emb: Embedding vectors
+            meta: Metadata for each embedding
+            dim: Dimension of embeddings
+            faiss_path: Path to save the FAISS index
+            meta_path: Path to save the metadata
+        """
+        # Ensure paths are Path objects
+        faiss_path = Path(faiss_path) if not isinstance(faiss_path, Path) else faiss_path
+        meta_path = Path(meta_path) if not isinstance(meta_path, Path) else meta_path
+        
         start_time = time.time()
         logger.info(f"Building FAISS index with {len(meta)} documents of dimension {dim}")
         
@@ -71,6 +93,15 @@ class VectorStore:
         logger.info(f"Index built in {time.time() - start_time:.2f} seconds")
 
     def search(self, q: np.ndarray, k: int) -> List[dict]:
+        """Search the index for nearest neighbors.
+        
+        Args:
+            q: Query vector
+            k: Number of nearest neighbors to return
+            
+        Returns:
+            List of metadata entries for nearest neighbors
+        """
         start_time = time.time()
         logger.debug(f"Starting vector search for top-{k} results")
         
@@ -106,6 +137,13 @@ class VectorStore:
         start_time = time.time()
         logger.info(f"Generating embeddings for {len(docs)} documents")
         
+        # Import here to avoid circular imports
+        try:
+            from . import _EMBEDDINGS_DIR
+            logger.info(f"Embeddings will be stored in: {_EMBEDDINGS_DIR}")
+        except ImportError:
+            logger.warning("Could not import _EMBEDDINGS_DIR from rag module")
+        
         # If embedder is provided, use it directly
         if embedder is not None:
             if hasattr(embedder, "encode"):
@@ -128,6 +166,8 @@ class VectorStore:
         else:
             # Load model
             model_load_start = time.time()
+            logger.info(f"Use pytorch device_name: cpu")
+            logger.info(f"Load pretrained SentenceTransformer: {model_name}")
             model = SentenceTransformer(model_name)
             model_load_time = time.time() - model_load_start
             logger.info(f"Loaded new SentenceTransformer model in {model_load_time:.2f} seconds")

@@ -36,7 +36,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .vector_store import VectorStore
-from . import _ARTIFACTS_DIR, _SBERT_DIR, _OPENAI_DIR
+from . import _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _SBERT_DIR, _OPENAI_DIR
 
 
 # ---------- Helper to load precomputed embeddings ----------
@@ -59,8 +59,9 @@ DEFAULT_SOURCE = "reuters"
 DEFAULT_CUTOFF = 1996
 DEFAULT_N_CLASSES = 10
 
-# Create the base artifacts directory
+# Create the base artifacts and embeddings directories
 _ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+_EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Legacy path - for backward compatibility
 DEFAULT_LEGACY_FAISS_PATH = _ARTIFACTS_DIR / "index.faiss"
@@ -93,8 +94,8 @@ def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
 
 
 def _load_reuters(cutoff_year: int = DEFAULT_CUTOFF, n_classes: int = None) -> tuple[list, list, list]:
-    from src.datasets.dataset import load_data
-    X_train, y_train, _, _, _ = load_data(n_classes)
+    from src.datasets.dataset import get_dataset
+    X_train, y_train, _, _, _ = get_dataset(n_classes=n_classes)
     # Assume all docs are pre-cutoff
     return X_train, y_train, [cutoff_year - 1] * len(X_train)
 
@@ -125,6 +126,12 @@ def main():
     sbert_meta_path = DEFAULT_SBERT_META_PATH
     openai_faiss_path = DEFAULT_OPENAI_FAISS_PATH
     openai_meta_path = DEFAULT_OPENAI_META_PATH
+    
+    # Print the paths being used
+    print(f"Using SBERT index path: {sbert_faiss_path}")
+    print(f"Using SBERT meta path: {sbert_meta_path}")
+    print(f"Using OpenAI index path: {openai_faiss_path}")
+    print(f"Using OpenAI meta path: {openai_meta_path}")
 
     # Build indices as requested
     if args.use_openai or args.build_both:

@@ -10,6 +10,7 @@ Functions:
 Created: 2025-05-03
 """
 
+import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
@@ -22,6 +23,31 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         
     def predict(self, X): 
         return self.rag.predict(X)
+    
+    def predict_proba(self, X):
+        """Generate probability estimates for each class.
+        
+        This method delegates to the underlying RAG model's predict_proba method
+        if it exists, otherwise raises an error.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The input samples to predict probabilities for.
+            
+        Returns
+        -------
+        np.ndarray : array of shape (n_samples, n_classes)
+            The class probabilities of the input samples.
+        
+        Raises
+        ------
+        AttributeError : If the underlying RAG model doesn't have a predict_proba method.
+        """
+        if hasattr(self.rag, 'predict_proba'):
+            return self.rag.predict_proba(X)
+        else:
+            raise AttributeError("The underlying RAG model does not implement predict_proba")
     
     def get_params(self, deep=True):
         """Get parameters for this estimator.

@@ -1,48 +1,61 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
 venv/
-.env/
-.venv/
+env/
+ENV/
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# VSCode settings
-.vscode/
+# Model files 
+*.pkl
+*.h5
+*.model
+*.bin
 
-# MacOS
-.DS_Store
-
-# Artifacts and results (auto-generated)
-artifacts/
-results/
-
-# Large data and model files
-*.faiss
-*.jsonl
-*.csv
-*.png
-
-# Environment variables
+# Distribution / packaging
 .env
-.env.*
+.venv
 
-# Logs
-*.log
+# Testing
+.coverage
+htmlcov/
+.tox/
+.nox/
 
-# Ignore system files
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
 Thumbs.db
 
-# Ignore test outputs
-htmlcov/
-.coverage
-
-# Ignore API keys or secrets
-openai_api_key.txt 
+# Project specific
+data/interim/
+data/processed/
+outputs/ 
