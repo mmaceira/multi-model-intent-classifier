@@ -223,9 +223,14 @@ class RagLLM(RagClassifierBase):
 
         # run async
         try:
+            # Always try the simple way first
             return asyncio.run(_run_all())
-        except RuntimeError:
+        except RuntimeError:          # "event loop is already running"
             import nest_asyncio, concurrent.futures
-            nest_asyncio.apply()
+            
+            nest_asyncio.apply()      # ↯ *patches* the running loop
+            # off‑load to a worker thread so .result() won't dead‑lock
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                return ex.submit(lambda: asyncio.run(_run_all())).result()
+                return ex.submit(
+                    lambda: asyncio.run(_run_all())
+                ).result()
