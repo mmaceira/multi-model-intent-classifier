@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import defaultdict
+from src.utils.error_analysis_utils import load_all_prediction_files, analyze_text_features, visualize_error_distribution, generate_detailed_error_report
 
 def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, pd.DataFrame]:
     """Load every CSV inside <experiment_dir>/predictions/ into a dict."""

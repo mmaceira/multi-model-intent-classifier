@@ -57,6 +57,8 @@ class LinearSVMClassifier(TextClassifier):
         self.classes_ = None
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the SVM classifier.
         
         Args:
@@ -124,6 +126,7 @@ class LinearSVMClassifier(TextClassifier):
         return probabilities
 
 class LinearSVMBigrams(TextClassifier):
+    _expects_vectors = False
     """TF-IDF with bigrams + Linear SVM classifier.
     
     This class extends the basic LinearSVMClassifier by using both
@@ -164,6 +167,8 @@ class LinearSVMBigrams(TextClassifier):
         self.classes_ = None
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the SVM classifier.
         
         Args:

@@ -61,8 +61,8 @@ class TextClassifier:
         print(f"Warning: Could not create stub model.py: {e}")
 
 # Default directory paths
-DEFAULT_MODELS_PATH = "experiment_with_13_classes/models"
-DEFAULT_EMBEDDINGS_PATH = "experiment_with_13_classes/embeddings"
+DEFAULT_MODELS_PATH = "output/experiment_with_03_classes/models"
+DEFAULT_EMBEDDINGS_PATH = "output/experiment_with_03_classes/embeddings"
 
 # Model information: ID, Display Name, and Description
 MODELS_INFO = {

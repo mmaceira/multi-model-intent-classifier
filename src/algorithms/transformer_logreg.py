@@ -88,6 +88,8 @@ class TransformerLogReg(TextClassifier):
         return self.embedder.encode(texts)
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the logistic regression classifier.
         
         Args:

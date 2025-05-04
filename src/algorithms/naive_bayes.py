@@ -55,6 +55,8 @@ class NaiveBayesClassifier(TextClassifier):
         self.clf = MultinomialNB(alpha=alpha)
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the Naive Bayes classifier.
         
         Args:
