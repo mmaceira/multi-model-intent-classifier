@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
 class TransformerLogReg(TextClassifier):
+    _expects_vectors = False
     """Transformer embeddings + Logistic Regression classifier.
     
     This class implements a text classifier using transformer-based

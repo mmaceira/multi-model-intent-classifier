@@ -1,114 +1,58 @@
-"""Enhanced qualitative analysis utilities for classification errors.
+"""Unified error-analysis utilities.
 
-This module provides more detailed analysis of misclassifications by:
-1. Analyzing error patterns across different model types
-2. Providing detailed analysis of frequently misclassified examples
-3. Generating visualizations to understand error distributions
-4. Comparing models based on their error profiles
-
-It expects an *experiment directory* that contains a `predictions/` 
-sub-folder with CSVs in the format:
-    true_label, pred_label, text, id
+Every helper here is **pure** (no I/O) so the module can be reused from
+CLI scripts, notebooks and the API alike.
 """
-
-import os
+from __future__ import annotations
 from pathlib import Path
-import glob
+from typing import Dict, List, Any
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
-from collections import Counter, defaultdict
-import re
+from collections import defaultdict
 
-def load_all_prediction_files(experiment_dir):
-    """Load all prediction files from an experiment directory.
-    
-    Returns a dictionary of {model_name: dataframe} pairs.
-    """
-    experiment_dir = Path(experiment_dir)
-    pred_dir = experiment_dir / 'predictions'
-    
+def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, pd.DataFrame]:
+    """Load every CSV inside <experiment_dir>/predictions/ into a dict."""
+    exp = Path(experiment_dir)
+    pred_dir = exp / 'predictions'
     if not pred_dir.exists():
-        raise FileNotFoundError(f'{pred_dir} not found')
-    
-    pred_files = glob.glob(str(pred_dir / '*_preds.csv'))
-    if not pred_files:
-        raise FileNotFoundError(f'No CSVs like <model>_preds.csv found in {pred_dir}')
-    
-    predictions = {}
-    for csv_path in pred_files:
-        model_name = Path(csv_path).stem.replace('_preds', '')
-        df = pd.read_csv(csv_path)
-        predictions[model_name] = df
-    
-    return predictions
+        raise FileNotFoundError(f'{pred_dir} does not exist')
+    dfs: Dict[str, pd.DataFrame] = {}
+    for csv in pred_dir.glob('*.csv'):
+        model = csv.stem
+        df = pd.read_csv(csv)
+        df['model'] = model
+        dfs[model] = df
+    return dfs
 
-def analyze_error_patterns(predictions_dict):
-    """Analyze common error patterns across all models.
-    
-    Returns a dataframe of common misclassifications.
-    """
-    all_errors = []
-    
-    for model_name, df in predictions_dict.items():
-        errors = df[df['true_label'] != df['pred_label']].copy()
-        errors['model'] = model_name
-        errors['error_type'] = errors['true_label'] + ' → ' + errors['pred_label']
-        all_errors.append(errors)
-    
-    if not all_errors:
-        return pd.DataFrame()
-    
-    all_errors_df = pd.concat(all_errors, ignore_index=True)
-    
-    # Count error types by model
-    error_counts = all_errors_df.groupby(['model', 'error_type']).size().reset_index(name='count')
-    
-    # Find common error types across models
-    common_error_types = all_errors_df['error_type'].value_counts().reset_index()
-    common_error_types.columns = ['error_type', 'total_count']
-    
-    return common_error_types
+def analyse_error_patterns(pred_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return dataframe with a row per distinct (true -> pred) error."""
+    frames = []
+    for name, df in pred_dfs.items():
+        errs = df[df.true_label != df.pred_label].copy()
+        errs['error_type'] = errs.true_label + ' -> ' + errs.pred_label
+        frames.append(errs)
+    if not frames:
+        return pd.DataFrame(columns=['error_type', 'total_count'])
+    merged = pd.concat(frames, ignore_index=True)
+    return (merged.groupby('error_type', as_index=False)
+                  .size()
+                  .rename(columns={'size': 'total_count'})
+                  .sort_values('total_count', ascending=False))
 
-def identify_consistently_misclassified(predictions_dict):
-    """Identify examples that are misclassified by multiple models.
-    
-    Returns a dataframe with examples and the count of models that misclassified them.
-    """
-    # Track misclassifications per example ID
-    misclass_count = defaultdict(list)
-    
-    for model_name, df in predictions_dict.items():
-        errors = df[df['true_label'] != df['pred_label']]
-        for _, row in errors.iterrows():
-            misclass_count[row['id']].append({
-                'model': model_name,
-                'true': row['true_label'],
-                'predicted': row['pred_label'],
-                'text': row['text']
-            })
-    
-    # Create a dataframe of examples misclassified by multiple models
-    results = []
-    for ex_id, errors in misclass_count.items():
-        if len(errors) > 1:  # Misclassified by at least 2 models
-            results.append({
-                'id': ex_id,
-                'text': errors[0]['text'],
-                'true_label': errors[0]['true'],
-                'misclassified_count': len(errors),
-                'models': ', '.join([e['model'] for e in errors]),
-                'predictions': ', '.join([e['predicted'] for e in errors])
-            })
-    
-    if not results:
-        return pd.DataFrame()
-    
-    return pd.DataFrame(results).sort_values('misclassified_count', ascending=False)
+def consistently_misclassified(pred_dfs: Dict[str, pd.DataFrame], min_models: int = 2):
+    """Docs misclassified by >= min_models models in exactly the same way."""
+    combined = None
+    for name, df in pred_dfs.items():
+        wrong = df[df.true_label != df.pred_label][['id', 'text', 'true_label', 'pred_label']].copy()
+        wrong[name] = True
+        combined = wrong if combined is None else combined.merge(wrong, how='outer')
+    combined = combined.fillna(False)
+    mask = combined.drop(columns=['id', 'text', 'true_label', 'pred_label']).sum(1) >= min_models
+    return combined[mask]
 
-def analyze_text_features(predictions_dict):
+def analyze_text_features(predictions_dict: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Analyze text features that might contribute to classification errors.
     
     Returns a dataframe with text statistics for correct and incorrect predictions.
@@ -135,7 +79,7 @@ def analyze_text_features(predictions_dict):
     
     return pd.DataFrame(all_rows)
 
-def visualize_error_distribution(predictions_dict, output_dir):
+def visualize_error_distribution(predictions_dict: Dict[str, pd.DataFrame], output_dir: Path):
     """Create visualizations of error distributions across models and classes.
     
     Saves visualizations to the output directory.
@@ -186,7 +130,7 @@ def visualize_error_distribution(predictions_dict, output_dir):
     plt.savefig(output_dir / 'error_rate_by_class.png', dpi=300)
     plt.close()
 
-def generate_detailed_error_report(predictions_dict, output_dir):
+def generate_detailed_error_report(predictions_dict: Dict[str, pd.DataFrame], output_dir: Path):
     """Generate an HTML report with detailed analysis of classification errors.
     
     Includes example text snippets and patterns.
@@ -195,10 +139,10 @@ def generate_detailed_error_report(predictions_dict, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Get consistently misclassified examples
-    misclass_df = identify_consistently_misclassified(predictions_dict)
+    misclass_df = consistently_misclassified(predictions_dict)
     
     # Get common error patterns
-    error_patterns_df = analyze_error_patterns(predictions_dict)
+    error_patterns_df = analyse_error_patterns(predictions_dict)
     
     # Create HTML report
     html = []
@@ -225,10 +169,11 @@ def generate_detailed_error_report(predictions_dict, output_dir):
     # Consistently misclassified examples
     html.append('<h2>Consistently Misclassified Examples</h2>')
     if not misclass_df.empty:
-        html.append('<table><tr><th>Text</th><th>True Label</th><th>Misclassified Count</th><th>Models</th><th>Predictions</th></tr>')
+        html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th><th>Models</th></tr>')
         for _, row in misclass_df.head(20).iterrows():
+            models = [name for name in predictions_dict.keys() if row.get(name, False)]
             html.append(f'<tr><td>{row["text"]}</td><td>{row["true_label"]}</td>')
-            html.append(f'<td>{row["misclassified_count"]}</td><td>{row["models"]}</td><td>{row["predictions"]}</td></tr>')
+            html.append(f'<td>{row["pred_label"]}</td><td>{", ".join(models)}</td></tr>')
         html.append('</table>')
     else:
         html.append('<p>No consistently misclassified examples found.</p>')
@@ -260,7 +205,7 @@ def generate_detailed_error_report(predictions_dict, output_dir):
     with open(output_dir / 'detailed_error_report.html', 'w') as f:
         f.write('\n'.join(html))
 
-def run_enhanced_qualitative_analysis(experiment_dir, output_dir, verbose=True):
+def run_enhanced_analysis(experiment_dir: str | Path, output_dir: str | Path | None = None, verbose: bool = True):
     """Run enhanced qualitative analysis on all models in an experiment.
     
     Provides more detailed insights into classification errors.
@@ -269,8 +214,8 @@ def run_enhanced_qualitative_analysis(experiment_dir, output_dir, verbose=True):
     ----------
     experiment_dir : str or Path
         Folder that contains a `predictions/` sub-dir with CSVs.
-    output_dir : str or Path
-        Where analysis outputs will be saved.
+    output_dir : str or Path, optional
+        Where analysis outputs will be saved. If None, uses experiment_dir.
     verbose : bool, optional
         Log progress to stdout.
     """
@@ -284,18 +229,18 @@ def run_enhanced_qualitative_analysis(experiment_dir, output_dir, verbose=True):
         print(f"Loaded {len(predictions_dict)} model prediction files")
     
     # Create output directory
-    output_dir = Path(output_dir)
+    output_dir = Path(output_dir) if output_dir else Path(experiment_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Perform analyses
     if verbose:
         print("Analyzing error patterns...")
-    error_patterns = analyze_error_patterns(predictions_dict)
+    error_patterns = analyse_error_patterns(predictions_dict)
     error_patterns.to_csv(output_dir / 'common_error_patterns.csv', index=False)
     
     if verbose:
         print("Identifying consistently misclassified examples...")
-    misclass_examples = identify_consistently_misclassified(predictions_dict)
+    misclass_examples = consistently_misclassified(predictions_dict, min_models=len(predictions_dict))
     if not misclass_examples.empty:
         misclass_examples.to_csv(output_dir / 'consistently_misclassified.csv', index=False)
     
@@ -317,19 +262,6 @@ def run_enhanced_qualitative_analysis(experiment_dir, output_dir, verbose=True):
     
     return {
         'error_patterns': error_patterns,
-        'misclassified_examples': misclass_examples,
+        'hard_cases': misclass_examples,
         'text_features': text_features
     }
-
-
-if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) < 3:
-        print("Usage: python enhanced_qualitative_analysis.py <experiment_dir> <output_dir>")
-        sys.exit(1)
-    
-    experiment_dir = sys.argv[1]
-    output_dir = sys.argv[2]
-    
-    run_enhanced_qualitative_analysis(experiment_dir, output_dir) 

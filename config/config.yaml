@@ -1,12 +1,12 @@
 # General Configuration
 general:
-  run_name: "experiment_with_10_classes"     # used as experiment id
+  run_name: "experiment_with_03_classes"     # used as experiment id
   seed: 42
-  n_classes: 10                               # ! propagated via env var N_CLASSES
+  n_classes: 03                               # ! propagated via env var N_CLASSES
 
 # Dataset configuration
 dataset:
-  split_type: "standard"                         # [standard | temporal | test]
+  split_type: "test"                         # [standard | temporal | test]
   test_split: 0.20
   cutoff_year: 1996
 

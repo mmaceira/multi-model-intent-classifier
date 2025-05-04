@@ -21,6 +21,7 @@ from sklearn.svm import LinearSVC
 from src.model import TextClassifier
 
 class LinearSVMClassifier(TextClassifier):
+    _expects_vectors = False
     """TF-IDF + Linear SVM classifier.
     
     This class implements a text classifier using TF-IDF features and

@@ -20,6 +20,7 @@ from sklearn.naive_bayes import MultinomialNB
 from src.model import TextClassifier
 
 class NaiveBayesClassifier(TextClassifier):
+    _expects_vectors = False
     """TF-IDF + Multinomial Naive Bayes classifier.
     
     This class implements a text classifier using TF-IDF features and
