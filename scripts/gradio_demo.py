@@ -26,6 +26,10 @@ import numpy as np
 import faiss
 import gradio as gr
 
+# Default directory paths
+DEFAULT_MODELS_PATH = "output/experiment_with_03_classes/models"
+DEFAULT_EMBEDDINGS_PATH = "output/experiment_with_03_classes/embeddings"
+
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
 # --------------------------------------------------------------------------- #
@@ -36,16 +40,55 @@ if str(project_root) not in sys.path:
 # --------------------------------------------------------------------------- #
 # 1. Model‑info table (UNCHANGED, but shortened here for clarity)             #
 # --------------------------------------------------------------------------- #
-MODELS_INFO: Dict[str, Dict[str, str]] = {
-    # id               human‑readable name, description, dir, type
-    'naive_bayes':     { 'name':'Naive Bayes',        'description':'Multinomial NB', 'dir':'Naive Bayes',  'type':'classifier'},
-    'linear_svm':      { 'name':'Linear SVM',         'description':'Linear SVM',     'dir':'Linear SVM',   'type':'classifier'},
-    'tfidf_svm':       { 'name':'TF-IDF + SVM',       'description':'Bigram SVM',     'dir':'TF-IDF bigrams + SVM',    'type':'classifier'},
-    'minilm_logreg':   { 'name':'MiniLM + LogReg',    'description':'Sentence-BERT embeddings + LR', 'dir':'MiniLM + LogReg', 'type':'classifier'},
-    'rag_centroid':    { 'name':'RAG CentroidNN',     'description':'Centroid-based nearest neighbors search', 'dir':'RAG-CentroidNN', 'type':'rag'},
-    'rag_kmajority':   { 'name':'RAG k-Majority',     'description':'k-majority voting for document retrieval', 'dir':'RAG-kMajority', 'type':'rag'},
-    'rag_llm_local':   { 'name':'RAG LLM (Local)',    'description':'Local embeddings for document retrieval', 'dir':'RAG-LLM (local-embeddings)', 'type':'rag'},
-    'rag_llm_openai':  { 'name':'RAG LLM (OpenAI)',   'description':'OpenAI embeddings for semantic search', 'dir':'RAG-LLM (OpenAI-embeddings)', 'type':'rag'},
+MODELS_INFO = {
+    'naive_bayes': {
+        'name': 'Naive Bayes',
+        'description': 'Multinomial Naive Bayes classifier using TF-IDF features. Fast and efficient for text classification.',
+        'dir': 'Naive Bayes',
+        'type': 'classifier'
+    },
+    'linear_svm': {
+        'name': 'Linear SVM',
+        'description': 'Support Vector Machine with linear kernel. Good balance of accuracy and speed.',
+        'dir': 'Linear SVM',
+        'type': 'classifier'
+    },
+    'tfidf_svm': {
+        'name': 'TF-IDF + SVM',
+        'description': 'SVM classifier using TF-IDF bigram features. Strong performance on news category prediction.',
+        'dir': 'TF-IDF bigrams + SVM',
+        'type': 'classifier'
+    },
+    'minilm_logreg': {
+        'name': 'MiniLM + LogReg',
+        'description': 'Transformer embeddings with Logistic Regression. Leverages semantic understanding from MiniLM.',
+        'dir': 'MiniLM + LogReg',
+        'type': 'classifier'
+    },
+    'rag_centroid': {
+        'name': 'RAG CentroidNN',
+        'description': 'Retrieval Augmented Generation using centroid-based nearest neighbors search.',
+        'dir': 'RAG-CentroidNN',
+        'type': 'rag'
+    },
+    'rag_kmajority': {
+        'name': 'RAG k-Majority',
+        'description': 'RAG model with k-majority voting to determine the most relevant documents.',
+        'dir': 'RAG-kMajority',
+        'type': 'rag'
+    },
+    'rag_llm_local': {
+        'name': 'RAG LLM (Local)',
+        'description': 'RAG model using locally computed embeddings for document retrieval.',
+        'dir': 'RAG-LLM (local-embeddings)',
+        'type': 'rag'
+    },
+    'rag_llm_openai': {
+        'name': 'RAG LLM (OpenAI)',
+        'description': 'RAG model using OpenAI embeddings for improved semantic search capabilities.',
+        'dir': 'RAG-LLM (OpenAI-embeddings)',
+        'type': 'rag'
+    }
 }
 
 # --------------------------------------------------------------------------- #
@@ -347,29 +390,115 @@ def predict(model_choice: str, text: str, top_k: int,
 # --------------------------------------------------------------------------- #
 
 def create_demo():
-    with gr.Blocks(title='Reuters RAG Classifier') as demo:
+    """Create the Gradio demo interface."""
+    with gr.Blocks(title="Reuters News Classifier & Search") as demo:
+        gr.Markdown("# 📰 Reuters News Classifier & Search")
+        
         with gr.Row():
-            models_path   = gr.Textbox(label='Models path',   value='output/experiment_with_03_classes/models')
-            embeddings_path = gr.Textbox(label='Embeddings path', value='output/experiment_with_03_classes/embeddings')
-        with gr.Row():
-            model_dropdown = gr.Dropdown(
-                label='Model',
-                choices=[(f'📊 {info["name"]}' if info['type']=="classifier" else f'🔍 {info["name"]}', mid)
-                         for mid, info in MODELS_INFO.items()],
-                value='naive_bayes',
-                interactive=True,
-            )
-        text_input = gr.Textbox(label='Article / query', lines=8, placeholder='Paste a Reuters article...')
-        top_k      = gr.Slider(1, 10, value=3, step=1, label='Top‑K documents (for RAG models)')
-
-        output = gr.Markdown()
-
-        btn = gr.Button('Predict')
-        btn.click(
+            with gr.Column(scale=3):
+                gr.Markdown("### Input")
+                models_path = gr.Textbox(
+                    value=DEFAULT_MODELS_PATH,
+                    label="Models Directory Path"
+                )
+                
+                embeddings_path = gr.Textbox(
+                    value=DEFAULT_EMBEDDINGS_PATH,
+                    label="Embeddings Directory Path"
+                )
+                
+                # Model dropdown with icons
+                model_dropdown = gr.Dropdown(
+                    choices=[(f'📊 {info["name"]}' if info['type']=="classifier" else f'🔍 {info["name"]}', mid)
+                             for mid, info in MODELS_INFO.items()],
+                    value='naive_bayes',
+                    label="Select Model",
+                    interactive=True,
+                )
+                
+                # Model description area
+                with gr.Accordion("Model Description", open=True) as model_info_accordion:
+                    # Get initial description for default model
+                    default_info = MODELS_INFO['naive_bayes']
+                    default_type = "Classification"  # Since naive_bayes is a classifier
+                    available_models = scan_models_directory(DEFAULT_MODELS_PATH)
+                    default_path = available_models.get('naive_bayes', {}).get('path', 'Not found')
+                    
+                    initial_description = f"""
+                    ## {default_info['name']}
+                    
+                    **Type:** {default_type}
+                    
+                    **Description:**  
+                    {default_info['description']}
+                    
+                    **Model File:** `{os.path.basename(default_path)}`
+                    """
+                    model_description = gr.Markdown(initial_description)
+                
+                top_k = gr.Slider(
+                    minimum=1,
+                    maximum=10,
+                    value=3,
+                    step=1,
+                    label="Number of Documents (for RAG models)"
+                )
+                
+            with gr.Column(scale=4):
+                gr.Markdown("### Text Input")
+                text_input = gr.Textbox(
+                    lines=8,
+                    label="Enter Article Text or Query",
+                    placeholder="Paste news article or query text here..."
+                )
+                
+                analyze_btn = gr.Button("Analyze", variant="primary")
+                
+                gr.Markdown("### Results")
+                output = gr.Markdown()
+        
+        # Update description function
+        def update_model_description(model_id):
+            if not model_id:
+                return "Please select a model to see its description."
+            
+            if model_id in MODELS_INFO:
+                info = MODELS_INFO[model_id]
+                model_type = info['type']
+                type_text = "Retrieval-Augmented Generation" if model_type == "rag" else "Classification" 
+                
+                # Get the model path from scanned models
+                available_models = scan_models_directory(models_path.value)
+                model_path = available_models.get(model_id, {}).get('path', 'Not found')
+                
+                description = f"""
+                ## {info['name']}
+                
+                **Type:** {type_text}
+                
+                **Description:**  
+                {info['description']}
+                
+                **Model File:** `{os.path.basename(model_path)}`
+                """
+                return description
+            else:
+                return f"Model information not available for: {model_id}"
+        
+        # Connect model selection to description update
+        model_dropdown.change(
+            fn=update_model_description,
+            inputs=model_dropdown,
+            outputs=model_description
+        )
+        
+        # Analyze button action
+        analyze_btn.click(
             fn=predict,
             inputs=[model_dropdown, text_input, top_k, models_path, embeddings_path],
-            outputs=output,
+            outputs=output
         )
+    
     return demo
 
 if __name__ == '__main__':
