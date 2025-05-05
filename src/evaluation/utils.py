@@ -6,26 +6,13 @@ This module provides helper functions used across the evaluation package.
 
 import logging
 from pathlib import Path
-from typing import Union, Dict, List, Any
+from typing import Union, Dict, List, Any, Optional
 
 import pandas as pd
-
-def ensure_dir(path: Union[str, Path]) -> Path:
-    """Ensure a directory exists, creating it if necessary.
-    
-    Parameters
-    ----------
-    path : Union[str, Path]
-        Path to the directory to ensure exists.
-        
-    Returns
-    -------
-    Path
-        The path to the directory.
-    """
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from src.utils.file_ops import ensure_dir
 
 def setup_logging(verbose: bool = True) -> logging.Logger:
     """Set up logging configuration.
@@ -50,7 +37,7 @@ def setup_logging(verbose: bool = True) -> logging.Logger:
     logger.setLevel(logging.INFO if verbose else logging.WARNING)
     return logger
 
-def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, pd.DataFrame]:
+def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Load every CSV prediction file from model directories into a dict.
     
     Parameters
@@ -60,54 +47,64 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, pd.DataFr
         
     Returns
     -------
-    Dict[str, pd.DataFrame]
-        Dictionary mapping model names to their prediction dataframes.
+    Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
     """
     exp = Path(experiment_dir)
-    dfs: Dict[str, pd.DataFrame] = {}
+    dfs: Dict[str, Dict[str, pd.DataFrame]] = {}
     
     # Find all model directories
     model_dirs = [d for d in exp.glob('*') if d.is_dir()]
     
     for model_dir in model_dirs:
         model_name = model_dir.name
-        test_pred_file = model_dir / "test_predictions.csv"
+        dfs[model_name] = {}
         
-        if test_pred_file.exists():
-            df = pd.read_csv(test_pred_file)
-            
-            # Rename columns if necessary to match expected names
-            if 'y_true' in df.columns and 'y_pred' in df.columns:
-                df = df.rename(columns={
-                    'y_true': 'true_label',
-                    'y_pred': 'pred_label'
-                })
-            
-            # Add model name column
-            df['model'] = model_name
-            
-            # Add ID column if it doesn't exist
-            if 'id' not in df.columns:
-                df['id'] = range(len(df))
-            
-            # Add text column if it doesn't exist
-            if 'text' not in df.columns:
-                df['text'] = "Placeholder text"  # In a real scenario, you would join with a dataset containing the text
-            
-            dfs[model_name] = df
+        # Process both train and test predictions
+        for split in ['train', 'test']:
+            pred_file = model_dir / f"{split}_predictions.csv"
+            if pred_file.exists():
+                df = pd.read_csv(pred_file)
+                
+                # Rename columns if necessary to match expected names
+                if 'y_true' in df.columns and 'y_pred' in df.columns:
+                    df = df.rename(columns={
+                        'y_true': 'true_label',
+                        'y_pred': 'pred_label'
+                    })
+                
+                # Add model name column
+                df['model'] = model_name
+                
+                # Add ID column if it doesn't exist
+                if 'id' not in df.columns:
+                    df['id'] = range(len(df))
+                
+                # Add text column if it doesn't exist
+                if 'text' not in df.columns:
+                    df['text'] = "Placeholder text"
+                
+                dfs[model_name][split] = df
     
     if not dfs:
         raise FileNotFoundError(f'No prediction files found in {exp}')
         
     return dfs
 
-def analyse_error_patterns(pred_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
     """Return dataframe with a row per distinct (true -> pred) error."""
     frames = []
-    for name, df in pred_dfs.items():
-        errs = df[df.true_label != df.pred_label].copy()
-        errs['error_type'] = errs.true_label + ' -> ' + errs.pred_label
-        frames.append(errs)
+    for name, splits in pred_dfs.items():
+        for split_name, df in splits.items():
+            # Handle both column naming conventions
+            true_col = 'true_label' if 'true_label' in df.columns else 'y_true'
+            pred_col = 'pred_label' if 'pred_label' in df.columns else 'y_pred'
+            
+            errs = df[df[true_col] != df[pred_col]].copy()
+            errs['error_type'] = errs[true_col] + ' -> ' + errs[pred_col]
+            errs['model'] = name
+            errs['split'] = split_name
+            frames.append(errs)
     if not frames:
         return pd.DataFrame(columns=['error_type', 'total_count'])
     merged = pd.concat(frames, ignore_index=True)
@@ -116,13 +113,13 @@ def analyse_error_patterns(pred_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
                   .rename(columns={'size': 'total_count'})
                   .sort_values('total_count', ascending=False))
 
-def consistently_misclassified(pred_dfs: Dict[str, pd.DataFrame], min_models: int = 2):
+def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min_models: int = 2):
     """Docs misclassified by >= min_models models in exactly the same way.
     
     Parameters
     ----------
-    pred_dfs : Dict[str, pd.DataFrame]
-        Dictionary mapping model names to their prediction dataframes.
+    pred_dfs : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
     min_models : int, optional
         Minimum number of models that must misclassify a document in the same way,
         by default 2.
@@ -134,12 +131,27 @@ def consistently_misclassified(pred_dfs: Dict[str, pd.DataFrame], min_models: in
         predicted labels, and which models misclassified them.
     """
     combined = None
-    for name, df in pred_dfs.items():
-        wrong = df[df.true_label != df.pred_label][['id', 'text', 'true_label', 'pred_label']].copy()
-        wrong[name] = True
-        combined = wrong if combined is None else combined.merge(wrong, how='outer')
+    for name, splits in pred_dfs.items():
+        # We'll only look at test set predictions for consistency
+        if 'test' in splits:
+            df = splits['test']
+            # Handle both column naming conventions
+            true_col = 'true_label' if 'true_label' in df.columns else 'y_true'
+            pred_col = 'pred_label' if 'pred_label' in df.columns else 'y_pred'
+            
+            wrong = df[df[true_col] != df[pred_col]][['id', 'text', true_col, pred_col]].copy()
+            wrong[name] = True
+            combined = wrong if combined is None else combined.merge(wrong, how='outer')
+    
+    if combined is None:
+        return pd.DataFrame()
+        
     combined = combined.fillna(False)
-    mask = combined.drop(columns=['id', 'text', 'true_label', 'pred_label']).sum(1) >= min_models
+    # Get the column names used in the DataFrame
+    true_col = 'true_label' if 'true_label' in combined.columns else 'y_true'
+    pred_col = 'pred_label' if 'pred_label' in combined.columns else 'y_pred'
+    
+    mask = combined.drop(columns=['id', 'text', true_col, pred_col]).sum(1) >= min_models
     return combined[mask]
 
 def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path]) -> None:
@@ -167,4 +179,4 @@ def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path
     if not results['text_features'].empty:
         results['text_features'].to_csv(output_dir / 'text_features.csv', index=False)
     
-    print(f"Analysis results exported to {output_dir}") 
+    print(f"Analysis results exported to {output_dir}")

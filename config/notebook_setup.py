@@ -61,9 +61,9 @@ GENERAL_CUTOFF_YEAR = config_vars.get("DATASET_CUTOFF_YEAR")
 
 # Path variables with shorter names for backward compatibility
 DATA_EXPLORATION_DIR = config_vars.get("PATHS_DATA_EXPLORATION_DIR")
-ARTIFACTS_DIR = config_vars.get("PATHS_ARTIFACTS_DIR")
 EMB_DIR = config_vars.get("PATHS_EMBEDDINGS_DIR") 
 MODELS_DIR = config_vars.get("PATHS_MODELS_DIR")
+PREDICTIONS_DIR = config_vars.get("PATHS_PREDICTIONS_DIR")
 RESULTS_DIR = config_vars.get("PATHS_RESULTS_DIR")
 
 # Set environment variables

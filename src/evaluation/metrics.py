@@ -100,15 +100,15 @@ def compute_metrics(
     
     return y_pred, y_prob, metrics
 
-def analyze_text_features(predictions_dict: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def analyze_text_features(predictions_dict: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
     """Analyze text features that might contribute to classification errors.
     
     Returns a dataframe with text statistics for correct and incorrect predictions.
     
     Parameters
     ----------
-    predictions_dict : Dict[str, pd.DataFrame]
-        Dictionary mapping model names to their prediction dataframes.
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
         
     Returns
     -------
@@ -117,23 +117,26 @@ def analyze_text_features(predictions_dict: Dict[str, pd.DataFrame]) -> pd.DataF
     """
     all_rows = []
     
-    for model_name, df in predictions_dict.items():
-        # Add features
-        df['is_correct'] = df['true_label'] == df['pred_label']
-        df['text_length'] = df['text'].apply(lambda x: len(str(x)))
-        df['word_count'] = df['text'].apply(lambda x: len(str(x).split()))
-        
-        # Group by correct/incorrect
-        for is_correct in [True, False]:
-            subset = df[df['is_correct'] == is_correct]
-            if len(subset) > 0:
-                all_rows.append({
-                    'model': model_name,
-                    'is_correct': is_correct,
-                    'count': len(subset),
-                    'avg_text_length': subset['text_length'].mean(),
-                    'avg_word_count': subset['word_count'].mean(),
-                })
+    for model_name, splits in predictions_dict.items():
+        # We'll analyze both train and test sets
+        for split_name, df in splits.items():
+            # Add features
+            df['is_correct'] = df['true_label'] == df['pred_label']
+            df['text_length'] = df['text'].apply(lambda x: len(str(x)))
+            df['word_count'] = df['text'].apply(lambda x: len(str(x).split()))
+            
+            # Group by correct/incorrect
+            for is_correct in [True, False]:
+                subset = df[df['is_correct'] == is_correct]
+                if len(subset) > 0:
+                    all_rows.append({
+                        'model': model_name,
+                        'split': split_name,
+                        'is_correct': is_correct,
+                        'count': len(subset),
+                        'avg_text_length': subset['text_length'].mean(),
+                        'avg_word_count': subset['word_count'].mean(),
+                    })
     
     return pd.DataFrame(all_rows)
 
@@ -142,54 +145,41 @@ def analyze_text_characteristics(misclassified_df: pd.DataFrame) -> None:
     
     Parameters
     ----------
-    misclassified_df : DataFrame
-        DataFrame containing misclassified examples
+    misclassified_df : pd.DataFrame
+        DataFrame containing columns: 'text', 'true_label', 'pred_label'
     """
-    if misclassified_df.empty:
-        print("No misclassified examples to analyze")
-        return
+    # Calculate text length and word count
+    misclassified_df['text_length'] = misclassified_df['text'].apply(lambda x: len(str(x)))
+    misclassified_df['word_count'] = misclassified_df['text'].apply(lambda x: len(str(x).split()))
     
-    # Add text length and word count
-    analysis_df = misclassified_df.copy()
-    analysis_df['text_length'] = analysis_df['text'].apply(lambda x: len(str(x)))
-    analysis_df['word_count'] = analysis_df['text'].apply(lambda x: len(str(x).split()))
+    # Group by true label and compute statistics
+    stats = misclassified_df.groupby('true_label').agg({
+        'text_length': ['count', 'mean', 'std'],
+        'word_count': ['mean', 'std']
+    }).round(2)
     
-    # Analyze by true label
-    by_label = analysis_df.groupby('true_label').agg({
-        'id': 'count',
-        'text_length': 'mean',
-        'word_count': 'mean'
-    }).reset_index()
+    # Create visualizations
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     
-    by_label.columns = ['true_label', 'count', 'avg_text_length', 'avg_word_count']
-    by_label = by_label.sort_values('count', ascending=False)
+    # Text length distribution
+    sns.histplot(data=misclassified_df, x='text_length', hue='true_label', ax=ax1)
+    ax1.set_title('Distribution of Text Length by True Label')
+    ax1.set_xlabel('Text Length')
     
-    print("Misclassification analysis by true label:")
-    display(by_label)
-    
-    # Plot distributions
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    
-    # Plot text length distribution
-    sns.histplot(analysis_df['text_length'], ax=axes[0], kde=True)
-    axes[0].set_title('Distribution of Text Length')
-    axes[0].set_xlabel('Text Length (characters)')
-    
-    # Plot word count distribution
-    sns.histplot(analysis_df['word_count'], ax=axes[1], kde=True)
-    axes[1].set_title('Distribution of Word Count')
-    axes[1].set_xlabel('Word Count')
+    # Word count distribution
+    sns.histplot(data=misclassified_df, x='word_count', hue='true_label', ax=ax2)
+    ax2.set_title('Distribution of Word Count by True Label')
+    ax2.set_xlabel('Word Count')
     
     plt.tight_layout()
     plt.show()
     
-    # Correlation between text length and word count
-    corr = analysis_df[['text_length', 'word_count']].corr()
-    print("\nCorrelation between text characteristics:")
-    display(corr)
+    # Calculate correlation between text length and word count
+    corr = misclassified_df[['text_length', 'word_count']].corr()
     
+    # Plot correlation heatmap
     plt.figure(figsize=(8, 6))
-    sns.heatmap(corr, annot=True, cmap='coolwarm')
-    plt.title('Correlation Matrix')
-    plt.tight_layout()
+    sns.heatmap(corr, annot=True, cmap='Blues', center=0,
+                vmin=-1, vmax=1, square=True)
+    plt.title('Correlation between Text Length and Word Count')
     plt.show() 

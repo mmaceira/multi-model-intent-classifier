@@ -12,6 +12,7 @@ from IPython.display import display
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import label_binarize
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 from .metrics import compute_metrics, analyze_text_features
 from .visualization import (
@@ -23,6 +24,7 @@ from .visualization import (
     plot_top_misclassifications,
     visualize_error_distribution,
     generate_detailed_error_report,
+    plot_top_error_types,
 )
 from .utils import (
     ensure_dir,
@@ -32,11 +34,44 @@ from .utils import (
     consistently_misclassified,
 )
 
+def analyze_top_errors(
+    predictions_df: pd.DataFrame,
+    output_path: Path,
+    top_n: int = 20
+) -> None:
+    """Analyze and save the top N errors for a model.
+    
+    Parameters
+    ----------
+    predictions_df : pd.DataFrame
+        DataFrame containing predictions and text data with 'true_label' and 'pred_label' columns
+    output_path : Path
+        Path to save the error analysis results
+    top_n : int, optional
+        Number of top errors to analyze, by default 20
+    """
+    # Handle both column naming conventions
+    true_col = 'true_label' if 'true_label' in predictions_df.columns else 'y_true'
+    pred_col = 'pred_label' if 'pred_label' in predictions_df.columns else 'y_pred'
+    
+    # Create a DataFrame with true and predicted labels
+    error_df = predictions_df[predictions_df[true_col] != predictions_df[pred_col]].copy()
+
+    # Count occurrences of each (true_label, pred_label) pair
+    error_counts = (
+        error_df.groupby([true_col, pred_col])
+        .size()
+        .reset_index(name='count')
+        .sort_values('count', ascending=False)
+        .head(top_n)
+    )
+
+    # Save to CSV
+    error_counts.to_csv(output_path, index=False)
+
 def run_evaluations(
     model_names: List[str],
     *,
-    y_true: Sequence[Any],
-    y_train_true: Optional[Sequence[Any]] = None,
     artefacts_root: str | Path = "artefacts",
     output_dir: str | Path = "results",
     verbose: bool = True,
@@ -44,28 +79,21 @@ def run_evaluations(
     """Compute metrics from persisted predictions.
     
     This function orchestrates the evaluation workflow by:
-    1. Reading model predictions and probabilities
-    2. Computing various metrics (accuracy, F1, ROC AUC, etc.)
-    3. Generating visualizations (confusion matrices, ROC curves, etc.)
-    4. Comparing training vs test performance
+    1. Reading model predictions for both train and test sets
+    2. Computing various metrics (accuracy, F1, etc.)
+    3. Generating visualizations (confusion matrices, etc.)
+    4. Comparing models based on their performance
     5. Computing overfitting metrics
-    6. Additional analyses (misclassifications, calibration) when data is available
     
     Parameters
     ----------
     model_names : List[str]
         List of model identifiers (must correspond to sub-folders inside
         *artefacts_root*).
-    y_true : Sequence[Any]
-        Ground-truth labels for the test set – must be in the same order
-        that was used when generating the predictions.
-    y_train_true : Optional[Sequence[Any]], optional
-        Ground-truth labels for the training set – if provided,
-        training metrics will also be computed, by default None.
     artefacts_root : str | Path, optional
         Directory containing model artifacts, by default "artefacts".
     output_dir : str | Path, optional
-        Where to write evaluation artifacts (reports, matrices, ROC curves),
+        Where to write evaluation artifacts (reports, matrices, etc.),
         by default "results".
     verbose : bool, optional
         Whether to log progress, by default True.
@@ -79,146 +107,91 @@ def run_evaluations(
     logger.info("Starting evaluation process")
     logger.info(f"Output directory for plots and results: {output_dir}")
     
-    # Convert inputs to numpy arrays
-    y_true = np.asarray(y_true)
-    classes = np.unique(y_true)
-    is_multiclass = len(classes) > 2
-    
-    # Prepare binarized versions of labels for ROC and PR curves
-    y_true_bin = label_binarize(y_true, classes=classes) if is_multiclass else y_true
-    
-    if y_train_true is not None:
-        y_train_true = np.asarray(y_train_true)
-        y_train_true_bin = label_binarize(y_train_true, classes=classes) if is_multiclass else y_train_true
-
     # Initialize results dictionary and ensure output directory exists
     results: Dict[str, Dict[str, Any]] = {}
     artefacts_root = Path(artefacts_root)
     output_dir = ensure_dir(output_dir)
 
-    # Process each model
-    for name in model_names:
-        model_dir = artefacts_root / name
-        model_out_dir = ensure_dir(output_dir / name)
-        train_out_dir = ensure_dir(model_out_dir / "train")
-        test_out_dir = ensure_dir(model_out_dir / "test")
-        logger.info(f"Output directories for model {name}:")
-        logger.info(f"  - Training results: {train_out_dir}")
-        logger.info(f"  - Test results: {test_out_dir}")
+    # Load all predictions
+    predictions_dict = load_all_prediction_files(artefacts_root)
+    
+    if not predictions_dict:
+        logger.error("No prediction files found")
+        return results
 
+    # Get unique classes from the first model's test predictions
+    classes = sorted(predictions_dict[list(predictions_dict.keys())[0]]['test']['true_label'].unique())
+    is_multiclass = len(classes) > 2
+
+    # Process each model
+    for name, model_predictions in predictions_dict.items():
+        if name not in model_names:
+            continue
+            
+        model_out_dir = ensure_dir(output_dir / name)
+        logger.info(f"Processing model {name}")
+        logger.info(f"Output directories for model {name}:")
+        logger.info(f"  - Training results: {model_out_dir / 'train'}")
+        logger.info(f"  - Test results: {model_out_dir / 'test'}")
+        
         # Dictionary to store all results for this model
         model_results = {}
-
-        # Define splits to process
-        splits = [
-            {
-                "name": "test",
-                "y_true": y_true,
-                "y_true_bin": y_true_bin,
-                "pred_file": "test_predictions.csv",
-                "prob_file": "test_prob.npy",
-                "prefix": "test_",
-                "out_dir": test_out_dir
-            }
-        ]
         
-        if y_train_true is not None:
-            splits.append({
-                "name": "train",
-                "y_true": y_train_true,
-                "y_true_bin": y_train_true_bin,
-                "pred_file": "train_predictions.csv",
-                "prob_file": "train_prob.npy",
-                "prefix": "train_",
-                "out_dir": train_out_dir
-            })
-
-        # Process each split
-        for split in splits:
-            # Load predictions and compute metrics
-            metrics = compute_metrics(
-                model_dir=model_dir,
-                split=split,
-                classes=classes,
-                is_multiclass=is_multiclass,
-                logger=logger
-            )
+        # Process each split (train and test)
+        for split_name, df in model_predictions.items():
+            split_out_dir = ensure_dir(model_out_dir / split_name)
             
-            if metrics is None:
-                continue
-                
-            y_pred, y_prob, split_metrics = metrics
+            # Extract true and predicted labels
+            y_true = df['true_label'].values
+            y_pred = df['pred_label'].values
             
-            # Generate visualizations
-            logger.info(f"Processing distribution analysis for {name} on {split['name']} set")
-            plot_label_distribution(
-                split["y_true"], 
-                y_pred, 
-                classes,
-                split["name"].title(),
-                name,
-                split["out_dir"] / f"{split['name']}_label_distribution.png"
-            )
+            # Compute basic metrics
+            metrics = {
+                f'{split_name}_accuracy': accuracy_score(y_true, y_pred),
+                f'{split_name}_macro_f1': f1_score(y_true, y_pred, average="macro"),
+                f'{split_name}_weighted_f1': f1_score(y_true, y_pred, average="weighted"),
+            }
             
-            logger.info(f"Processing confusion matrix for {name} on {split['name']} set")
-            plot_confusion_matrix(
-                split["y_true"],
-                y_pred,
-                classes,
-                split["name"].title(),
-                name,
-                split["out_dir"] / f"{split['name']}_confusion.png"
-            )
+            # Save classification report
+            report_dict = classification_report(y_true, y_pred, output_dict=True)
+            pd.DataFrame(report_dict).T.to_csv(split_out_dir / f"{split_name}_report.csv")
             
             # Store metrics
-            model_results.update(split_metrics)
-            
-            # Process probabilities if available
-            if y_prob is not None:
-                # Generate ROC curves
-                logger.info(f"Processing ROC curves for {name} on {split['name']} set")
-                plot_roc_curves(
-                    split["y_true_bin"],
-                    y_prob,
-                    classes,
-                    split["name"].title(),
-                    name,
-                    split["out_dir"] / f"{split['name']}_roc_curves.png",
-                    is_multiclass
-                )
-                
-                # Generate precision-recall curves
-                logger.info(f"Processing precision-recall curves for {name} on {split['name']} set")
-                plot_precision_recall_curves(
-                    split["y_true_bin"],
-                    y_prob,
-                    classes,
-                    split["name"].title(),
-                    name,
-                    split["out_dir"] / f"{split['name']}_pr_curves.png",
-                    is_multiclass
-                )
+            model_results.update(metrics)
             
             # Additional analyses for test set
-            if split["name"] == "test":
-                # Top misclassifications if text data is available
-                if "text" in pd.read_csv(model_dir / split["pred_file"]).columns:
-                    logger.info(f"Processing top misclassifications for {name}")
-                    plot_top_misclassifications(
-                        pd.read_csv(model_dir / split["pred_file"])["text"].values,
-                        split["y_true"],
-                        y_pred,
-                        split["out_dir"] / "top_misclassifications.csv"
-                    )
-
+            if split_name == "test" and "text" in df.columns:
+                logger.info(f"Processing top misclassifications for {name}")
+                plot_top_misclassifications(
+                    df,
+                    split_out_dir / "top_misclassifications.csv"
+                )
+                
+                # Analyze top 20 errors
+                logger.info(f"Analyzing top 20 errors for {name}")
+                analyze_top_errors(
+                    df,
+                    split_out_dir / f"{split_name}_top_20_errors.csv"
+                )
+                # Plot and save top n error types (default 10)
+                plot_top_error_types(df, split_out_dir / "top_10_error_types.png", n=10)
+        
+        # Compute overfitting metrics if both train and test predictions are available
+        if 'train' in model_predictions and 'test' in model_predictions:
+            for metric in ['accuracy', 'macro_f1', 'weighted_f1']:
+                train_metric = model_results.get(f'train_{metric}')
+                test_metric = model_results.get(f'test_{metric}')
+                if train_metric is not None and test_metric is not None:
+                    model_results[f'{metric}_diff'] = train_metric - test_metric
+        
         # Store model results
         results[name] = model_results
 
     # Create a comprehensive summary table
     summary_df = pd.DataFrame(results).T
     
-    # Add "best" indicators
-    for metric in ["test_accuracy", "test_macro_f1", "test_weighted_f1", "test_roc_auc"]:
+    # Add "best" indicators for test metrics
+    for metric in ["test_accuracy", "test_macro_f1", "test_weighted_f1"]:
         if metric in summary_df.columns:
             best_idx = summary_df[metric].idxmax()
             summary_df[f"{metric}_best"] = False
@@ -227,13 +200,34 @@ def run_evaluations(
     # Save summary metrics
     summary_df.to_csv(output_dir / "summary_metrics.csv")
     
+    # Generate visualizations for each model
+    logger.info("Generating visualizations for each model...")
+    for name, model_predictions in predictions_dict.items():
+        if name not in model_names:
+            continue
+            
+        model_out_dir = ensure_dir(output_dir / name)
+        logger.info(f"Generating visualizations for model {name}")
+        
+        # Process each split (train and test)
+        for split_name, df in model_predictions.items():
+            split_out_dir = ensure_dir(model_out_dir / split_name)
+            logger.info(f"  - Processing {split_name} set visualizations")
+            
+            # Create a predictions dict with just this model and split
+            single_model_predictions = {name: {split_name: df}}
+            
+            # Generate split-specific visualizations
+            plot_label_distribution(single_model_predictions, split_out_dir)
+            plot_confusion_matrix(single_model_predictions, split_out_dir)
+            plot_precision_recall_curves(single_model_predictions, split_out_dir)
+            visualize_error_distribution(single_model_predictions, split_out_dir)
+            generate_detailed_error_report(single_model_predictions, split_out_dir)
+    
     # Generate model comparison visualizations if multiple models
     if len(model_names) > 1:
-        plot_model_comparisons(summary_df, model_names, output_dir)
-
-    # Load all prediction files for error analysis
-    predictions_dict = load_all_prediction_files(artefacts_root)
-    
+        plot_model_comparisons(predictions_dict, output_dir)
+        
     # Perform error analysis
     logger.info("Performing error analysis...")
     
@@ -247,24 +241,11 @@ def run_evaluations(
         misclass_examples.to_csv(output_dir / 'consistently_misclassified.csv', index=False)
     
     # Analyze text features
-    text_features = analyze_text_features(predictions_dict)
-    text_features.to_csv(output_dir / 'text_feature_analysis.csv', index=False)
-    
-    # Create error distribution visualizations
-    visualize_error_distribution(predictions_dict, output_dir)
-    
-    # Generate detailed error report
-    generate_detailed_error_report(predictions_dict, output_dir)
-    
-    # Add error analysis results to the main results dictionary
-    for model_name in results:
-        results[model_name].update({
-            'error_patterns': error_patterns,
-            'hard_cases': misclass_examples,
-            'text_features': text_features
-        })
+    if "text" in predictions_dict[list(predictions_dict.keys())[0]]['test'].columns:
+        text_features = analyze_text_features(predictions_dict)
+        text_features.to_csv(output_dir / 'text_features_analysis.csv', index=False)
 
-    return results 
+    return results
 
 def display_detailed_results(results: Dict[str, Dict[str, Any]]) -> None:
     """Display detailed evaluation results in a formatted way.
@@ -310,4 +291,4 @@ def display_detailed_results(results: Dict[str, Dict[str, Any]]) -> None:
             print("\nInterpretation guide:")
             print("- Positive values indicate potential overfitting (model performs better on training data)")
             print("- Values close to zero indicate good generalization")
-            print("- Negative values might indicate underfitting or data leakage issues") 
+            print("- Negative values might indicate underfitting or data leakage issues")
