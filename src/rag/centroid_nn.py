@@ -12,6 +12,30 @@ Key Features:
 - Support for multiple embedding types
 - Scikit-learn compatible interface
 
+Implementation Details:
+1. Initialization:
+   - Loads ALL documents from the database
+   - Groups them by label
+   - For each label, computes the mean vector (centroid) of ALL documents in that class
+   - The centroids represent a summarized form of the full database
+
+2. Prediction:
+   - Embeds new documents using MiniLM
+   - Normalizes the embeddings
+   - Compares each document to the pre-computed centroids using cosine similarity
+   - Assigns the label of the most similar centroid
+   - No additional retrieval or filtering of the database is performed
+   - Decisions are based solely on similarity to class centroids
+
+Advantages:
+- Fast prediction (only needs to compare to centroids)
+- Memory efficient (stores only centroids, not full database)
+- Simple and interpretable
+
+Disadvantages:
+- May miss subtle patterns not well represented by centroids
+- Less flexible than approaches using full database or k-nearest neighbors
+
 Classes:
 - CentroidNN: Centroid-based classifier for RAG systems
 

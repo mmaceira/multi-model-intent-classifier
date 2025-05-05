@@ -69,8 +69,8 @@ def plot_label_distribution(
     for splits in predictions_dict.values():
         if 'test' in splits:
             df = splits['test']
-            all_labels.update(df['true_label'].unique())
-            all_labels.update(df['pred_label'].unique())
+            all_labels.update(df['y_true'].unique())
+            all_labels.update(df['y_pred'].unique())
     
     all_labels = sorted(all_labels)
     
@@ -79,8 +79,8 @@ def plot_label_distribution(
             df = splits['test']
             
             # Compute label distributions
-            true_counts = pd.Series(df['true_label']).value_counts().reindex(all_labels, fill_value=0)
-            pred_counts = pd.Series(df['pred_label']).value_counts().reindex(all_labels, fill_value=0)
+            true_counts = pd.Series(df['y_true']).value_counts().reindex(all_labels, fill_value=0)
+            pred_counts = pd.Series(df['y_pred']).value_counts().reindex(all_labels, fill_value=0)
             
             df_dist = pd.DataFrame({
                 'True': true_counts,
@@ -190,7 +190,7 @@ def plot_precision_recall_curves(
     for splits in predictions_dict.values():
         if 'test' in splits:
             df = splits['test']
-            all_labels.update(df['true_label'].unique())
+            all_labels.update(df['y_true'].unique())
     
     all_labels = sorted(all_labels)
     
@@ -202,7 +202,7 @@ def plot_precision_recall_curves(
             y_prob = np.array([eval(p) for p in df['probabilities']])
             
             # Create binary labels for each class
-            y_true_bin = label_binarize(df['true_label'], classes=all_labels)
+            y_true_bin = label_binarize(df['y_true'], classes=all_labels)
             
             # Plot curves
             fig, ax = plt.subplots(figsize=(10, 8))
@@ -259,7 +259,7 @@ def plot_confusion_matrix(
     classes = set()
     for model_predictions in predictions_dict.values():
         if 'test' in model_predictions:
-            classes.update(model_predictions['test']['true_label'].unique())
+            classes.update(model_predictions['test']['y_true'].unique())
     classes = sorted(classes)
     
     # Process each model
@@ -268,8 +268,8 @@ def plot_confusion_matrix(
             continue
             
         df = model_predictions['test']
-        y_true = df['true_label'].values
-        y_pred = df['pred_label'].values
+        y_true = df['y_true'].values
+        y_pred = df['y_pred'].values
         
         # Compute confusion matrix
         cm = confusion_matrix(y_true, y_pred, labels=classes)
@@ -343,8 +343,8 @@ def plot_model_comparisons(
             continue
             
         df = model_predictions['test']
-        y_true = df['true_label'].values
-        y_pred = df['pred_label'].values
+        y_true = df['y_true'].values
+        y_pred = df['y_pred'].values
         
         metrics.append({
             'Model': model_name,
@@ -375,7 +375,7 @@ def plot_top_misclassifications(
     Parameters
     ----------
     predictions_df : pd.DataFrame
-        DataFrame containing predictions and text data with 'text', 'true_label', and 'pred_label' columns
+        DataFrame containing predictions and text data with 'text', 'y_true', and 'y_pred' columns
     output_path : Path
         Path to save the misclassifications CSV
     top_n : int, optional
@@ -387,7 +387,7 @@ def plot_top_misclassifications(
         DataFrame containing the top misclassifications
     """
     # Filter misclassifications
-    df = predictions_df[predictions_df['true_label'] != predictions_df['pred_label']].copy()
+    df = predictions_df[predictions_df['y_true'] != predictions_df['y_pred']].copy()
     
     # Save to CSV
     df.head(top_n).to_csv(output_path, index=False)
@@ -418,13 +418,13 @@ def visualize_error_distribution(predictions_dict: Dict[str, Dict[str, pd.DataFr
         if 'test' in splits:
             df = splits['test']
             # Calculate overall accuracy
-            accuracy = (df['true_label'] == df['pred_label']).mean()
+            accuracy = (df['y_true'] == df['y_pred']).mean()
             model_results.append({'model': model_name, 'accuracy': accuracy})
             
             # Calculate per-class error rates
-            for class_name in df['true_label'].unique():
-                class_df = df[df['true_label'] == class_name]
-                error_rate = (class_df['true_label'] != class_df['pred_label']).mean()
+            for class_name in df['y_true'].unique():
+                class_df = df[df['y_true'] == class_name]
+                error_rate = (class_df['y_true'] != class_df['y_pred']).mean()
                 class_error_rates.append({
                     'model': model_name,
                     'class': class_name,
@@ -494,8 +494,8 @@ def generate_detailed_error_report(predictions_dict: Dict[str, Dict[str, pd.Data
         html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th><th>Models</th></tr>')
         for _, row in misclass_df.head(20).iterrows():
             models = [name for name in predictions_dict.keys() if row.get(name, False)]
-            html.append(f'<tr><td>{row["text"]}</td><td>{row["true_label"]}</td>')
-            html.append(f'<td>{row["pred_label"]}</td><td>{", ".join(models)}</td></tr>')
+            html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td>')
+            html.append(f'<td>{row["y_pred"]}</td><td>{", ".join(models)}</td></tr>')
         html.append('</table>')
     else:
         html.append('<p>No consistently misclassified examples found.</p>')
@@ -506,22 +506,22 @@ def generate_detailed_error_report(predictions_dict: Dict[str, Dict[str, pd.Data
         # We'll only analyze test set for the report
         if 'test' in splits:
             df = splits['test']
-            errors = df[df['true_label'] != df['pred_label']]
+            errors = df[df['y_true'] != df['y_pred']]
             html.append(f'<h3>{model_name}</h3>')
             
             # Error count by class
-            error_by_class = errors.groupby('true_label').size().reset_index(name='count')
+            error_by_class = errors.groupby('y_true').size().reset_index(name='count')
             html.append('<h4>Error Count by True Class</h4>')
             html.append('<table><tr><th>Class</th><th>Error Count</th></tr>')
             for _, row in error_by_class.sort_values('count', ascending=False).iterrows():
-                html.append(f'<tr><td>{row["true_label"]}</td><td>{row["count"]}</td></tr>')
+                html.append(f'<tr><td>{row["y_true"]}</td><td>{row["count"]}</td></tr>')
             html.append('</table>')
             
             # Sample errors
             html.append('<h4>Sample Errors</h4>')
             html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th></tr>')
             for _, row in errors.head(5).iterrows():
-                html.append(f'<tr><td>{row["text"]}</td><td>{row["true_label"]}</td><td>{row["pred_label"]}</td></tr>')
+                html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td><td>{row["y_pred"]}</td></tr>')
             html.append('</table>')
     
     html.append('</body></html>')
@@ -560,8 +560,8 @@ def plot_confusion_matrices(experiment_dir: str | Path, figsize: Tuple[int, int]
     for splits in predictions.values():
         if 'test' in splits:
             df = splits['test']
-            all_labels.update(df['true_label'].unique())
-            all_labels.update(df['pred_label'].unique())
+            all_labels.update(df['y_true'].unique())
+            all_labels.update(df['y_pred'].unique())
     
     all_labels = sorted(all_labels)
     
@@ -574,7 +574,7 @@ def plot_confusion_matrices(experiment_dir: str | Path, figsize: Tuple[int, int]
                 df = splits['test']
                 
                 # Calculate confusion matrix
-                cm = confusion_matrix(df['true_label'], df['pred_label'], labels=all_labels)
+                cm = confusion_matrix(df['y_true'], df['y_pred'], labels=all_labels)
                 
                 # Normalize by row (true labels)
                 cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
@@ -606,14 +606,14 @@ def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):
         n (int): Number of top error types to plot (default 10).
     """
     # Accept both naming conventions
-    if 'true_label' in df.columns and 'pred_label' in df.columns:
-        y_true = df['true_label']
-        y_pred = df['pred_label']
+    if 'y_true' in df.columns and 'y_pred' in df.columns:
+        y_true = df['y_true']
+        y_pred = df['y_pred']
     elif 'y_true' in df.columns and 'y_pred' in df.columns:
         y_true = df['y_true']
         y_pred = df['y_pred']
     else:
-        raise ValueError("DataFrame must contain either ('true_label', 'pred_label') or ('y_true', 'y_pred') columns.")
+        raise ValueError("DataFrame must contain either ('y_true', 'y_pred') or ('true_label', 'pred_label') columns.")
 
     # Create error type column
     error_df = df[y_true != y_pred].copy()

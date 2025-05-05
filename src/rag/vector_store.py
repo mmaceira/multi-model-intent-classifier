@@ -42,11 +42,13 @@ Example Usage:
 import json
 import time
 import logging
+import os
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Sequence, Dict, Any
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from src.utils.embeddings import EmbeddingGenerator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -56,26 +58,142 @@ logger = logging.getLogger(__name__)
 _CACHED_MODELS = {}
 
 class VectorStore:
-    def __init__(self, faiss_path, meta_path):
-        """Initialize VectorStore by loading FAISS index and metadata.
+    def __init__(self, *args, **kwargs):
+        """Initialize the vector store.
         
-        Args:
-            faiss_path: Path to FAISS index file
-            meta_path: Path to metadata JSONL file
+        Parameters
+        ----------
+        Either:
+            api_key : str
+                OpenAI API key
+            model : str, optional
+                Model to use for embeddings, by default "text-embedding-3-small"
+        Or:
+            index_path : str | Path
+                Path to the FAISS index file
+            meta_path : str | Path
+                Path to the metadata file
         """
-        start_time = time.time()
+        if len(args) == 2 and isinstance(args[0], (str, Path)) and isinstance(args[1], (str, Path)):
+            # Initialize with index and metadata paths
+            index_path = Path(args[0])
+            meta_path = Path(args[1])
+            
+            # Load FAISS index
+            self.index = faiss.read_index(str(index_path))
+            
+            # Load metadata
+            self._meta = []
+            with open(meta_path, 'r') as f:
+                for line in f:
+                    self._meta.append(json.loads(line))
+            
+            # Initialize embedder for search functionality
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                
+            self.embedder = EmbeddingGenerator(
+                api_key=api_key,  # Use the actual API key from environment
+                model="text-embedding-3-small",
+                batch_size=100,
+                max_retries=3
+            )
+            self.vectors = {}
+            self.metadata = {}
+        else:
+            # Initialize with API key and model
+            api_key = args[0] if args else kwargs.get('api_key')
+            if not api_key:
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+            
+            self.embedder = EmbeddingGenerator(
+                api_key=api_key,
+                model=kwargs.get('model', "text-embedding-3-small"),
+                batch_size=100,
+                max_retries=3
+            )
+            self.vectors = {}
+            self.metadata = {}
+            self._meta = []
+    
+    @property
+    def meta(self) -> List[Dict[str, Any]]:
+        """Return metadata in the old format for backward compatibility."""
+        if hasattr(self, '_meta') and self._meta:
+            return self._meta
+        return [
+            {
+                'label': meta.get('label', ''),
+                'text': meta.get('text', ''),
+                'vector': self.vectors.get(doc, []).tolist() if doc in self.vectors else []
+            }
+            for doc, meta in self.metadata.items()
+        ]
+    
+    def add_documents(self, documents: List[str], metadata: List[Dict[str, Any]] = None):
+        """Add documents to the vector store.
         
-        # Ensure paths are Path objects
-        self.index_path = Path(faiss_path) if not isinstance(faiss_path, Path) else faiss_path
-        self.meta_path = Path(meta_path) if not isinstance(meta_path, Path) else meta_path
+        Parameters
+        ----------
+        documents : List[str]
+            List of documents to add
+        metadata : List[Dict[str, Any]], optional
+            List of metadata dictionaries for each document, by default None
+        """
+        embeddings = self.embedder.generate_embeddings(documents)
         
-        logger.info(f"Loading FAISS index from {self.index_path}")
-        self.index = faiss.read_index(str(self.index_path))
+        for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
+            self.vectors[doc] = embedding
+            if metadata:
+                self.metadata[doc] = metadata[i]
+    
+    def search(self, query: str | np.ndarray, k: int = 5) -> List[Dict[str, Any]]:
+        """Search for similar documents.
         
-        logger.info(f"Loading metadata from {self.meta_path}")
-        self.meta: List[dict] = [json.loads(l) for l in Path(self.meta_path).read_text().splitlines()]
+        Parameters
+        ----------
+        query : str | np.ndarray
+            Query text or embedding vector
+        k : int, optional
+            Number of results to return, by default 5
+            
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of results with scores and metadata
+        """
+        # Handle both string queries and embedding vectors
+        if isinstance(query, str):
+            query_embedding = self.embedder.generate_embeddings([query])[0]
+        elif isinstance(query, np.ndarray):
+            query_embedding = query
+        else:
+            raise ValueError(f"Query must be a string or numpy array, got {type(query)}")
         
-        logger.info(f"VectorStore initialized with {len(self.meta)} documents in {time.time() - start_time:.2f} seconds")
+        # Normalize the query embedding
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)
+        
+        # Search using FAISS
+        distances, indices = self.index.search(
+            query_embedding.reshape(1, -1).astype('float32'),
+            k
+        )
+        
+        # Convert to list of results
+        results = []
+        for i, idx in enumerate(indices[0]):
+            if idx >= 0:  # FAISS returns -1 for invalid indices
+                result = {
+                    "text": self._meta[idx].get('text', ''),
+                    "label": self._meta[idx].get('label', ''),
+                    "score": float(distances[0][i])
+                }
+                results.append(result)
+        
+        return results
 
     @staticmethod
     def build(emb: np.ndarray, meta: List[dict], dim: int, faiss_path, meta_path):
@@ -120,36 +238,6 @@ class VectorStore:
         logger.info(f"Wrote metadata in {time.time() - meta_start:.2f} seconds")
         
         logger.info(f"Index built in {time.time() - start_time:.2f} seconds")
-
-    def search(self, q: np.ndarray, k: int) -> List[dict]:
-        """Search the index for nearest neighbors.
-        
-        Args:
-            q: Query vector
-            k: Number of nearest neighbors to return
-            
-        Returns:
-            List of metadata entries for nearest neighbors
-        """
-        start_time = time.time()
-        logger.debug(f"Starting vector search for top-{k} results")
-        
-        normalize_start = time.time()
-        faiss.normalize_L2(q)
-        normalize_time = time.time() - normalize_start
-        
-        search_start = time.time()
-        _, idx = self.index.search(q.astype('float32'), k)
-        search_time = time.time() - search_start
-        
-        gather_start = time.time()
-        results = [self.meta[i] for i in idx[0]]
-        gather_time = time.time() - gather_start
-        
-        total_time = time.time() - start_time
-        logger.debug(f"Vector search completed in {total_time:.4f}s (normalize: {normalize_time:.4f}s, search: {search_time:.4f}s, gather: {gather_time:.4f}s)")
-        
-        return results
 
     @staticmethod
     def embed(model_name: str, docs: Sequence[str], embedder=None) -> np.ndarray:

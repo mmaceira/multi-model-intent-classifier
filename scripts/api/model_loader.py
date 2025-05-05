@@ -147,7 +147,7 @@ def get_model(model_identifier: str):
                 
                 # If this is a RagSklearnAdapter with no rag component, initialize it
                 if hasattr(classifier_obj, 'rag') and classifier_obj.rag is None:
-                    from src.rag import load_kmajority, load_centroid, load_llm
+                    from src.rag import load_kmajority, load_centroid, load_llm, load_hybrid
                     from src.embeddings.openai_embedder import OpenAIEmbedder
                     from src.rag.vector_store import VectorStore
                     
@@ -156,6 +156,8 @@ def get_model(model_identifier: str):
                         rag_model = load_kmajority(top_k=5, use_openai='openai' in model_identifier)
                     elif 'centroid' in model_identifier:
                         rag_model = load_centroid(use_openai='openai' in model_identifier)
+                    elif 'hybrid' in model_identifier:
+                        rag_model = load_hybrid(use_openai='openai' in model_identifier)
                     else:  # LLM-based RAG
                         if 'openai' in model_identifier:
                             embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)

@@ -2,37 +2,41 @@
 Retrieval-Augmented Generation (RAG) LLM News Classifier
 ========================================================
 
-This module implements a robust news classification system using a Retrieval-Augmented 
-Generation approach with large language models. It's designed for production 
-environments with reliability features including:
+A production-ready news classifier using RAG with LLMs. Combines vector similarity search with LLM reasoning.
 
-- **Rate limiting**: Controls API request frequency to prevent throttling
-- **Batched processing**: Optimizes throughput by classifying multiple documents per request
-- **Robust error handling**: Implements exponential backoff, fallbacks, and detailed logging
-- **Concurrency control**: Manages parallel processing for optimal performance
+Key Features:
+- Rate limiting and batched processing
+- Robust error handling with exponential backoff
+- Concurrency control for optimal performance
 
-The classifier uses a retrieval system to find relevant context examples for each document,
-then prompts an LLM to classify the document based on the retrieved examples.
+Implementation:
+1. Two-Stage Process:
+   a) Retrieval: Finds k similar examples from database
+   b) Generation: Uses LLM to classify based on examples
+
+2. Database Usage:
+   - Uses database to find context examples
+   - LLM uses examples to make informed decisions
+   - More flexible than centroid or k-NN approaches
+
+3. Production Features:
+   - Batched processing for efficiency
+   - Rate limiting to prevent throttling
+   - Error handling with retries
+
+Advantages:
+- Most flexible approach
+- Handles complex cases well
+- Adapts to new patterns
+
+Disadvantages:
+- Expensive (requires LLM API calls)
+- Slower than other approaches
+- More complex implementation
 
 Example usage:
     ```python
-    from rag.rag_llm import RagLLM
-    
-    # Create with default settings 
     classifier = RagLLM.load_default()
-    
-    # Or configure custom settings
-    from rag.retrieval import Retriever
-    retriever = Retriever.from_default()
-    classifier = RagLLM(
-        retriever=retriever,
-        labels=["business", "sports", "technology"],
-        model="gpt-4o-mini",
-        batch_size=10,
-        rate_limit_per_minute=100
-    )
-    
-    # Classify documents
     results = classifier.predict([
         "Apple's stock rose 2% after strong quarterly earnings.",
         "Manchester United signed a new striker for £80 million."
@@ -51,12 +55,13 @@ import logging
 import os
 import random
 import time
-from typing import Callable, Iterable, List, Sequence, Tuple
+from typing import Callable, Iterable, List, Sequence, Tuple, Dict, Any
 
 import numpy as np
 import openai
 from dotenv import load_dotenv
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, RateLimitError, BadRequestError
+from src.utils.retry import with_retry
 
 from .classifier_base import RagClassifierBase
 from .retrieval import Retriever
@@ -69,7 +74,10 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 # Configuration helpers
 # ---------------------------------------------------------------------------
+# Load environment variables from .env file
 load_dotenv()
+
+# Verify OpenAI API key is set
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise EnvironmentError("OPENAI_API_KEY not set in environment")
@@ -202,6 +210,35 @@ class RagLLM(RagClassifierBase):
             return np.array(self.embedder.encode(list(docs)), dtype="float32")
         return np.array(self.embedder(list(docs)), dtype="float32")
 
+    @with_retry(
+        max_retries=3,
+        initial_delay=1.0,
+        max_delay=10.0,
+        backoff_factor=2.0,
+        logger=logger
+    )
+    def get_completion(self, prompt: str, **kwargs) -> str:
+        """Get a completion from the LLM.
+        
+        Parameters
+        ----------
+        prompt : str
+            The prompt to send to the LLM
+        **kwargs
+            Additional arguments to pass to the completion API
+            
+        Returns
+        -------
+        str
+            The completion text
+        """
+        response = self._client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            **kwargs
+        )
+        return response.choices[0].message.content
+
     async def _chat_with_retry(self, messages) -> openai.chat.completion.ChatCompletion:
         """Send a request to the OpenAI API with robust error handling.
         
@@ -211,44 +248,49 @@ class RagLLM(RagClassifierBase):
         - Detailed error logging
         
         Args:
-            messages: List of message objects for the chat completion API
+            messages: List of message dictionaries with 'role' and 'content' keys
             
         Returns:
-            openai.chat.completion.ChatCompletion: The API response
+            ChatCompletion: The API response
             
         Raises:
-            RuntimeError: If all retry attempts fail
+            RateLimitError: If rate limit is exceeded after all retries
+            BadRequestError: If the request is invalid
+            APIError: For other API-related errors
         """
-        last_request_time = time.time()
-        for attempt in range(self.max_retries):
+        attempt = 0
+        while attempt < self.max_retries:
             try:
-                # Calculate time since last request and wait if needed
-                now = time.time()
-                time_since_last = now - last_request_time
-                if time_since_last < self._min_interval:
-                    wait_time = max(0, self._min_interval - time_since_last)
-                    await asyncio.sleep(wait_time)
+                # Ensure minimum interval between API calls
+                if attempt > 0:
+                    await asyncio.sleep(self._min_interval)
                 
-                # Update last request time
-                last_request_time = time.time()
-                
-                # Make the API call with JSON response format
-                return await self._client.chat.completions.create(
+                # Make the API call with the new format
+                response = await self._client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    temperature=0.0,
                     response_format={"type": "json_object"},
+                    temperature=0.0
                 )
-            except RateLimitError as exc:
-                wait = _exponential_backoff(attempt)
-                logger.warning("Rate‑limit hit: waiting %.1fs (attempt %d/%d)", wait, attempt+1, self.max_retries)
-                await asyncio.sleep(wait)
-            except Exception as e:
-                wait = _exponential_backoff(attempt)
-                logger.error(f"API error: {str(e)} - waiting {wait:.1f}s (attempt {attempt+1}/{self.max_retries})")
-                await asyncio.sleep(wait)
+                return response
                 
-        raise RuntimeError("OpenAI API failed after retries")
+            except RateLimitError as e:
+                attempt += 1
+                if attempt >= self.max_retries:
+                    logger.error(f"Rate limit exceeded after {attempt} attempts: {e}")
+                    raise
+                delay = _exponential_backoff(attempt)
+                logger.warning(f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})")
+                await asyncio.sleep(delay)
+                
+            except Exception as e:
+                attempt += 1
+                if attempt >= self.max_retries:
+                    logger.error(f"API error after {attempt} attempts: {e}")
+                    raise
+                delay = _exponential_backoff(attempt)
+                logger.warning(f"API error, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})")
+                await asyncio.sleep(delay)
 
     async def _classify_batch(
         self, docs: List[str], vectors: List[np.ndarray], return_probas: bool = False
@@ -277,14 +319,22 @@ class RagLLM(RagClassifierBase):
         # prepare contexts
         contexts: List[str] = []
         for vec in vectors:
-            neigh = self.retriever.top_k(vec[None,:], self.top_k)
-            contexts.append("\n\n".join(n['text'] for n in neigh))
+            try:
+                # Pass the numpy array directly to the retriever
+                neigh = self.retriever.top_k(vec, self.top_k)
+                contexts.append("\n\n".join(n['text'] for n in neigh))
+            except Exception as e:
+                logger.error(f"Error retrieving neighbors: {e}")
+                contexts.append("")  # Use empty context if retrieval fails
 
         # build a single prompt with multiple items
         allowed = ", ".join(self.labels)
         lines = []
-        for i,(doc,ctx) in enumerate(zip(docs, contexts), start=1):
-            lines.append(f"{i}. Article: {doc}\nContext:\n{ctx}")
+        for i, (doc, ctx) in enumerate(zip(docs, contexts), start=1):
+            # Ensure doc is a string and not empty
+            doc_text = str(doc).strip() if doc else " "
+            ctx_text = str(ctx).strip() if ctx else " "
+            lines.append(f"{i}. Article: {doc_text}\nContext:\n{ctx_text}")
         
         # Create the examples part of the JSON structure
         examples_json = ', '.join(f'"{self.labels[0]}"' for _ in range(min(3, len(docs))))
@@ -310,11 +360,11 @@ class RagLLM(RagClassifierBase):
             "content": f"I'll respond with only a JSON object with exactly {len(docs)} labels: {{\"labels\": [{examples_json}]}}"
         })
 
-        resp = await self._chat_with_retry(messages)
-        text = resp.choices[0].message.content.strip()
-        
-        # Improved JSON parsing with better error handling
         try:
+            resp = await self._chat_with_retry(messages)
+            text = resp.choices[0].message.content.strip()
+            
+            # Improved JSON parsing with better error handling
             import json
             response_data = json.loads(text)
             
@@ -471,18 +521,23 @@ class RagLLM(RagClassifierBase):
                     # For similarity-based probability estimation
                     batch_results = []
                     for j, (doc, vec) in enumerate(zip(docs_batch, vec_batch)):
-                        # Get nearest neighbors
-                        neighbors = self.retriever.top_k(np.expand_dims(vec, axis=0), self.top_k)
-                        # Count label occurrences
-                        label_counts = {}
-                        for neighbor in neighbors:
-                            label = neighbor['label']
-                            label_counts[label] = label_counts.get(label, 0) + 1
-                        
-                        # Convert to probabilities
-                        for label, count in label_counts.items():
-                            if label in label_to_idx:
-                                all_probas[batch_start + j, label_to_idx[label]] = count / self.top_k
+                        try:
+                            # Pass the numpy array directly to the retriever
+                            neighbors = self.retriever.top_k(vec, self.top_k)
+                            # Count label occurrences
+                            label_counts = {}
+                            for neighbor in neighbors:
+                                label = neighbor['label']
+                                label_counts[label] = label_counts.get(label, 0) + 1
+                            
+                            # Convert to probabilities
+                            for label, count in label_counts.items():
+                                if label in label_to_idx:
+                                    all_probas[batch_start + j, label_to_idx[label]] = count / self.top_k
+                        except Exception as e:
+                            logger.error(f"Error processing document {j} in batch {i}: {e}")
+                            # If there's an error, assign equal probabilities to all classes
+                            all_probas[batch_start + j, :] = 1.0 / len(sorted_labels)
                 
                 batch_start += len(docs_batch)
             

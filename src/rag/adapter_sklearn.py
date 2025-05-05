@@ -51,7 +51,12 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         return self
         
     def predict(self, X): 
-        return self.rag.predict(X)
+        if isinstance(X, list):
+            return self.rag.predict(X)
+        elif isinstance(X, np.ndarray):
+            return self.rag.predict(X.tolist())
+        else:
+            raise ValueError(f"Input must be a list or numpy array, got {type(X)}")
     
     def predict_proba(self, X):
         """Generate probability estimates for each class.
@@ -74,6 +79,19 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         AttributeError : If the underlying RAG model doesn't have a predict_proba method.
         """
         if hasattr(self.rag, 'predict_proba'):
+            # Convert input to list of strings if it's a numpy array
+            if isinstance(X, np.ndarray):
+                if X.dtype.kind in ['U', 'S']:  # If array contains strings
+                    X = X.tolist()
+                else:
+                    raise ValueError("Input array must contain strings")
+            elif isinstance(X, list):
+                # Verify all elements are strings
+                if not all(isinstance(x, str) for x in X):
+                    raise ValueError("All elements in input list must be strings")
+            else:
+                raise ValueError(f"Input must be a list of strings or numpy array of strings, got {type(X)}")
+            
             return self.rag.predict_proba(X)
         else:
             raise AttributeError("The underlying RAG model does not implement predict_proba")

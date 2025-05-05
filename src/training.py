@@ -77,12 +77,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.base import clone as safe_clone
-
-def _ensure_dir(path: str | Path) -> Path:
-    """Create *path* (including parents) if it does not exist and return a `Path`."""
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+from src.utils.file_ops import ensure_dir
 
 def run_training(
     models: Dict[str, Any],
@@ -122,7 +117,7 @@ def run_training(
     Dict[str, Any]
         Mapping ``name → fitted estimator``.
     """
-    output_dir = _ensure_dir(output_dir)
+    output_dir = ensure_dir(output_dir)
     fitted: Dict[str, Any] = {}
 
     for name, model in models.items():
@@ -133,7 +128,7 @@ def run_training(
         estimator.fit(X_train, y_train)
         fitted[name] = estimator
 
-        model_dir = _ensure_dir(output_dir / name)
+        model_dir = ensure_dir(output_dir / name)
 
         # --- persist model ---------------------------------------------------
         if save_models:

@@ -64,14 +64,9 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
         for split in ['train', 'test']:
             pred_file = model_dir / f"{split}_predictions.csv"
             if pred_file.exists():
+                logger = setup_logging(True)
+                logger.info(f"Loading predictions from {pred_file}")
                 df = pd.read_csv(pred_file)
-                
-                # Rename columns if necessary to match expected names
-                if 'y_true' in df.columns and 'y_pred' in df.columns:
-                    df = df.rename(columns={
-                        'y_true': 'true_label',
-                        'y_pred': 'pred_label'
-                    })
                 
                 # Add model name column
                 df['model'] = model_name
@@ -85,6 +80,7 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
                     df['text'] = "Placeholder text"
                 
                 dfs[model_name][split] = df
+                logger.info(f"Successfully loaded {split} predictions for {model_name}")
     
     if not dfs:
         raise FileNotFoundError(f'No prediction files found in {exp}')
@@ -96,12 +92,8 @@ def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.D
     frames = []
     for name, splits in pred_dfs.items():
         for split_name, df in splits.items():
-            # Handle both column naming conventions
-            true_col = 'true_label' if 'true_label' in df.columns else 'y_true'
-            pred_col = 'pred_label' if 'pred_label' in df.columns else 'y_pred'
-            
-            errs = df[df[true_col] != df[pred_col]].copy()
-            errs['error_type'] = errs[true_col] + ' -> ' + errs[pred_col]
+            errs = df[df['y_true'] != df['y_pred']].copy()
+            errs['error_type'] = errs['y_true'] + ' -> ' + errs['y_pred']
             errs['model'] = name
             errs['split'] = split_name
             frames.append(errs)
@@ -135,11 +127,7 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
         # We'll only look at test set predictions for consistency
         if 'test' in splits:
             df = splits['test']
-            # Handle both column naming conventions
-            true_col = 'true_label' if 'true_label' in df.columns else 'y_true'
-            pred_col = 'pred_label' if 'pred_label' in df.columns else 'y_pred'
-            
-            wrong = df[df[true_col] != df[pred_col]][['id', 'text', true_col, pred_col]].copy()
+            wrong = df[df['y_true'] != df['y_pred']][['id', 'text', 'y_true', 'y_pred']].copy()
             wrong[name] = True
             combined = wrong if combined is None else combined.merge(wrong, how='outer')
     
@@ -147,11 +135,7 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
         return pd.DataFrame()
         
     combined = combined.fillna(False)
-    # Get the column names used in the DataFrame
-    true_col = 'true_label' if 'true_label' in combined.columns else 'y_true'
-    pred_col = 'pred_label' if 'pred_label' in combined.columns else 'y_pred'
-    
-    mask = combined.drop(columns=['id', 'text', true_col, pred_col]).sum(1) >= min_models
+    mask = combined.drop(columns=['id', 'text', 'y_true', 'y_pred']).sum(1) >= min_models
     return combined[mask]
 
 def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path]) -> None:

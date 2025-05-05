@@ -11,6 +11,41 @@ Key Features:
 - Support for multiple embedding types
 - Scikit-learn compatible interface
 
+Implementation Details:
+1. Initialization:
+   - Loads the vector store containing all document embeddings
+   - Extracts unique labels from the metadata
+   - Configures the number of nearest neighbors (k) to consider
+   - Creates a label-to-index mapping for efficient probability computation
+
+2. Prediction Process:
+   - For each new document:
+     1. Generates its embedding using MiniLM
+     2. Retrieves the k most similar documents from the database
+     3. Applies majority voting on the labels of these neighbors
+     4. Returns the most frequent label as the prediction
+   - For probability estimation:
+     1. Counts occurrences of each label among the k neighbors
+     2. Normalizes counts to get probability estimates
+     3. Returns a probability distribution over all possible labels
+
+3. Database Usage:
+   - Unlike CentroidNN which uses summarized centroids, RagKMajority:
+     - Performs actual nearest neighbor search for each query
+     - Uses the full database during prediction
+     - Considers the actual distribution of labels in the neighborhood
+
+Advantages:
+- More flexible than centroid-based approaches
+- Can capture local patterns in the data
+- Provides probability estimates based on actual neighbor distributions
+- Better at handling documents that fall between class boundaries
+
+Disadvantages:
+- Slower than centroid-based approaches (requires nearest neighbor search)
+- More memory intensive (needs to store and search through all embeddings)
+- Performance depends on the choice of k (number of neighbors)
+
 Classes:
 - RagKMajority: K-Majority classifier for RAG systems
 

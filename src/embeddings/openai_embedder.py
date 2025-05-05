@@ -18,7 +18,11 @@ import time
 import logging
 import random
 import backoff
-from typing import Iterable, List
+from typing import Iterable, List, Dict, Any
+import numpy as np
+from openai import OpenAI
+from src.utils.retry import with_retry
+from src.utils.embeddings import EmbeddingGenerator
 
 try:
     import openai
@@ -57,69 +61,56 @@ class OpenAIEmbedder:
         Maximum number of retries for rate-limited API calls.
     """
 
-    def __init__(
-        self,
-        model: str = "text-embedding-3-small",
-        batch_size: int = 100,
-        api_key: str | None = None,
-        organization: str | None = None,
-        max_retries: int = 5,
-    ):
-        self.model = model
-        self.batch_size = batch_size
-        self.max_retries = max_retries
-        openai.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if organization:
-            openai.organization = organization
-        self._client = openai
-
-    def _backoff_hdlr(self, details):
-        """Handler called on backoff before each retry."""
-        logger.warning(
-            f"OpenAI API embeddings call failed. Retrying in {details['wait']:.2f}s after {details['tries']} tries. "
-            f"Error: {details['exception']}"
+    def __init__(self, api_key: str | None = None, model: str = "text-embedding-3-small", batch_size: int = 100):
+        """Initialize the OpenAI embedder.
+        
+        Parameters
+        ----------
+        api_key : str | None
+            OpenAI API key. If None, falls back to OPENAI_API_KEY environment variable.
+        model : str, optional
+            Model to use for embeddings, by default "text-embedding-3-small"
+        batch_size : int, optional
+            Number of texts to process in each batch, by default 100
+        """
+        if api_key is None:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key is None:
+                raise ValueError("No API key provided and OPENAI_API_KEY environment variable is not set")
+        
+        self.embedder = EmbeddingGenerator(
+            api_key=api_key,
+            model=model,
+            batch_size=batch_size,
+            max_retries=3
         )
 
-    @backoff.on_exception(
-        backoff.expo,
-        (RateLimitError, openai.RateLimitError),
-        max_tries=5,  # Max retries
-        factor=1.5,   # Exponential backoff factor
-        jitter=backoff.full_jitter,  # Add jitter for distributed systems
-    )
-    def _create_embeddings_with_retry(self, batch):
-        """Make an OpenAI embeddings API call with retry logic for rate limits"""
-        try:
-            return self._client.embeddings.create(input=batch, model=self.model)
-        except (RateLimitError, openai.RateLimitError) as e:
-            # Extract wait time from error message if available
-            wait_time = 0.5  # Default wait time if we can't parse the message
-            try:
-                # Try to extract wait time from error message
-                if hasattr(e, 'message') and 'try again in' in e.message.lower():
-                    import re
-                    match = re.search(r'try again in (\d+)ms', e.message.lower())
-                    if match:
-                        wait_ms = int(match.group(1))
-                        wait_time = wait_ms / 1000.0 + 0.1  # Add a small buffer
-            except:
-                pass
+    def get_embeddings(self, texts: List[str]) -> np.ndarray:
+        """Get embeddings for a list of texts.
+        
+        Parameters
+        ----------
+        texts : List[str]
+            List of texts to embed
             
-            logger.warning(f"Rate limit exceeded for embeddings. Waiting for {wait_time:.2f}s before retry")
-            time.sleep(wait_time)
-            raise  # Re-raise to be caught by backoff
+        Returns
+        -------
+        np.ndarray
+            Array of embeddings
+        """
+        return self.embedder.generate_embeddings(texts)
 
     def encode(self, texts: List[str]) -> List[List[float]]:
         """Return a list of embedding vectors aligned with *texts*."""
         # Start timing the entire encoding process
         start_time = time.time()
-        logger.info(f"Starting OpenAI embedding generation for {len(texts)} texts with model {self.model}")
+        logger.info(f"Starting OpenAI embedding generation for {len(texts)} texts with model {self.embedder.model}")
         
         embeddings: List[List[float]] = []
         batch_count = 0
         total_token_count = 0  # This is just an estimate
         
-        for batch in chunk_iterable(texts, self.batch_size):
+        for batch in chunk_iterable(texts, self.embedder.batch_size):
             batch_count += 1
             batch_size = len(batch)
             batch_start_time = time.time()
@@ -132,7 +123,7 @@ class OpenAIEmbedder:
             
             try:
                 # Use the retry-enabled method instead of direct API call
-                response = self._create_embeddings_with_retry(batch)
+                response = self.get_embeddings(batch)
                 
                 # Get actual token usage if available in the response
                 if hasattr(response, 'usage') and hasattr(response.usage, 'total_tokens'):
@@ -140,7 +131,7 @@ class OpenAIEmbedder:
                     logger.info(f"Batch {batch_count} used {actual_tokens} tokens")
                 
                 # Using .data list ensures order preserved
-                embeddings.extend([d.embedding for d in response.data])
+                embeddings.extend([list(embedding) for embedding in response])
                 
                 batch_end_time = time.time()
                 batch_duration = batch_end_time - batch_start_time
@@ -150,7 +141,7 @@ class OpenAIEmbedder:
                     logger.info(f"Average time per text in batch: {batch_duration/batch_size:.4f} seconds")
                 
                 # Add a small delay between batches to avoid rate limits
-                if batch_count < (len(texts) + self.batch_size - 1) // self.batch_size:
+                if batch_count < (len(texts) + self.embedder.batch_size - 1) // self.embedder.batch_size:
                     delay = random.uniform(0.2, 0.5)
                     logger.info(f"Adding delay of {delay:.2f}s before next batch")
                     time.sleep(delay)

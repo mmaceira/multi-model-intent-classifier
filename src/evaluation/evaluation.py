@@ -44,22 +44,18 @@ def analyze_top_errors(
     Parameters
     ----------
     predictions_df : pd.DataFrame
-        DataFrame containing predictions and text data with 'true_label' and 'pred_label' columns
+        DataFrame containing predictions and text data with 'y_true' and 'y_pred' columns
     output_path : Path
         Path to save the error analysis results
     top_n : int, optional
         Number of top errors to analyze, by default 20
     """
-    # Handle both column naming conventions
-    true_col = 'true_label' if 'true_label' in predictions_df.columns else 'y_true'
-    pred_col = 'pred_label' if 'pred_label' in predictions_df.columns else 'y_pred'
-    
     # Create a DataFrame with true and predicted labels
-    error_df = predictions_df[predictions_df[true_col] != predictions_df[pred_col]].copy()
+    error_df = predictions_df[predictions_df['y_true'] != predictions_df['y_pred']].copy()
 
-    # Count occurrences of each (true_label, pred_label) pair
+    # Count occurrences of each (y_true, y_pred) pair
     error_counts = (
-        error_df.groupby([true_col, pred_col])
+        error_df.groupby(['y_true', 'y_pred'])
         .size()
         .reset_index(name='count')
         .sort_values('count', ascending=False)
@@ -68,6 +64,64 @@ def analyze_top_errors(
 
     # Save to CSV
     error_counts.to_csv(output_path, index=False)
+
+def analyze_rag_documents(
+    predictions_df: pd.DataFrame,
+    output_path: Path,
+    top_n: int = 5
+) -> None:
+    """Analyze and save RAG document relevance and comparison with queries.
+    
+    Parameters
+    ----------
+    predictions_df : pd.DataFrame
+        DataFrame containing predictions, queries, and retrieved documents
+    output_path : Path
+        Path to save the RAG analysis results
+    top_n : int, optional
+        Number of top documents to analyze per query, by default 5
+    """
+    if 'retrieved_docs' not in predictions_df.columns or 'query' not in predictions_df.columns:
+        logger.warning("Missing RAG document or query information")
+        return
+
+    analysis_results = []
+    
+    for idx, row in predictions_df.iterrows():
+        query = row['query']
+        retrieved_docs = row['retrieved_docs']
+        true_label = row['y_true']
+        pred_label = row['y_pred']
+        
+        # Analyze each retrieved document
+        for doc_idx, doc in enumerate(retrieved_docs[:top_n]):
+            # Basic document analysis
+            doc_length = len(doc.split())
+            doc_sentences = len(doc.split('.'))
+            
+            # Simple relevance indicators
+            label_in_doc = true_label.lower() in doc.lower()
+            pred_label_in_doc = pred_label.lower() in doc.lower()
+            
+            # Document position in retrieval
+            position = doc_idx + 1
+            
+            analysis_results.append({
+                'query_id': idx,
+                'query': query,
+                'true_label': true_label,
+                'pred_label': pred_label,
+                'document_position': position,
+                'document_length': doc_length,
+                'document_sentences': doc_sentences,
+                'contains_true_label': label_in_doc,
+                'contains_pred_label': pred_label_in_doc,
+                'document_text': doc
+            })
+    
+    # Convert to DataFrame and save
+    analysis_df = pd.DataFrame(analysis_results)
+    analysis_df.to_csv(output_path, index=False)
 
 def run_evaluations(
     model_names: List[str],
@@ -84,6 +138,7 @@ def run_evaluations(
     3. Generating visualizations (confusion matrices, etc.)
     4. Comparing models based on their performance
     5. Computing overfitting metrics
+    6. Analyzing RAG document relevance (for RAG models)
     
     Parameters
     ----------
@@ -120,7 +175,12 @@ def run_evaluations(
         return results
 
     # Get unique classes from the first model's test predictions
-    classes = sorted(predictions_dict[list(predictions_dict.keys())[0]]['test']['true_label'].unique())
+    first_model = list(predictions_dict.keys())[0]
+    if 'test' not in predictions_dict[first_model]:
+        logger.error(f"No test predictions found for model {first_model}")
+        return results
+        
+    classes = sorted(predictions_dict[first_model]['test']['y_true'].unique())
     is_multiclass = len(classes) > 2
 
     # Process each model
@@ -142,8 +202,8 @@ def run_evaluations(
             split_out_dir = ensure_dir(model_out_dir / split_name)
             
             # Extract true and predicted labels
-            y_true = df['true_label'].values
-            y_pred = df['pred_label'].values
+            y_true = df['y_true'].values
+            y_pred = df['y_pred'].values
             
             # Compute basic metrics
             metrics = {
@@ -175,6 +235,14 @@ def run_evaluations(
                 )
                 # Plot and save top n error types (default 10)
                 plot_top_error_types(df, split_out_dir / "top_10_error_types.png", n=10)
+                
+                # Analyze RAG documents if available
+                if 'retrieved_docs' in df.columns:
+                    logger.info(f"Analyzing RAG documents for {name}")
+                    analyze_rag_documents(
+                        df,
+                        split_out_dir / f"{split_name}_rag_analysis.csv"
+                    )
         
         # Compute overfitting metrics if both train and test predictions are available
         if 'train' in model_predictions and 'test' in model_predictions:
@@ -247,7 +315,7 @@ def run_evaluations(
 
     return results
 
-def display_detailed_results(results: Dict[str, Dict[str, Any]]) -> None:
+def display_detailed_results(results: Dict[str, Dict[str, Any]], model_order: List[str] = None) -> None:
     """Display detailed evaluation results in a formatted way.
     
     This function displays:
@@ -259,32 +327,54 @@ def display_detailed_results(results: Dict[str, Dict[str, Any]]) -> None:
     ----------
     results : Dict[str, Dict[str, Any]]
         Dictionary mapping model names to their evaluation metrics.
+    model_order : List[str], optional
+        List of model names in the desired display order. If None, models will be displayed
+        in their natural order.
     """
-    print("\n=== Summary of Test Metrics ===")
+    # Create DataFrame from results
     test_metrics = pd.DataFrame({
         model: {k: v for k, v in metrics.items() if k.startswith('test_')}
         for model, metrics in results.items()
     }).T
+
+    # Sort models according to specified order if provided
+    if model_order is not None:
+        # Filter to only include models that exist in results
+        model_order = [m for m in model_order if m in test_metrics.index]
+        # Reindex the DataFrame
+        test_metrics = test_metrics.reindex(model_order)
+
+    print("\n=== Summary of Test Metrics ===")
     display(test_metrics)
 
     # Show train metrics if available
     train_cols = [col for col in next(iter(results.values())).keys() if col.startswith('train_')]
     if train_cols:
-        print("\n=== Summary of Train Metrics ===")
         train_metrics = pd.DataFrame({
             model: {k: v for k, v in metrics.items() if k.startswith('train_')}
             for model, metrics in results.items()
         }).T
+
+        # Sort models according to specified order if provided
+        if model_order is not None:
+            train_metrics = train_metrics.reindex(model_order)
+
+        print("\n=== Summary of Train Metrics ===")
         display(train_metrics)
         
         # Show potential overfitting metrics
         diff_cols = [col for col in next(iter(results.values())).keys() if col.endswith('_diff')]
         if diff_cols:
-            print("\n=== Train/Test Differences (Overfitting Analysis) ===")
             diff_metrics = pd.DataFrame({
                 model: {k: v for k, v in metrics.items() if k.endswith('_diff')}
                 for model, metrics in results.items()
             }).T
+
+            # Sort models according to specified order if provided
+            if model_order is not None:
+                diff_metrics = diff_metrics.reindex(model_order)
+
+            print("\n=== Train/Test Differences (Overfitting Analysis) ===")
             display(diff_metrics)
             
             # Interpretation guideline

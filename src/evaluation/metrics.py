@@ -121,7 +121,7 @@ def analyze_text_features(predictions_dict: Dict[str, Dict[str, pd.DataFrame]]) 
         # We'll analyze both train and test sets
         for split_name, df in splits.items():
             # Add features
-            df['is_correct'] = df['true_label'] == df['pred_label']
+            df['is_correct'] = df['y_true'] == df['y_pred']
             df['text_length'] = df['text'].apply(lambda x: len(str(x)))
             df['word_count'] = df['text'].apply(lambda x: len(str(x).split()))
             

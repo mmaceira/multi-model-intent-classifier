@@ -23,6 +23,7 @@ Functions:
 - load_centroid: Load Centroid NN model
 - load_llm: Load RAG LLM model
 - load_optimized_llm: Load optimized RAG-LLM model
+- load_hybrid: Load RAG Hybrid model
 
 Dependencies:
 - importlib
@@ -50,23 +51,21 @@ import os
 import sys
 from typing import Any, Optional, Union, Dict
 
-# Import PATHS_ARTIFACTS_DIR from notebook_setup
+# Import PATHS_EMBEDDINGS_DIR from notebook_setup
 if 'config.notebook_setup' in sys.modules:
-    from config.notebook_setup import PATHS_ARTIFACTS_DIR, PATHS_EMBEDDINGS_DIR
+    from config.notebook_setup import PATHS_EMBEDDINGS_DIR
 else:
     # Explicitly import it if not already imported
     try:
-        from config.notebook_setup import PATHS_ARTIFACTS_DIR, PATHS_EMBEDDINGS_DIR
+        from config.notebook_setup import PATHS_EMBEDDINGS_DIR
     except ImportError:
-        raise ImportError("Cannot import PATHS_ARTIFACTS_DIR from config.notebook_setup. "
+        raise ImportError("Cannot import PATHS_EMBEDDINGS_DIR from config.notebook_setup. "
                          "Make sure to import notebook_setup before importing rag module.")
 
-# Set _ARTIFACTS_DIR to PATHS_ARTIFACTS_DIR
-_ARTIFACTS_DIR = Path(PATHS_ARTIFACTS_DIR)
 # Set _EMBEDDINGS_DIR to PATHS_EMBEDDINGS_DIR
 _EMBEDDINGS_DIR = Path(PATHS_EMBEDDINGS_DIR)
 
-# Create subdirectories within the embeddings directory instead of artifacts
+# Create subdirectories within the embeddings directory
 _SBERT_DIR = _EMBEDDINGS_DIR / 'sbert'
 _OPENAI_DIR = _EMBEDDINGS_DIR / 'openai'
 OPENAI_ARTIFACTS = _EMBEDDINGS_DIR / 'openai'
@@ -89,24 +88,21 @@ def set_artifacts_dir(artifacts_dir: Union[str, Path], embeddings_dir: Optional[
         artifacts_dir: Path to the artifacts directory
         embeddings_dir: Path to the embeddings directory (if None, uses artifacts_dir)
     """
-    global _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _SBERT_DIR, _OPENAI_DIR, OPENAI_ARTIFACTS, SBERT_ARTIFACTS
+    global _EMBEDDINGS_DIR, _SBERT_DIR, _OPENAI_DIR, OPENAI_ARTIFACTS, SBERT_ARTIFACTS
     global _SBERT_INDEX, _SBERT_META, _OPENAI_INDEX, _OPENAI_META, _DEFAULT_INDEX, _DEFAULT_META
-    
-    _ARTIFACTS_DIR = Path(artifacts_dir)
     
     # Use provided embeddings_dir or default to using artifacts_dir
     if embeddings_dir is not None:
         _EMBEDDINGS_DIR = Path(embeddings_dir)
     else:
-        _EMBEDDINGS_DIR = _ARTIFACTS_DIR
+        _EMBEDDINGS_DIR = Path(artifacts_dir)
     
-    # Update derived paths
+    # Update all derived paths
     _SBERT_DIR = _EMBEDDINGS_DIR / 'sbert'
     _OPENAI_DIR = _EMBEDDINGS_DIR / 'openai'
     OPENAI_ARTIFACTS = _EMBEDDINGS_DIR / 'openai'
     SBERT_ARTIFACTS = _EMBEDDINGS_DIR / 'sbert'
     
-    # Update index paths
     _SBERT_INDEX = _SBERT_DIR / "index.faiss"
     _SBERT_META = _SBERT_DIR / "meta.jsonl"
     _OPENAI_INDEX = _OPENAI_DIR / "index.faiss"
@@ -129,11 +125,10 @@ def get_index_paths(use_openai: bool = False, artifacts_dir: Optional[Union[str,
     """
     # Use provided artifacts_dir and embeddings_dir if given
     if artifacts_dir is not None or embeddings_dir is not None:
-        old_artifacts_dir = _ARTIFACTS_DIR
         old_embeddings_dir = _EMBEDDINGS_DIR
-        set_artifacts_dir(artifacts_dir or old_artifacts_dir, embeddings_dir)
+        set_artifacts_dir(artifacts_dir or _EMBEDDINGS_DIR, embeddings_dir)
         result = _get_index_paths_internal(use_openai)
-        set_artifacts_dir(old_artifacts_dir, old_embeddings_dir)  # Restore original
+        set_artifacts_dir(_EMBEDDINGS_DIR, old_embeddings_dir)  # Restore original
         return result
     
     return _get_index_paths_internal(use_openai)
@@ -182,7 +177,7 @@ def load_kmajority(use_openai: bool = False, artifacts_dir: Optional[Union[str, 
     """
     # Use provided artifacts_dir if given
     if artifacts_dir is not None:
-        old_dir = _ARTIFACTS_DIR
+        old_dir = _EMBEDDINGS_DIR
         set_artifacts_dir(artifacts_dir)
         
     # Add use_openai to kwargs
@@ -208,7 +203,7 @@ def load_centroid(use_openai: bool = False, artifacts_dir: Optional[Union[str, P
     """
     # Use provided artifacts_dir if given
     if artifacts_dir is not None:
-        old_dir = _ARTIFACTS_DIR
+        old_dir = _EMBEDDINGS_DIR
         set_artifacts_dir(artifacts_dir)
     
     # Add use_openai to kwargs  
@@ -234,7 +229,7 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
     """
     # Use provided artifacts_dir if given
     if artifacts_dir is not None:
-        old_dir = _ARTIFACTS_DIR
+        old_dir = _EMBEDDINGS_DIR
         set_artifacts_dir(artifacts_dir)
     
     # Determine use_openai from embedder if provided
@@ -246,6 +241,12 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
     # Add use_openai to kwargs if it's not None
     if use_openai is not None:
         cfg['use_openai'] = use_openai
+        if use_openai and 'embedder' not in cfg:
+            # Set environment variable for OpenAI embeddings
+            os.environ['USE_OPENAI_EMBEDDINGS'] = '1'
+            # Instantiate the OpenAI embedder
+            from src.embeddings.openai_embedder import OpenAIEmbedder
+            cfg['embedder'] = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
     
     result = _lazy_load("rag_llm", "RagLLM", **cfg)
     
@@ -256,62 +257,44 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
     return result
 
 def load_optimized_llm(use_openai_embeddings: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
-    """
-    Load an optimized RAG-LLM model with safer defaults:
-    - Smaller batch size (1) to avoid hanging
-    - Smaller top_k (3) for faster processing
-    - Can specify whether to use OpenAI embeddings or not
-    
-    Args:
-        use_openai_embeddings: Whether to use OpenAI embeddings (not index)
-        artifacts_dir: Optional alternative artifacts directory
-        **cfg: Additional config parameters for the RagLLM class
-    
-    Returns:
-        A RagLLM instance with optimized settings
-    """
-    import os
-    from .rag_llm import RagLLM
-    from ..embeddings.openai_embedder import OpenAIEmbedder
-    
+    """Load an optimized LLM model with optional OpenAI embeddings."""
     # Use provided artifacts_dir if given
     if artifacts_dir is not None:
-        old_dir = _ARTIFACTS_DIR
+        old_dir = _EMBEDDINGS_DIR
         set_artifacts_dir(artifacts_dir)
     
-    # Set environment variable for OpenAI embeddings
-    if use_openai_embeddings:
-        os.environ['USE_OPENAI_EMBEDDINGS'] = '1'
-        embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=5)
-    else:
-        os.environ['USE_OPENAI_EMBEDDINGS'] = '0'
-        embedder = None
-    
-    # Set defaults if not provided
-    defaults = {
-        'top_k': 3,
-        'batch_size': 1,
-        'model': 'gpt-4o-mini'
-    }
-    
-    # Override defaults with provided values
-    for key, value in defaults.items():
-        if key not in cfg:
-            cfg[key] = value
-    
-    # Always use sentence-transformer index unless explicitly asked for OpenAI
-    use_openai_index = cfg.pop('use_openai', False)
-    
-    # Create the RAG-LLM model
-    model = load_llm(
-        use_openai=use_openai_index,
-        embedder=embedder,
-        artifacts_dir=artifacts_dir if artifacts_dir is not None else _ARTIFACTS_DIR,
-        **cfg
-    )
+    # Add use_openai to kwargs  
+    cfg['use_openai'] = use_openai_embeddings
+    result = _lazy_load("rag_llm", "RagLLM", **cfg)
     
     # Restore original artifacts_dir if changed
     if artifacts_dir is not None:
         set_artifacts_dir(old_dir)
+        
+    return result
+
+def load_hybrid(use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
+    """Load Hybrid RAG model
     
-    return model
+    Args:
+        use_openai: Whether to use OpenAI embeddings
+        artifacts_dir: Optional alternative artifacts directory
+        **cfg: Additional config parameters
+        
+    Returns:
+        A RagHybrid instance
+    """
+    # Use provided artifacts_dir if given
+    if artifacts_dir is not None:
+        old_dir = _EMBEDDINGS_DIR
+        set_artifacts_dir(artifacts_dir)
+    
+    # Add use_openai to kwargs  
+    cfg['use_openai'] = use_openai
+    result = _lazy_load("rag_hybrid", "RagHybrid", **cfg)
+    
+    # Restore original artifacts_dir if changed
+    if artifacts_dir is not None:
+        set_artifacts_dir(old_dir)
+        
+    return result
