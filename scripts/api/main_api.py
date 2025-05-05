@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from .model_loader import get_model, MODELS_DIR
+from .model_loader import get_model, MODELS_DIR, MODELS_INFO
 from pathlib import Path
 
 app = FastAPI(
@@ -11,7 +11,8 @@ app = FastAPI(
 )
 
 class PredictRequest(BaseModel):
-    model_name: str
+    model_name: Optional[str] = None
+    model_id: Optional[str] = None
     text: str
 
 class PredictResponse(BaseModel):
@@ -20,7 +21,7 @@ class PredictResponse(BaseModel):
 
 class ModelInfo(BaseModel):
     name: str
-    type: str  # 'file' or 'directory'
+    type: str
     path: str
 
 @app.get("/models", response_model=List[ModelInfo])
@@ -48,17 +49,46 @@ def list_models():
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
-    model = get_model(req.model_name)
+    # Use model_id if provided, otherwise fall back to model_name
+    model_identifier = req.model_id or req.model_name
+    if not model_identifier:
+        raise HTTPException(status_code=400, detail="Either model_id or model_name must be provided")
+    
+    # Get model info
+    model_info = None
+    for mid, info in MODELS_INFO.items():
+        if mid == model_identifier or info['dir'] == model_identifier:
+            model_info = info
+            break
+    
+    if model_info is None:
+        raise HTTPException(status_code=400, detail=f"Unknown model type for {model_identifier}")
+    
+    model = get_model(model_identifier)
+    
     try:
-        label = model.predict([req.text])[0]
+        if model_info['type'] == 'rag':
+            # Handle RAG models
+            if not model['model']:
+                raise HTTPException(status_code=400, detail="RAG model not properly initialized")
+            
+            label = model['model'].predict([req.text])[0]
+            conf = None
+            if hasattr(model['model'], "predict_proba"):
+                try:
+                    conf = float(max(model['model'].predict_proba([req.text])[0]))
+                except Exception:
+                    conf = None
+        else:
+            # Handle regular classifiers
+            label = model.predict([req.text])[0]
+            conf = None
+            if hasattr(model, "predict_proba"):
+                try:
+                    conf = float(max(model.predict_proba([req.text])[0]))
+                except Exception:
+                    conf = None
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prediction failed: {e}")
-
-    conf = None
-    if hasattr(model, "predict_proba"):
-        try:
-            conf = float(max(model.predict_proba([req.text])[0]))
-        except Exception:
-            conf = None
 
     return PredictResponse(label=label, confidence=conf)

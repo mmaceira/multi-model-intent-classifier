@@ -42,7 +42,7 @@ You can point the service to any models directory by setting the `MODELS_DIR`
 environment variable at launch:
 
 ```bash
-MODELS_DIR=experiment_with_07_classes/models uvicorn src.api.main:app --reload
+MODELS_DIR=output/experiment_with_03_classes/models uvicorn scripts.api.main_api:app --reload
 ```
 
 If `MODELS_DIR` is not set, it defaults to the `models/` folder at the repo root.
