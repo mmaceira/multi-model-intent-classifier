@@ -22,6 +22,7 @@ from src.analysis_extra import (
     plot_calibration_curve,
     vocabulary_drift,
 )
+from config.notebook_setup import RESULTS_DIR
 
 def analyze_all_models(config, models_dir=None, results_dir=None):
     """
@@ -162,7 +163,7 @@ def analyze_all_models(config, models_dir=None, results_dir=None):
         
         plt.title("t-SNE Visualization of Document Embeddings")
         plt.tight_layout()
-        tsne_path = f"{results_dir}/tsne_visualization.png"
+        tsne_path = f"{RESULTS_DIR}/tsne_visualization.png"
         plt.savefig(tsne_path)
         plt.close()
         print(f"Saved t-SNE visualization to {tsne_path}")
@@ -178,7 +179,7 @@ def analyze_all_models(config, models_dir=None, results_dir=None):
         print(drift_df.head(10))
         
         # Save to CSV
-        vocab_drift_path = f"{results_dir}/vocabulary_drift.csv"
+        vocab_drift_path = f"{RESULTS_DIR}/vocabulary_drift.csv"
         drift_df.to_csv(vocab_drift_path, index=False)
         print(f"Saved vocabulary drift analysis to {vocab_drift_path}")
         results["vocab_drift"] = vocab_drift_path
