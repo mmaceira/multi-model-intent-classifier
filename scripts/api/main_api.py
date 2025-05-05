@@ -1,8 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from .model_loader import get_model, MODELS_DIR, MODELS_INFO
+from scripts.api.model_loader import get_model, MODELS_DIR, MODELS_INFO
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI(
     title="Text Classification API",
