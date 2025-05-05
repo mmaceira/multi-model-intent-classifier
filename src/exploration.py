@@ -3,13 +3,14 @@ Text Dataset Exploration Module
 
 This module provides comprehensive tools for analyzing and visualizing text classification datasets,
 helping researchers and practitioners understand their data characteristics before model training.
-It includes functions for analyzing class distributions, text length statistics, and topic
-co-occurrence patterns.
+It includes functions for analyzing class distributions, text length statistics, topic
+co-occurrence patterns, and vocabulary drift between splits.
 
 Key Features:
 - Class distribution analysis and visualization
 - Text length statistics and distribution plots
 - Topic co-occurrence pattern analysis
+- Vocabulary drift analysis between train/test splits
 - Customizable visualizations with publication-ready styling
 - Detailed statistical summaries
 - CSV export capabilities for further analysis
@@ -18,12 +19,14 @@ Functions:
 - class_frequency: Analyze and visualize class distribution with optional top-N filtering
 - length_distribution: Analyze text length patterns with percentile statistics
 - topic_cooccurrence: Create and visualize topic co-occurrence matrices
+- vocabulary_drift: Analyze vocabulary differences between train and test splits
 
 Statistical Outputs:
 - Class frequencies and proportions
 - Text length summary statistics (mean, median, std, min, max)
 - Customizable percentile statistics
 - Topic co-occurrence matrices
+- Token frequency drift metrics
 
 Visualizations:
 - Bar plots of class distributions
@@ -38,6 +41,7 @@ Dependencies:
 - seaborn
 - typing
 - os
+- collections
 
 Example Usage:
     >>> # Analyze class distribution
@@ -61,14 +65,26 @@ Example Usage:
     ...     labels=y_train,
     ...     save_path='cooccurrence.png'
     ... )
+    
+    >>> # Analyze vocabulary drift
+    >>> drift = vocabulary_drift(
+    ...     train_texts=X_train,
+    ...     test_texts=X_test,
+    ...     top_k=2000,
+    ...     output_path='vocab_drift.csv'
+    ... )
 """
+
+from __future__ import annotations
 
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Sequence
 import pandas as pd
 import os
+from pathlib import Path
+from collections import Counter
 
 def class_frequency(labels: np.ndarray, plot: bool = True,
                    save_path: str = None, top_n: int = None) -> Dict[str, Any]:
@@ -208,55 +224,61 @@ def length_distribution(texts: List[str], save_path: str = None, output_dir: str
         'percentile_stats': percentile_stats
     }
 
-def topic_cooccurrence(labels: List[str], save_path: str = None, figsize: tuple = (10, 8)) -> pd.DataFrame:
-    """Analyze and visualize topic co-occurrence patterns.
+def vocabulary_drift(
+    train_texts: Sequence[str], 
+    test_texts: Sequence[str], 
+    *, 
+    top_k: int = 2000,
+    min_freq: int = 10,
+    output_path: str|Path = None
+) -> pd.DataFrame:
+    """Compute token frequency drift between train and test splits.
     
-    This function creates a co-occurrence matrix for topic labels and 
-    visualizes it as a heatmap. For single-label datasets, the diagonal 
-    shows the frequency of each class.
+    Parameters
+    ----------
+    train_texts : Sequence[str]
+        Training documents
+    test_texts : Sequence[str]
+        Test documents
+    top_k : int, optional
+        Number of most frequent tokens to consider
+    min_freq : int, optional
+        Minimum number of times a token must appear in train + test to be included
+    output_path : str|Path, optional
+        Path to save results
     
-    Args:
-        labels: List of topic labels
-        save_path: Path to save the plot (default: None)
-        figsize: Figure size as a tuple (width, height) (default: (10, 8))
-        
-    Returns:
-        DataFrame containing the co-occurrence matrix
-        
-    Example:
-        >>> df = topic_cooccurrence(y_train, save_path="topic_cooccurrence.png")
-        >>> print(f"Most frequent topic: {df.idxmax().idxmax()}")
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with token frequencies and drift metrics
     """
-    # Get unique labels and create empty matrix
-    unique_labels = sorted(set(labels))
-    cooccurrence = np.zeros((len(unique_labels), len(unique_labels)))
+    def _tokenize(s: str):
+        return s.lower().split()
     
-    # Populate co-occurrence matrix
-    for i, label1 in enumerate(unique_labels):
-        for j, label2 in enumerate(unique_labels):
-            if i <= j:  # Only compute upper triangle
-                # For a single-label dataset like Reuters, co-occurrence only happens 
-                # when i==j (same label)
-                if i == j:
-                    cooccurrence[i, j] = np.sum(np.array(labels) == label1)
-                else:
-                    cooccurrence[i, j] = 0
-                cooccurrence[j, i] = cooccurrence[i, j]  # Mirror
+    train_counts = Counter(token for doc in train_texts for token in _tokenize(doc))
+    test_counts = Counter(token for doc in test_texts for token in _tokenize(doc))
     
-    # Create DataFrame with proper labels
-    cooccurrence_df = pd.DataFrame(cooccurrence, index=unique_labels, columns=unique_labels)
+    # restrict to top_k in either split
+    vocab = set([w for w,_ in train_counts.most_common(top_k)] + [w for w,_ in test_counts.most_common(top_k)])
+    rows = []
     
-    # Plot heatmap
-    plt.figure(figsize=figsize)
-    sns.heatmap(cooccurrence_df, annot=True, fmt='.0f', cmap='YlOrRd')
-    plt.title('Topic Co-occurrence Matrix')
-    plt.tight_layout()
+    for w in vocab:
+        tr = train_counts.get(w, 0)
+        te = test_counts.get(w, 0)
+        total = tr + te
+        if total < min_freq:
+            continue
+        rows.append({
+            "token": w, 
+            "train_freq": tr/total, 
+            "test_freq": te/total, 
+            "abs_diff": abs(tr/total - te/total)
+        })
     
-    # Save if path provided
-    if save_path:
-        plt.savefig(save_path)
-        # Also save CSV version
-        csv_path = os.path.splitext(save_path)[0] + ".csv"
-        cooccurrence_df.to_csv(csv_path, index=True)
+    df = pd.DataFrame(rows).sort_values("abs_diff", ascending=False)
     
-    return cooccurrence_df
+    # Save results if output path provided
+    if output_path:
+        df.to_csv(output_path, index=False)
+    
+    return df
