@@ -7,6 +7,6 @@ metrics and visualizations without touching the models directly, ensuring
 deterministic and reproducible evaluation.
 """
 
-from .evaluation import run_evaluations
+from .evaluation import run_evaluations, display_detailed_results
 
-__all__ = ['run_evaluations'] 
+__all__ = ['run_evaluations', 'display_detailed_results'] 

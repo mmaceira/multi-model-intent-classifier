@@ -7,6 +7,7 @@ It coordinates the various evaluation components and generates comprehensive rep
 
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Any
+from IPython.display import display
 
 import numpy as np
 import pandas as pd
@@ -233,3 +234,49 @@ def run_evaluations(
         plot_model_comparisons(summary_df, model_names, output_dir)
 
     return results 
+
+def display_detailed_results(results: Dict[str, Dict[str, Any]]) -> None:
+    """Display detailed evaluation results in a formatted way.
+    
+    This function displays:
+    1. Test metrics summary
+    2. Train metrics summary (if available)
+    3. Train/Test differences for overfitting analysis (if available)
+    
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Dictionary mapping model names to their evaluation metrics.
+    """
+    print("\n=== Summary of Test Metrics ===")
+    test_metrics = pd.DataFrame({
+        model: {k: v for k, v in metrics.items() if k.startswith('test_')}
+        for model, metrics in results.items()
+    }).T
+    display(test_metrics)
+
+    # Show train metrics if available
+    train_cols = [col for col in next(iter(results.values())).keys() if col.startswith('train_')]
+    if train_cols:
+        print("\n=== Summary of Train Metrics ===")
+        train_metrics = pd.DataFrame({
+            model: {k: v for k, v in metrics.items() if k.startswith('train_')}
+            for model, metrics in results.items()
+        }).T
+        display(train_metrics)
+        
+        # Show potential overfitting metrics
+        diff_cols = [col for col in next(iter(results.values())).keys() if col.endswith('_diff')]
+        if diff_cols:
+            print("\n=== Train/Test Differences (Overfitting Analysis) ===")
+            diff_metrics = pd.DataFrame({
+                model: {k: v for k, v in metrics.items() if k.endswith('_diff')}
+                for model, metrics in results.items()
+            }).T
+            display(diff_metrics)
+            
+            # Interpretation guideline
+            print("\nInterpretation guide:")
+            print("- Positive values indicate potential overfitting (model performs better on training data)")
+            print("- Values close to zero indicate good generalization")
+            print("- Negative values might indicate underfitting or data leakage issues") 
