@@ -7,10 +7,8 @@ text classification dataset with various sampling strategies.
 Functions:
     get_dataset: Common entry point for all dataset loading strategies
     _extract_fileids: Extract file IDs based on selection criteria
-    _extract_year: Extract year from document metadata
     _prepare_dataset: Convert file IDs to text and labels
-    _load_standard_splait: Load the standard train/test split
-    _load_temporal_split: Load temporal train/test split based on year
+    _load_standard_split: Load the standard train/test split
     _load_small_test_dataset: Load a small balanced test dataset
 
 Created: 2025-05-03
@@ -21,7 +19,6 @@ from typing import List, Dict, Tuple, Optional, Callable, Literal
 import nltk
 from nltk.corpus import reuters
 from collections import Counter
-import re as _re
 import warnings as _warnings
 import random
 import logging
@@ -36,14 +33,13 @@ logger = logging.getLogger(__name__)
 # Type aliases for better code readability
 DatasetSplit = Tuple[List[str], List[str], List[str], List[str], List[str]]
 FileIDs = List[str]
-SplitType = Literal["standard", "temporal", "test"]
+SplitType = Literal["standard", "test"]
 
 
 def get_dataset(
     split_type: SplitType = "standard", 
     n_classes: Optional[int] = None,
     n_samples_per_class: Optional[int] = None,
-    cutoff_year: int = 1996,
     random_seed: Optional[int] = None
 ) -> DatasetSplit:
     """
@@ -52,11 +48,9 @@ def get_dataset(
     Args:
         split_type: The type of dataset split to use:
             - "standard": Use NLTK's train/test split
-            - "temporal": Split by document year (train on older, test on newer)
             - "test": Small balanced dataset with equal samples per class
         n_classes: Number of most frequent classes to include (None for all)
         n_samples_per_class: Maximum samples per class (only used with "test" split)
-        cutoff_year: Year threshold for temporal split (default: 1996)
         random_seed: Random seed for reproducibility in sampling
     
     Returns:
@@ -73,8 +67,6 @@ def get_dataset(
     logger.info(f"  - Number of classes: {n_classes if n_classes is not None else 'all'}")
     if split_type == "test":
         logger.info(f"  - Samples per class: {n_samples_per_class or 20}")
-    if split_type == "temporal":
-        logger.info(f"  - Cutoff year: {cutoff_year}")
     logger.info(f"  - Random seed: {random_seed}")
     
     # Set random seed if provided
@@ -88,8 +80,6 @@ def get_dataset(
     # Route to appropriate dataset loading function
     if split_type == "standard":
         return _load_standard_split(n_classes)
-    elif split_type == "temporal":
-        return _load_temporal_split(cutoff_year, n_classes)
     elif split_type == "test":
         return _load_small_test_dataset(
             n_samples_per_class or 20,
@@ -97,26 +87,6 @@ def get_dataset(
         )
     else:
         raise ValueError(f"Invalid split_type: {split_type}")
-
-
-def _extract_year(text: str) -> Optional[int]:
-    """
-    Extract the year from a Reuters document.
-    
-    Args:
-        text: The raw text of a Reuters document
-    
-    Returns:
-        The year as an integer, or None if it couldn't be extracted
-    """
-    m = _re.search(r"<DATE>[^<]*?(\d{2})-(\w{3})-(\d{2,4})", text)
-    if not m:
-        return None
-    _, _, year = m.groups()
-    year = int(year)
-    if year < 100:  # Reuters stores 2‑digit years
-        year += 1900
-    return year
 
 
 def _extract_fileids(selection_criteria: Callable[[str], bool]) -> FileIDs:
@@ -218,45 +188,6 @@ def _load_standard_split(n_classes: Optional[int] = None) -> DatasetSplit:
     return _prepare_dataset(train_ids, test_ids)
 
 
-def _load_temporal_split(cutoff_year: int = 1996, n_classes: Optional[int] = None) -> DatasetSplit:
-    """
-    Load Reuters dataset with temporal split: train on older, test on newer documents.
-    
-    Args:
-        cutoff_year: Year threshold - train before, test on/after (default: 1996)
-        n_classes: Number of most frequent classes to include (None for all)
-    
-    Returns:
-        X_train, y_train, X_test, y_test, classes
-    """
-    logger.info(f"Loading temporal split with cutoff year {cutoff_year}")
-    
-    # Extract year from each document
-    year_map = {fid: _extract_year(reuters.raw(fid)) for fid in reuters.fileids()}
-    
-    # Split by year
-    train_ids = [fid for fid, year in year_map.items() if year is not None and year < cutoff_year]
-    test_ids = [fid for fid, year in year_map.items() if year is not None and year >= cutoff_year]
-    
-    logger.info(f"Temporal split: {len(train_ids)} documents before {cutoff_year}, {len(test_ids)} from {cutoff_year} onward")
-    
-    # Fall back to standard split if no test documents
-    if not test_ids:
-        _warnings.warn("No test documents found in or after cutoff_year – falling back to default split.")
-        logger.warning(f"No test documents found in or after {cutoff_year} - falling back to default split")
-        return _load_standard_split(n_classes)
-    
-    # Determine top classes from training set
-    top_classes = _get_top_classes(train_ids, n_classes)
-    logger.info(f"Selected {len(top_classes)} classes: {', '.join(top_classes[:5])}{' and more...' if len(top_classes) > 5 else ''}")
-    
-    # Filter documents to only include selected classes
-    train_ids = _filter_by_classes(train_ids, top_classes)
-    test_ids = _filter_by_classes(test_ids, top_classes)
-    
-    return _prepare_dataset(train_ids, test_ids)
-
-
 def _load_small_test_dataset(n_samples_per_class: int = 20, n_classes: int = 7) -> DatasetSplit:
     """
     Load a small balanced dataset with equal samples per class for testing purposes.
@@ -308,4 +239,43 @@ def _load_small_test_dataset(n_samples_per_class: int = 20, n_classes: int = 7) 
         logger.info(f"  - Class '{cls}': {len(train_docs)} train, {len(test_docs)} test")
     
     return X_train, y_train, X_test, y_test, top_classes
+
+
+def test_dataset_loading():
+    """
+    Test function to debug dataset loading with current configuration.
+    """
+    # Test with current config values
+    print("\nTesting dataset loading with current configuration:")
+    print("=================================================")
+    
+    # Test standard split
+    print("\n1. Testing standard split:")
+    X_train, y_train, X_test, y_test, classes = get_dataset(
+        split_type="standard",
+        n_classes=10
+    )
+    print(f"Standard split results:")
+    print(f"- Train samples: {len(X_train)}")
+    print(f"- Test samples: {len(X_test)}")
+    print(f"- Classes: {len(classes)}")
+    print(f"- Class distribution in train: {Counter(y_train)}")
+    print(f"- Class distribution in test: {Counter(y_test)}")
+    
+    # Test small test dataset
+    print("\n2. Testing small test dataset:")
+    X_train, y_train, X_test, y_test, classes = get_dataset(
+        split_type="test",
+        n_classes=10,
+        n_samples_per_class=20
+    )
+    print(f"Small test dataset results:")
+    print(f"- Train samples: {len(X_train)}")
+    print(f"- Test samples: {len(X_test)}")
+    print(f"- Classes: {len(classes)}")
+    print(f"- Class distribution in train: {Counter(y_train)}")
+    print(f"- Class distribution in test: {Counter(y_test)}")
+
+if __name__ == "__main__":
+    test_dataset_loading()
 

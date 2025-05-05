@@ -6,9 +6,7 @@ general:
 
 # Dataset configuration
 dataset:
-  split_type: "temporal"                         # [standard | temporal | test]
-  test_split: 0.20
-  cutoff_year: 1996
+  split_type: "standard"                         # [standard | test]
 
 # Paths (all are resolved relative to repo root)
 paths:
