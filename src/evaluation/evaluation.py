@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import label_binarize
 
-from .metrics import compute_metrics
+from .metrics import compute_metrics, analyze_text_features
 from .visualization import (
     plot_label_distribution,
     plot_confusion_matrix,
@@ -21,9 +21,16 @@ from .visualization import (
     plot_precision_recall_curves,
     plot_model_comparisons,
     plot_top_misclassifications,
-    plot_tsne
+    visualize_error_distribution,
+    generate_detailed_error_report,
 )
-from .utils import ensure_dir, setup_logging
+from .utils import (
+    ensure_dir,
+    setup_logging,
+    load_all_prediction_files,
+    analyse_error_patterns,
+    consistently_misclassified,
+)
 
 def run_evaluations(
     model_names: List[str],
@@ -42,7 +49,7 @@ def run_evaluations(
     3. Generating visualizations (confusion matrices, ROC curves, etc.)
     4. Comparing training vs test performance
     5. Computing overfitting metrics
-    6. Additional analyses (misclassifications, t-SNE, calibration) when data is available
+    6. Additional analyses (misclassifications, calibration) when data is available
     
     Parameters
     ----------
@@ -203,15 +210,6 @@ def run_evaluations(
                         y_pred,
                         split["out_dir"] / "top_misclassifications.csv"
                     )
-                
-                # t-SNE visualization if embeddings are available
-                if "embeddings" in pd.read_csv(model_dir / split["pred_file"]).columns:
-                    logger.info(f"Processing t-SNE visualization for {name}")
-                    plot_tsne(
-                        pd.read_csv(model_dir / split["pred_file"])["embeddings"].values,
-                        y_pred,
-                        split["out_dir"] / "tsne_visualization.png"
-                    )
 
         # Store model results
         results[name] = model_results
@@ -232,6 +230,39 @@ def run_evaluations(
     # Generate model comparison visualizations if multiple models
     if len(model_names) > 1:
         plot_model_comparisons(summary_df, model_names, output_dir)
+
+    # Load all prediction files for error analysis
+    predictions_dict = load_all_prediction_files(artefacts_root)
+    
+    # Perform error analysis
+    logger.info("Performing error analysis...")
+    
+    # Analyze error patterns
+    error_patterns = analyse_error_patterns(predictions_dict)
+    error_patterns.to_csv(output_dir / 'common_error_patterns.csv', index=False)
+    
+    # Identify consistently misclassified examples
+    misclass_examples = consistently_misclassified(predictions_dict, min_models=len(predictions_dict))
+    if not misclass_examples.empty:
+        misclass_examples.to_csv(output_dir / 'consistently_misclassified.csv', index=False)
+    
+    # Analyze text features
+    text_features = analyze_text_features(predictions_dict)
+    text_features.to_csv(output_dir / 'text_feature_analysis.csv', index=False)
+    
+    # Create error distribution visualizations
+    visualize_error_distribution(predictions_dict, output_dir)
+    
+    # Generate detailed error report
+    generate_detailed_error_report(predictions_dict, output_dir)
+    
+    # Add error analysis results to the main results dictionary
+    for model_name in results:
+        results[model_name].update({
+            'error_patterns': error_patterns,
+            'hard_cases': misclass_examples,
+            'text_features': text_features
+        })
 
     return results 
 
