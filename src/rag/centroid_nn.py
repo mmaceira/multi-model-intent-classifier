@@ -1,13 +1,38 @@
-"""\
-Centroid Nn module.
+"""
+Centroid Nearest Neighbor Classifier Module
+
+This module implements a Centroid-based Nearest Neighbor classifier for RAG
+(Retrieval-Augmented Generation) systems. It uses class centroids and cosine
+similarity to make predictions.
+
+Key Features:
+- Centroid-based classification
+- Cosine similarity computation
+- Softmax probability estimation
+- Support for multiple embedding types
+- Scikit-learn compatible interface
 
 Classes:
-- CentroidNN
+- CentroidNN: Centroid-based classifier for RAG systems
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- numpy
+- scipy
+- typing
+- sentence_transformers
+
+Example Usage:
+    >>> # Initialize the classifier
+    >>> classifier = CentroidNN.load_default()
+    
+    >>> # Make predictions
+    >>> predictions = classifier.predict(documents)
+    
+    >>> # Get probability estimates
+    >>> probabilities = classifier.predict_proba(documents)
 """
 
 from typing import Sequence

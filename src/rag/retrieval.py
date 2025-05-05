@@ -1,13 +1,40 @@
-"""\
-Retrieval module.
+"""
+Retrieval Module
+
+This module provides a retriever component for the RAG (Retrieval-Augmented Generation)
+system. It handles the retrieval of similar documents from a vector store based on
+query embeddings.
+
+Key Features:
+- Efficient nearest neighbor search
+- Support for multiple embedding types
+- Performance logging
+- Default configuration loading
 
 Classes:
-- Retriever
+- Retriever: Main class for document retrieval
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- numpy
+- logging
+- time
+- vector_store
+- get_index_paths
+
+Example Usage:
+    >>> # Create a default retriever
+    >>> retriever = Retriever.from_default()
+    
+    >>> # Or create with custom vector store
+    >>> from rag.vector_store import VectorStore
+    >>> store = VectorStore("path/to/index", "path/to/meta")
+    >>> retriever = Retriever(store)
+    
+    >>> # Retrieve similar documents
+    >>> results = retriever.top_k(query_embedding, k=5)
 """
 
 import time

@@ -1,3 +1,80 @@
+"""
+Advanced Vocabulary Analysis Module
+
+This module provides comprehensive tools for analyzing vocabulary patterns in text classification
+datasets, with special focus on Reuters news articles. It includes advanced filtering options,
+class-specific analysis, and extensive visualization capabilities.
+
+Key Features:
+- Comprehensive vocabulary analysis
+- Class-specific word frequency analysis
+- Multiple filtering options
+- Domain-specific stopwords for Reuters
+- Financial term detection
+- Publication-ready visualizations
+- CSV export capabilities
+
+Constants:
+- STOPWORDS: Common English stopwords
+- FINANCIAL_TERMS: Financial and numeric terms
+- ADDITIONAL_STOPS: Reuters-specific stopwords
+
+Core Functions:
+- is_numeric_or_financial: Detect numeric/financial terms
+- _analyze_vocabulary: Internal vocabulary analysis
+- _word_frequency_by_class: Class-specific word analysis
+- comprehensive_analysis: Complete vocabulary analysis workflow
+
+Filtering Options:
+- Common stopwords
+- Domain-specific stopwords
+- Numeric tokens
+- Financial terms
+- Minimum word length
+- Custom stopword lists
+
+Analysis Features:
+- Word frequency distributions
+- Class-specific patterns
+- Vocabulary size statistics
+- Top-N word rankings
+- Cross-class comparisons
+
+Visualization Types:
+- Word frequency bar plots
+- Class-specific distributions
+- Comparative visualizations
+- Custom-styled plots
+- Publication-ready outputs
+
+Dependencies:
+- pandas
+- matplotlib
+- seaborn
+- re
+- collections
+- typing
+- os
+
+Example Usage:
+    >>> # Run comprehensive analysis
+    >>> results = comprehensive_analysis(
+    ...     texts=documents,
+    ...     labels=categories,
+    ...     label_names=['Business', 'Sports', 'Tech'],
+    ...     output_dir='analysis/vocab',
+    ...     min_word_length=3,
+    ...     top_n=30,
+    ...     create_visualizations=True,
+    ...     create_csv=True
+    ... )
+    >>> 
+    >>> # Access specific analysis components
+    >>> print(f"Total vocabulary size: {results['vocab_size']}")
+    >>> print(f"Most common words: {results['top_words'].head()}")
+    >>> print(f"Class-specific patterns: {results['class_patterns']}")
+"""
+
 #!/usr/bin/env python
 import pandas as pd
 import matplotlib.pyplot as plt

@@ -1,17 +1,47 @@
-"""\
-  Init   module.
+"""
+RAG Module Initialization
+
+This module provides initialization and configuration for the RAG (Retrieval-Augmented Generation)
+system. It handles path management, model loading, and configuration for different RAG implementations.
+
+Key Features:
+- Path management for artifacts and embeddings
+- Model loading utilities
+- Configuration handling
+- Support for multiple embedding types (OpenAI, SentenceTransformer)
+- Optimized model loading
 
 Classes:
-- None
+- None (Module-level functions only)
 
 Functions:
-- _lazy_load
-- load_kmajority
-- load_centroid
-- load_llm
-- load_optimized_llm
+- set_artifacts_dir: Configure artifact and embedding directories
+- get_index_paths: Get paths for index and metadata files
+- _get_index_paths_internal: Internal implementation of path resolution
+- _lazy_load: Lazy loading utility for modules
+- load_kmajority: Load K-Majority RAG model
+- load_centroid: Load Centroid NN model
+- load_llm: Load RAG LLM model
+- load_optimized_llm: Load optimized RAG-LLM model
 
-Created: 2025-05-03
+Dependencies:
+- importlib
+- pathlib
+- os
+- sys
+- typing
+- config.notebook_setup
+
+Example Usage:
+    >>> # Set up directories
+    >>> set_artifacts_dir("path/to/artifacts", "path/to/embeddings")
+    
+    >>> # Load a model
+    >>> model = load_optimized_llm(
+    ...     use_openai_embeddings=True,
+    ...     model="gpt-4",
+    ...     top_k=5
+    ... )
 """
 
 from importlib import import_module

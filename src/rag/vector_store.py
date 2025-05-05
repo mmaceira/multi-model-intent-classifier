@@ -1,13 +1,42 @@
-"""\
-Vector Store module.
+"""
+Vector Store Module
+
+This module provides a vector store implementation for the RAG (Retrieval-Augmented
+Generation) system. It handles the storage and retrieval of document embeddings
+using FAISS (Facebook AI Similarity Search) and manages associated metadata.
+
+Key Features:
+- FAISS-based vector storage and retrieval
+- Efficient nearest neighbor search
+- Document embedding generation
+- Metadata management
+- Performance logging
+- Model caching
 
 Classes:
-- VectorStore
+- VectorStore: Main class for vector storage and retrieval
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- faiss
+- numpy
+- sentence_transformers
+- json
+- logging
+- pathlib
+- typing
+
+Example Usage:
+    >>> # Initialize vector store
+    >>> store = VectorStore("path/to/index.faiss", "path/to/meta.jsonl")
+    
+    >>> # Search for similar documents
+    >>> results = store.search(query_embedding, k=5)
+    
+    >>> # Generate embeddings
+    >>> embeddings = VectorStore.embed("sentence-transformers/all-MiniLM-L6-v2", documents)
 """
 
 import json

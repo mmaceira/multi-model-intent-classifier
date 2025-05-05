@@ -1,3 +1,80 @@
+"""
+Stopwords and Vocabulary Analysis Module
+
+This module provides comprehensive tools for analyzing vocabulary distributions and stopword
+impacts in text classification datasets. It includes functionality for filtering common words,
+financial terms, and numerical tokens, along with visualization capabilities for understanding
+word frequency patterns.
+
+Key Features:
+- Customizable stopword filtering
+- Financial term detection and filtering
+- Numerical token handling
+- Word frequency analysis
+- Class-specific vocabulary analysis
+- Publication-ready visualizations
+- Side-by-side comparisons
+
+Constants:
+- STOPWORDS: Set of common English stopwords
+- FINANCIAL_TERMS: Set of common financial and numerical terms
+
+Functions:
+- is_numeric_or_financial: Detect numeric values and financial terms
+- analyze_vocabulary: Analyze word distributions with filtering options
+- compare_with_without_stopwords: Compare vocabulary with/without stopwords
+- word_frequency_by_class: Analyze word frequencies per class
+
+Filtering Options:
+- Stopword removal
+- Numeric token removal
+- Financial term removal
+- Minimum word length
+- Custom term lists
+
+Visualization Features:
+- Word frequency bar plots
+- Side-by-side comparisons
+- Class-specific distributions
+- Customizable styling
+- Publication-ready outputs
+
+Dependencies:
+- re
+- matplotlib
+- numpy
+- pandas
+- collections
+- typing
+- seaborn
+
+Example Usage:
+    >>> # Basic vocabulary analysis
+    >>> stats = analyze_vocabulary(
+    ...     texts=documents,
+    ...     remove_stopwords=True,
+    ...     remove_numbers=True,
+    ...     min_word_length=3,
+    ...     n_most_common=30
+    ... )
+    >>> print(f"Vocabulary size: {stats['vocab_size']}")
+    
+    >>> # Compare with/without stopwords
+    >>> compare_with_without_stopwords(
+    ...     texts=documents,
+    ...     n_words=20,
+    ...     remove_financial_terms=True
+    ... )
+    
+    >>> # Analyze word frequencies by class
+    >>> class_freqs = word_frequency_by_class(
+    ...     texts=documents,
+    ...     labels=labels,
+    ...     label_names=['Class A', 'Class B'],
+    ...     n_words=10
+    ... )
+"""
+
 import re
 import matplotlib.pyplot as plt
 import numpy as np

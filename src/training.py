@@ -1,12 +1,72 @@
-"""Unified training workflow for text classification models.
+"""Training Module for Text Classification
 
-This module defines a *single* `run_training` function that:
-1. trains one or more estimators,
-2. optionally persists them,
-3. persists their predictions on the *test* split so that the evaluation
-   stage can run **without touching the models again**.
+This module provides a unified training workflow for text classification models, ensuring
+consistent model training, artifact persistence, and prediction generation. It is designed
+to work seamlessly with the evaluation module, enabling reproducible model assessment.
 
-The API is intentionally symmetric with `src.evaluation.run_evaluations`.
+Key Features:
+- Unified training interface for multiple models
+- Consistent artifact persistence
+- Safe model cloning
+- Training and test prediction generation
+- Probability score handling
+- Comprehensive error handling
+- Progress logging
+
+Main Function:
+run_training:
+    - Trains multiple estimators in sequence
+    - Persists trained models (optional)
+    - Saves predictions for both training and test sets
+    - Handles probability scores when available
+    - Returns dictionary of fitted estimators
+
+Artifact Structure:
+output_dir/
+├── model_name1/
+│   ├── model.joblib          # Trained model
+│   ├── train_predictions.csv # Training set predictions
+│   ├── train_prob.npy       # Training probability scores
+│   ├── test_predictions.csv # Test set predictions
+│   └── test_prob.npy       # Test probability scores
+└── model_name2/
+    └── ...
+
+Helper Functions:
+- _ensure_dir: Create directory if it doesn't exist
+
+Requirements for Models:
+- Must implement fit() and predict()
+- Should implement predict_proba() for ROC curves
+- Must be compatible with scikit-learn's clone utility
+
+Dependencies:
+- pathlib
+- typing
+- joblib
+- numpy
+- pandas
+- sklearn.base
+
+Example Usage:
+    >>> # Define models to train
+    >>> models = {
+    ...     'svm': SVC(probability=True),
+    ...     'rf': RandomForestClassifier()
+    ... }
+    >>> 
+    >>> # Run training workflow
+    >>> fitted_models = run_training(
+    ...     models=models,
+    ...     X_train=train_texts,
+    ...     y_train=train_labels,
+    ...     X_test=test_texts,
+    ...     y_test=test_labels,
+    ...     output_dir='experiments/run_001',
+    ...     save_models=True,
+    ...     save_train_predictions=True,
+    ...     verbose=True
+    ... )
 """
 
 from __future__ import annotations

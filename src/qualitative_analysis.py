@@ -1,16 +1,64 @@
-"""High‑level qualitative analysis utilities.
+"""
+Qualitative Analysis Module
 
-This module expects an *experiment directory* that contains a
-`predictions/` sub‑folder with one CSV per model:
-    <model_name>_preds.csv
+This module provides high-level utilities for qualitative analysis of text classification models,
+focusing on error analysis, visualization, and detailed performance reporting. It processes
+model predictions and generates comprehensive analysis artifacts.
 
-Each CSV must have, at minimum:
-    id, text, true_label, pred_label[, confidence]
+Input Requirements:
+- Experiment directory containing a 'predictions/' subfolder
+- CSV files named as '{model_name}_preds.csv'
+- Required CSV columns:
+  - id: Document identifier
+  - text: Raw text content
+  - true_label: Ground truth label
+  - pred_label: Model prediction
+  - confidence: Prediction confidence (optional)
 
-The helper will:
-  • save top‑N high‑confidence mis‑classifications
-  • draw and save a confusion matrix
-  • export a per‑class classification report
+Generated Artifacts:
+1. Error Analysis:
+   - CSV files with top-N high-confidence misclassifications
+   - Sorted by confidence when available
+   - Includes full context for each error
+
+2. Confusion Matrices:
+   - High-resolution visualizations
+   - Cell-level prediction counts
+   - Clear label annotations
+   - Publication-ready styling
+
+3. Classification Reports:
+   - Per-class precision, recall, F1
+   - Support counts
+   - Macro and weighted averages
+   - Exported as CSV for further analysis
+
+Functions:
+- run_all_qualitative_analyses: Main entry point for running all analyses
+- _save_confusion_matrix: Generate styled confusion matrix plots
+- _export_top_errors: Save high-confidence misclassifications
+- _export_classification_report: Generate detailed performance metrics
+
+Dependencies:
+- pathlib
+- glob
+- pandas
+- matplotlib
+- sklearn.metrics
+
+Example Usage:
+    >>> # Run analysis for all models in experiment
+    >>> run_all_qualitative_analyses(
+    ...     experiment_dir='experiments/run_001',
+    ...     output_dir='analysis/run_001',
+    ...     top_n=20,
+    ...     verbose=True
+    ... )
+    >>> 
+    >>> # Access generated artifacts
+    >>> import pandas as pd
+    >>> errors_df = pd.read_csv('analysis/run_001/model1_top20_errors.csv')
+    >>> metrics_df = pd.read_csv('analysis/run_001/model1_classification_report.csv')
 """
 
 from pathlib import Path

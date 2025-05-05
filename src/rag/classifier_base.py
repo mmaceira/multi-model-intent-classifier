@@ -1,13 +1,37 @@
-"""\
-Classifier Base module.
+"""
+Classifier Base Module
+
+This module provides the base class for RAG (Retrieval-Augmented Generation)
+classifiers. It defines the common interface and functionality shared by all
+RAG classifier implementations.
+
+Key Features:
+- Abstract base class for RAG classifiers
+- Common label management
+- Majority voting utility
+- Type hints for consistent interfaces
 
 Classes:
-- RagClassifierBase
+- RagClassifierBase: Abstract base class for RAG classifiers
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- abc
+- typing
+- numpy
+
+Example Usage:
+    >>> # Create a custom classifier by inheriting from RagClassifierBase
+    >>> class CustomClassifier(RagClassifierBase):
+    ...     def predict(self, docs: Sequence[str], **kwargs) -> list[str]:
+    ...         # Implement prediction logic
+    ...         return predictions
+    ...     
+    ...     def predict_proba(self, docs: Sequence[str], **kwargs) -> np.ndarray:
+    ...         # Implement probability estimation
+    ...         return probabilities
 """
 
 from abc import ABC, abstractmethod

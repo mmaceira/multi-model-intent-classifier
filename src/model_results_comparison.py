@@ -1,15 +1,61 @@
-"""\
-Model results comparison module.
+"""
+Model Results Comparison Module
 
-This module provides tools for comparing and visualizing the performance
-of different text classification models. It includes functions for loading
-evaluation results and creating visualizations to compare model metrics.
+This module provides tools for comparing and visualizing the performance of different text
+classification models. It facilitates the analysis of model evaluation results by loading,
+aggregating, and visualizing key metrics across multiple models.
+
+Key Features:
+- Automated loading of evaluation results from CSV files
+- Aggregation of metrics across multiple models
+- Publication-ready visualizations of model comparisons
+- Support for macro-F1 score comparisons
+- Flexible output formats (display or save to file)
+- Consistent styling across visualizations
 
 Functions:
-- load_results: Load and aggregate model evaluation results
-- plot_macro_f1: Create bar plot of model F1 scores
+- load_results: Load and aggregate evaluation results from CSV files
+  - Handles multiple model results
+  - Supports custom results directory
+  - Returns a unified DataFrame for analysis
+  
+- plot_macro_f1: Create bar plot comparing model macro-F1 scores
+  - Sorts models by performance
+  - Customizable plot styling
+  - Optional plot saving
 
-Created: 2025-05-03
+Input Format:
+- Results directory containing CSV files with model evaluation metrics
+- Each CSV file named as '{model_name}_report.csv'
+- CSV files must include columns for metrics and 'macro avg' row
+
+Output Format:
+- Aggregated DataFrame with model metrics
+- Publication-ready bar plots
+- Optional file output for both data and plots
+
+Dependencies:
+- os
+- pandas
+- matplotlib
+- seaborn
+- typing
+
+Example Usage:
+    >>> # Load all model results
+    >>> results_df = load_results(
+    ...     results_dir='experiment_results'
+    ... )
+    >>> 
+    >>> # Create and save comparison plot
+    >>> plot_macro_f1(
+    ...     df=results_df,
+    ...     save_path='visualizations/model_comparison.png'
+    ... )
+    >>> 
+    >>> # Access specific model metrics
+    >>> best_model = results_df.sort_values('f1-score', ascending=False).iloc[0]
+    >>> print(f"Best model: {best_model['model']}")
 """
 
 # model_results_comparison.py

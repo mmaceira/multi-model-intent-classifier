@@ -1,13 +1,37 @@
-"""\
-Rag Kmajority module.
+"""
+RAG K-Majority Classifier Module
+
+This module implements a K-Majority classifier for RAG (Retrieval-Augmented Generation)
+systems. It uses a majority voting scheme on the k-nearest neighbors to make predictions.
+
+Key Features:
+- K-nearest neighbors retrieval
+- Majority voting classification
+- Probability estimation
+- Support for multiple embedding types
+- Scikit-learn compatible interface
 
 Classes:
-- RagKMajority
+- RagKMajority: K-Majority classifier for RAG systems
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- numpy
+- collections
+- sentence_transformers
+- typing
+
+Example Usage:
+    >>> # Initialize the classifier
+    >>> classifier = RagKMajority.load_default(top_k=5)
+    
+    >>> # Make predictions
+    >>> predictions = classifier.predict(documents)
+    
+    >>> # Get probability estimates
+    >>> probabilities = classifier.predict_proba(documents)
 """
 
 from typing import Sequence

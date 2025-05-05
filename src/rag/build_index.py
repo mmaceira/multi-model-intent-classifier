@@ -15,19 +15,52 @@ except ImportError:
     # Fall back to relative import if absolute import fails
     from ..embeddings.openai_embedder import OpenAIEmbedder
 
-"""\
-Build Index module.
+"""
+Build Index Module
+
+This module provides functionality for building FAISS indices for the RAG
+(Retrieval-Augmented Generation) system. It supports both SentenceTransformer
+and OpenAI embeddings, with options for backward compatibility and parallel
+index building.
+
+Key Features:
+- FAISS index building
+- Support for multiple embedding types
+- Backward compatibility options
+- Parallel index building
+- Embedding generation
+- Metadata management
 
 Classes:
-- None
+- None (Module-level functions only)
 
 Functions:
-- _extract_year
-- _load_csv
-- _load_reuters
-- main
+- _load_precomputed_embeddings: Load precomputed embeddings from file
+- _load_csv: Load data from CSV file
+- _load_reuters: Load Reuters dataset
+- main: Main entry point for building indices
+- build_openai_index: Build index using OpenAI embeddings
+- load_embedder: Load appropriate embedder based on configuration
 
-Created: 2025-05-03
+Dependencies:
+- argparse
+- csv
+- json
+- numpy
+- tqdm
+- pathlib
+- os
+- sys
+- faiss
+- sentence_transformers
+- openai
+
+Example Usage:
+    >>> # Build indices using default settings
+    >>> python build_index.py
+    
+    >>> # Build indices with custom settings
+    >>> python build_index.py --use_openai --build_both --legacy_compat
 """
 
 import argparse, csv, json, re

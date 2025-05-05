@@ -1,13 +1,42 @@
-"""\
-Adapter Sklearn module.
+"""
+Adapter Sklearn Module
+
+This module provides an adapter class that makes RAG (Retrieval-Augmented Generation)
+classifiers compatible with scikit-learn's estimator interface. This allows RAG
+classifiers to be used in scikit-learn pipelines and with scikit-learn's model
+selection tools.
+
+Key Features:
+- scikit-learn compatibility
+- Probability estimation support
+- Custom serialization handling
+- Proper cloning support
 
 Classes:
-- RagSklearnAdapter
+- RagSklearnAdapter: Adapter class for scikit-learn compatibility
 
 Functions:
-- None
+- None (Class methods only)
 
-Created: 2025-05-03
+Dependencies:
+- numpy
+- sklearn.base
+
+Example Usage:
+    >>> # Create a RAG classifier
+    >>> from rag.rag_llm import RagLLM
+    >>> rag_clf = RagLLM.load_default()
+    
+    >>> # Wrap it in the adapter
+    >>> from rag.adapter_sklearn import RagSklearnAdapter
+    >>> sklearn_clf = RagSklearnAdapter(rag_clf)
+    
+    >>> # Use in scikit-learn pipeline
+    >>> from sklearn.pipeline import Pipeline
+    >>> pipeline = Pipeline([
+    ...     ('preprocessor', preprocessor),
+    ...     ('classifier', sklearn_clf)
+    ... ])
 """
 
 import numpy as np

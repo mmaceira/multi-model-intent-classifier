@@ -1,16 +1,66 @@
-"""\
-Exploration module for analyzing and visualizing text datasets.
+"""
+Text Dataset Exploration Module
 
-This module provides tools for analyzing and visualizing text datasets,
-including functions for analyzing class distributions and text length
-statistics. It helps understand data characteristics before model training.
+This module provides comprehensive tools for analyzing and visualizing text classification datasets,
+helping researchers and practitioners understand their data characteristics before model training.
+It includes functions for analyzing class distributions, text length statistics, and topic
+co-occurrence patterns.
+
+Key Features:
+- Class distribution analysis and visualization
+- Text length statistics and distribution plots
+- Topic co-occurrence pattern analysis
+- Customizable visualizations with publication-ready styling
+- Detailed statistical summaries
+- CSV export capabilities for further analysis
 
 Functions:
-- class_frequency: Analyze and visualize class distribution
-- length_distribution: Analyze and visualize text length distribution
-- topic_cooccurrence: Analyze and visualize topic co-occurrence patterns
+- class_frequency: Analyze and visualize class distribution with optional top-N filtering
+- length_distribution: Analyze text length patterns with percentile statistics
+- topic_cooccurrence: Create and visualize topic co-occurrence matrices
 
-Created: 2025-05-03
+Statistical Outputs:
+- Class frequencies and proportions
+- Text length summary statistics (mean, median, std, min, max)
+- Customizable percentile statistics
+- Topic co-occurrence matrices
+
+Visualizations:
+- Bar plots of class distributions
+- Histograms of text lengths
+- Heatmaps of topic co-occurrence
+- Publication-ready plots with proper styling
+
+Dependencies:
+- numpy
+- pandas
+- matplotlib
+- seaborn
+- typing
+- os
+
+Example Usage:
+    >>> # Analyze class distribution
+    >>> class_stats = class_frequency(
+    ...     labels=y_train,
+    ...     plot=True,
+    ...     save_path='class_dist.png',
+    ...     top_n=10
+    ... )
+    
+    >>> # Analyze text lengths
+    >>> length_stats = length_distribution(
+    ...     texts=X_train,
+    ...     save_path='length_dist.png',
+    ...     output_dir='stats',
+    ...     percentiles=[25, 50, 75, 90, 95, 99]
+    ... )
+    
+    >>> # Analyze topic co-occurrence
+    >>> cooccurrence = topic_cooccurrence(
+    ...     labels=y_train,
+    ...     save_path='cooccurrence.png'
+    ... )
 """
 
 import numpy as np

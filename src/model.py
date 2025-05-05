@@ -1,17 +1,60 @@
-"""\
-Model module for text classification.
+"""
+Text Classification Model Module
 
-This module provides the base text classifier interface and common
-functionality for all text classification models in the project.
-It defines the abstract base class that all classifiers must implement.
+This module provides the foundational architecture for text classification models in the project.
+It defines an abstract base class that standardizes the interface and implements common functionality
+for all text classifiers, ensuring consistency and interoperability across different model implementations.
+
+Key Features:
+- Abstract base class for text classifiers
+- Scikit-learn compatibility through BaseEstimator
+- Flexible text vectorization support
+- Type hints and comprehensive error handling
+- Consistent API across model implementations
+- Parameter management for model persistence
 
 Classes:
-- TextClassifier: Abstract base class for text classifiers
+- TextClassifier: Abstract base class that all text classifiers must inherit from
+  - Implements common functionality for text vectorization
+  - Provides scikit-learn compatible parameter handling
+  - Enforces consistent interface through abstract methods
+  - Manages model state and validation
 
-Functions:
-- None
+Abstract Methods (to be implemented by subclasses):
+- _fit_model: Train the model on vectorized features
+- _predict_model: Make predictions using vectorized features
 
-Created: 2025-05-03
+Concrete Methods:
+- fit: Train the classifier on raw text data
+- predict: Make predictions on raw text data
+- vectorize: Convert raw text to feature vectors
+- get_params: Get model parameters (scikit-learn compatibility)
+- set_params: Set model parameters (scikit-learn compatibility)
+
+Dependencies:
+- abc (Abstract Base Classes)
+- typing
+- numpy
+- sklearn.base
+
+Example Usage:
+    >>> # Create a custom classifier
+    >>> class MyClassifier(TextClassifier):
+    ...     def __init__(self, vectorizer):
+    ...         super().__init__(vectorizer)
+    ...         
+    ...     def _fit_model(self, X_vec, y):
+    ...         # Implement training logic
+    ...         pass
+    ...         
+    ...     def _predict_model(self, X_vec):
+    ...         # Implement prediction logic
+    ...         pass
+    ...         
+    >>> # Use the classifier
+    >>> clf = MyClassifier(vectorizer=CountVectorizer())
+    >>> clf.fit(X_train, y_train)
+    >>> predictions = clf.predict(X_test)
 """
 
 from abc import ABC, abstractmethod
