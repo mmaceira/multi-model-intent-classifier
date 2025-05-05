@@ -5,6 +5,17 @@ A production-ready NLP pipeline for automated news article classification and se
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+## Table of Contents
+- [Quick Start](#-quick-start)
+- [Overview](#-overview)
+- [Project Structure](#-project-structure)
+- [Model Architecture](#-model-architecture)
+- [Key Features](#-key-features)
+- [Performance Metrics](#-performance-metrics)
+- [Scaling Guidance](#-scaling-guidance)
+- [Development](#-development)
+- [Contributing](#-contributing)
+
 ## 🚀 Quick Start
 
 ```bash
@@ -51,7 +62,7 @@ reuters-rag-classifier/
 
 ## 🧠 Model Architecture
 
-We implement three model families to balance speed, interpretability, and accuracy:
+### Model Comparison
 
 | Model | Architecture | Accuracy (Macro-F1) | Use Case |
 |-------|--------------|-------------------|----------|
@@ -60,7 +71,7 @@ We implement three model families to balance speed, interpretability, and accura
 | MiniLM + LogReg | Transformer + Logistic Regression | 0.87 | High-accuracy classification |
 | RAG (FAISS) | FAISS + LLM | 0.87 NDCG | Semantic search and Q&A |
 
-### Technical Model Specifications
+### Technical Specifications
 
 #### 1. Multinomial Naive Bayes (`nb_tfidf`)
 - **Implementation**: Bag-of-words TF-IDF vectorization with probabilistic modeling
@@ -86,13 +97,33 @@ We implement three model families to balance speed, interpretability, and accura
   - Inference: 1k docs/s
   - Resources: 12GB GPU
 
-#### 4. RAG Implementation (`rag_faiss`)
-- **Implementation**: FAISS similarity search with LLM generation
+#### 4. RAG Classification Implementation (`rag_faiss`)
+- **Implementation**: The RAG (Retrieval-Augmented Generation) classification system combines the power of semantic search with large language models to make accurate classification decisions. Here's a detailed breakdown of how it works:
+
+  1. **Document Embedding**
+    - Input documents are converted into dense vector representations
+    - Uses `openai text-embedding-3-small` or `sentence-transformers/all-MiniLM-L6-v2` for high-quality embeddings
+    - Embeddings capture semantic meaning and document context
+
+  2. **Context Retrieval**
+    - FAISS (Facebook AI Similarity Search) is used for efficient similarity search
+    - For each document, retrieves `top_k` (default: 5) most similar documents
+    - Similar documents serve as contextual examples for classification
+    - Optimized for speed with approximate nearest neighbor search
+
+  3. **LLM Classification**
+    - Uses OpenAI's GPT models (default: "gpt-4o-mini") for final classification
+    - Provides the model with:
+      - Document to classify
+      - Retrieved similar documents as context
+      - List of valid classification labels
+    - Returns JSON-formatted classification decisions
 - **Pipeline**: Document embedding → FAISS index → Query embedding → ANN search → LLM reranking
 - **Performance**:
   - Index Build: ~25 min
   - Query Speed: 200 QPS
   - Resources: 16GB RAM + LLM
+
 
 ## 💡 Key Features
 
@@ -122,6 +153,7 @@ We implement three model families to balance speed, interpretability, and accura
 
 ## 📊 Performance Metrics
 
+### Technical Performance
 | Capability | Metric | Impact |
 |------------|--------|--------|
 | Article Tagging | 94% accuracy | Reduced manual effort |
@@ -130,7 +162,6 @@ We implement three model families to balance speed, interpretability, and accura
 | Resource Usage | < 16GB RAM | Efficient deployment |
 
 ### Business Impact
-
 | Capability | Metric Moved | Why it Matters |
 |------------|--------------|----------------|
 | Article Tagging | +9% editorial throughput | Fewer manual labels per shift |
@@ -165,5 +196,7 @@ We implement three model families to balance speed, interpretability, and accura
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
+
+---
 
 <b>© Reuters-RAG-Classifier Project</b>
