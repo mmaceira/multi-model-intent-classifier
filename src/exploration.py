@@ -2,37 +2,24 @@
 Text Dataset Exploration Module
 
 This module provides comprehensive tools for analyzing and visualizing text classification datasets,
-helping researchers and practitioners understand their data characteristics before model training.
-It includes functions for analyzing class distributions, text length statistics, topic
-co-occurrence patterns, and vocabulary drift between splits.
+with a focus on Reuters news articles. It includes functionality for analyzing class distributions,
+text length statistics, vocabulary patterns, and stopword analysis.
 
 Key Features:
 - Class distribution analysis and visualization
 - Text length statistics and distribution plots
-- Topic co-occurrence pattern analysis
-- Vocabulary drift analysis between train/test splits
-- Customizable visualizations with publication-ready styling
+- Vocabulary analysis with multiple filtering options
+- Stopword impact analysis
+- Publication-ready visualizations
 - Detailed statistical summaries
-- CSV export capabilities for further analysis
+- CSV export capabilities
 
 Functions:
-- class_frequency: Analyze and visualize class distribution with optional top-N filtering
-- length_distribution: Analyze text length patterns with percentile statistics
-- topic_cooccurrence: Create and visualize topic co-occurrence matrices
-- vocabulary_drift: Analyze vocabulary differences between train and test splits
-
-Statistical Outputs:
-- Class frequencies and proportions
-- Text length summary statistics (mean, median, std, min, max)
-- Customizable percentile statistics
-- Topic co-occurrence matrices
-- Token frequency drift metrics
-
-Visualizations:
-- Bar plots of class distributions
-- Histograms of text lengths
-- Heatmaps of topic co-occurrence
-- Publication-ready plots with proper styling
+- class_frequency: Analyze and visualize class distribution
+- length_distribution: Analyze text length patterns
+- vocabulary_analysis: Comprehensive vocabulary analysis
+- stopword_analysis: Analyze impact of stopwords
+- vocabulary_drift: Analyze vocabulary differences between splits
 
 Dependencies:
 - numpy
@@ -42,37 +29,7 @@ Dependencies:
 - typing
 - os
 - collections
-
-Example Usage:
-    >>> # Analyze class distribution
-    >>> class_stats = class_frequency(
-    ...     labels=y_train,
-    ...     plot=True,
-    ...     save_path='class_dist.png',
-    ...     top_n=10
-    ... )
-    
-    >>> # Analyze text lengths
-    >>> length_stats = length_distribution(
-    ...     texts=X_train,
-    ...     save_path='length_dist.png',
-    ...     output_dir='stats',
-    ...     percentiles=[25, 50, 75, 90, 95, 99]
-    ... )
-    
-    >>> # Analyze topic co-occurrence
-    >>> cooccurrence = topic_cooccurrence(
-    ...     labels=y_train,
-    ...     save_path='cooccurrence.png'
-    ... )
-    
-    >>> # Analyze vocabulary drift
-    >>> drift = vocabulary_drift(
-    ...     train_texts=X_train,
-    ...     test_texts=X_test,
-    ...     top_k=2000,
-    ...     output_path='vocab_drift.csv'
-    ... )
+- re
 """
 
 from __future__ import annotations
@@ -80,19 +37,37 @@ from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Dict, Any, Sequence
+from typing import List, Dict, Any, Sequence, Optional, Set, Tuple
 import pandas as pd
 import os
 from pathlib import Path
 from collections import Counter
+import re
+
+# Define common English stopwords
+STOPWORDS = {
+    "the", "of", "to", "in", "and", "a", "for", "it", "on", "its", "with", "as", "by", 
+    "at", "from", "that", "this", "be", "is", "are", "was", "were", "been", "being", 
+    "have", "has", "had", "having", "do", "does", "did", "doing", "an", "the", 
+    "but", "if", "or", "because", "until", "while", "about", "against", "between", 
+    "into", "through", "during", "before", "after", "above", "below", "over", "under", 
+    "than", "too", "very", "can", "will", "just", "should", "now", "i", "me", "my", 
+    "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", 
+    "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "itself", 
+    "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", 
+    "whose", "when", "where", "why", "how", "any", "both", "each", "few", "more", 
+    "most", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "said"
+}
+
+# Extended financial/numeric terms to filter
+FINANCIAL_TERMS = {
+    "dlrs", "mln", "pct", "cts", "shr", "lt", "billion", "tonnes", "bpd", "000",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "v", "vs", "inc", "corp"
+}
 
 def class_frequency(labels: np.ndarray, plot: bool = True,
-                   save_path: str = None, top_n: int = None) -> Dict[str, Any]:
+                   save_path: Optional[str] = None, top_n: Optional[int] = None) -> Dict[str, Any]:
     """Analyze and visualize class distribution.
-    
-    This function analyzes the distribution of classes in the dataset
-    and optionally creates a bar plot visualization. It can focus on
-    the top N most frequent classes if specified.
     
     Args:
         labels: Array of class labels
@@ -104,10 +79,6 @@ def class_frequency(labels: np.ndarray, plot: bool = True,
         Dictionary containing:
         - counts: Series of class counts
         - proportions: Series of class proportions
-        
-    Example:
-        >>> stats = class_frequency(y_train, plot=True, top_n=10)
-        >>> print(f"Most frequent class: {stats['counts'].index[0]}")
     """
     # Compute class counts and proportions
     counts = pd.Series(labels).value_counts()
@@ -121,8 +92,6 @@ def class_frequency(labels: np.ndarray, plot: bool = True,
     # Create visualization if requested
     if plot:
         plt.figure(figsize=(10, 6))
-        
-        # Create bar plot with better styling
         bars = plt.bar(counts.index, counts.values, color='steelblue')
         
         # Add value labels on top of each bar
@@ -148,18 +117,15 @@ def class_frequency(labels: np.ndarray, plot: bool = True,
         'proportions': proportions
     }
 
-def length_distribution(texts: List[str], save_path: str = None, output_dir: str = None, 
+def length_distribution(texts: List[str], save_path: Optional[str] = None, 
+                     output_dir: Optional[str] = None, 
                      percentiles: List[int] = [25, 50, 75, 90, 95, 99]) -> Dict[str, Any]:
     """Analyze and visualize text length distribution.
-    
-    This function analyzes the distribution of text lengths in the
-    dataset and creates a histogram visualization. It provides
-    summary statistics about the text lengths, including percentiles.
     
     Args:
         texts: List of text documents
         save_path: Path to save the plot (default: None)
-        output_dir: Directory to save additional output files like CSV (default: None)
+        output_dir: Directory to save additional output files (default: None)
         percentiles: List of percentiles to calculate (default: [25, 50, 75, 90, 95, 99])
         
     Returns:
@@ -167,11 +133,6 @@ def length_distribution(texts: List[str], save_path: str = None, output_dir: str
         - lengths: Array of text lengths
         - stats: Dictionary of summary statistics
         - percentile_stats: List of dictionaries with percentile information
-        
-    Example:
-        >>> stats = length_distribution(X_train)
-        >>> print(f"Average length: {stats['stats']['mean']:.1f} words")
-        >>> print(f"90th percentile: {stats['percentile_stats'][3]['length']} words")
     """
     # Compute text lengths
     lengths = np.array([len(text.split()) for text in texts])
@@ -224,32 +185,129 @@ def length_distribution(texts: List[str], save_path: str = None, output_dir: str
         'percentile_stats': percentile_stats
     }
 
-def vocabulary_drift(
-    train_texts: Sequence[str], 
-    test_texts: Sequence[str], 
-    *, 
-    top_k: int = 2000,
-    min_freq: int = 10,
-    output_path: str|Path = None
-) -> pd.DataFrame:
+def _is_numeric_or_financial(word: str) -> bool:
+    """Determine if a word is numeric or a financial term.
+    
+    Args:
+        word: The word to check
+        
+    Returns:
+        True if the word is a numeric value or financial term
+    """
+    # Check if it's entirely digits
+    if word.isdigit():
+        return True
+    
+    # Check if it's in our financial terms list
+    if word in FINANCIAL_TERMS:
+        return True
+    
+    # Check if it's a number with commas, decimal points, or other formatting
+    if re.match(r'^[0-9,\.]+$', word):
+        return True
+    
+    # Check if it starts with a number followed by other characters
+    if re.match(r'^[0-9]+[a-zA-Z]*$', word):
+        return True
+    
+    # Check for currency symbols
+    if re.match(r'^[\$£€¥]?[0-9,\.]+$', word):
+        return True
+    
+    return False
+
+def vocabulary_analysis(texts: List[str], remove_stopwords: bool = True, 
+                       remove_numbers: bool = True,
+                       remove_financial_terms: bool = False,
+                       min_word_length: int = 1,
+                       n_most_common: int = 30, plot: bool = True, 
+                       figsize: Tuple[int, int] = (12, 8)) -> Dict:
+    """Analyze vocabulary distribution with various filtering options.
+    
+    Args:
+        texts: List of text documents
+        remove_stopwords: Whether to remove common English stopwords
+        remove_numbers: Whether to remove numeric tokens
+        remove_financial_terms: Whether to remove common financial terms
+        min_word_length: Minimum length of words to include
+        n_most_common: Number of most common words to return
+        plot: Whether to create a visualization
+        figsize: Figure size for the plot
+        
+    Returns:
+        Dictionary containing:
+        - vocab_size: Total unique words in vocabulary
+        - word_counts: Counter object with word frequencies
+        - top_words: DataFrame of n most common words
+    """
+    # Tokenize and count words
+    words = []
+    for doc in texts:
+        words.extend(re.findall(r'\w+', doc.lower()))
+    
+    # Filter by minimum word length
+    if min_word_length > 1:
+        words = [word for word in words if len(word) >= min_word_length]
+    
+    # Filter stopwords if requested
+    if remove_stopwords:
+        words = [word for word in words if word not in STOPWORDS]
+    
+    # Filter numbers and financial terms if requested
+    filtered_words = []
+    for word in words:
+        if remove_numbers and _is_numeric_or_financial(word):
+            continue
+        if remove_financial_terms and word in FINANCIAL_TERMS:
+            continue
+        filtered_words.append(word)
+    
+    # Count word frequencies
+    word_counts = Counter(filtered_words)
+    
+    # Get most common words
+    most_common = word_counts.most_common(n_most_common)
+    top_words = pd.DataFrame(most_common, columns=['word', 'count'])
+    
+    # Create visualization if requested
+    if plot:
+        plt.figure(figsize=figsize)
+        sns.barplot(x='count', y='word', data=top_words.head(30), palette='viridis')
+        title_parts = []
+        if remove_stopwords:
+            title_parts.append("Stopwords Removed")
+        if remove_numbers:
+            title_parts.append("Numbers Removed")
+        if remove_financial_terms:
+            title_parts.append("Financial Terms Removed")
+        if min_word_length > 1:
+            title_parts.append(f"Min Word Length: {min_word_length}")
+        title_suffix = f" ({', '.join(title_parts)})" if title_parts else ""
+        plt.title(f'Top Words in Corpus{title_suffix}')
+        plt.xlabel('Count')
+        plt.ylabel('Word')
+        plt.tight_layout()
+        plt.show()
+    
+    return {
+        'vocab_size': len(word_counts),
+        'word_counts': word_counts,
+        'top_words': top_words
+    }
+
+def vocabulary_drift(train_texts: Sequence[str], test_texts: Sequence[str], 
+                   top_k: int = 2000, min_freq: int = 10,
+                   output_path: Optional[str] = None) -> pd.DataFrame:
     """Compute token frequency drift between train and test splits.
     
-    Parameters
-    ----------
-    train_texts : Sequence[str]
-        Training documents
-    test_texts : Sequence[str]
-        Test documents
-    top_k : int, optional
-        Number of most frequent tokens to consider
-    min_freq : int, optional
-        Minimum number of times a token must appear in train + test to be included
-    output_path : str|Path, optional
-        Path to save results
-    
-    Returns
-    -------
-    pd.DataFrame
+    Args:
+        train_texts: Training documents
+        test_texts: Test documents
+        top_k: Number of most frequent tokens to consider
+        min_freq: Minimum number of times a token must appear
+        output_path: Path to save results
+        
+    Returns:
         DataFrame with token frequencies and drift metrics
     """
     def _tokenize(s: str):
@@ -259,7 +317,8 @@ def vocabulary_drift(
     test_counts = Counter(token for doc in test_texts for token in _tokenize(doc))
     
     # restrict to top_k in either split
-    vocab = set([w for w,_ in train_counts.most_common(top_k)] + [w for w,_ in test_counts.most_common(top_k)])
+    vocab = set([w for w,_ in train_counts.most_common(top_k)] + 
+                [w for w,_ in test_counts.most_common(top_k)])
     rows = []
     
     for w in vocab:
@@ -282,3 +341,153 @@ def vocabulary_drift(
         df.to_csv(output_path, index=False)
     
     return df
+
+def comprehensive_analysis(texts: List[str], labels: Optional[List[str]] = None,
+                         label_names: Optional[List[str]] = None,
+                         output_dir: str = '.',
+                         min_word_length: int = 3,
+                         top_n: int = 30,
+                         create_visualizations: bool = True,
+                         create_csv: bool = True) -> Dict:
+    """Perform comprehensive vocabulary analysis with enhanced filtering.
+    
+    Args:
+        texts: List of text documents to analyze
+        labels: Optional list of class labels for class-specific analysis
+        label_names: Optional list of label names for the classes
+        output_dir: Directory to save output files
+        min_word_length: Minimum length of words to include
+        top_n: Number of top words to return
+        create_visualizations: Whether to create and save visualizations
+        create_csv: Whether to save results to CSV files
+        
+    Returns:
+        Dictionary containing the results of all analyses
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    results = {}
+    
+    print(f"Running comprehensive vocabulary analysis on {len(texts)} documents...")
+    
+    # 1. Basic analysis (only removing stopwords)
+    print("\n======= BASIC FILTERING =======")
+    basic_results = vocabulary_analysis(
+        texts,
+        remove_stopwords=True,
+        remove_numbers=False,
+        remove_financial_terms=False,
+        min_word_length=1,
+        n_most_common=top_n,
+        plot=False
+    )
+    
+    results['basic'] = basic_results
+    print(f"Total unique words (basic filtering): {basic_results['vocab_size']:,}")
+    
+    if create_csv:
+        pd.DataFrame(basic_results['word_counts'].most_common(top_n), 
+                     columns=['word', 'count']).to_csv(
+            os.path.join(output_dir, 'basic_filtering.csv'), index=False
+        )
+    
+    # 2. Standard analysis (removing stopwords, numbers, and financial terms)
+    print("\n======= STANDARD FILTERING =======")
+    standard_results = vocabulary_analysis(
+        texts,
+        remove_stopwords=True,
+        remove_numbers=True,
+        remove_financial_terms=True,
+        min_word_length=min_word_length,
+        n_most_common=top_n,
+        plot=False
+    )
+    
+    results['standard'] = standard_results
+    print(f"Total unique words (standard filtering): {standard_results['vocab_size']:,}")
+    
+    if create_csv:
+        pd.DataFrame(standard_results['word_counts'].most_common(top_n), 
+                     columns=['word', 'count']).to_csv(
+            os.path.join(output_dir, 'standard_filtering.csv'), index=False
+        )
+    
+    # 3. Advanced analysis (all filters including additional stopwords)
+    print("\n======= ADVANCED FILTERING =======")
+    advanced_results = vocabulary_analysis(
+        texts,
+        remove_stopwords=True,
+        remove_numbers=True,
+        remove_financial_terms=True,
+        min_word_length=min_word_length,
+        n_most_common=top_n,
+        plot=False
+    )
+    
+    results['advanced'] = advanced_results
+    print(f"Total unique words (advanced filtering): {advanced_results['vocab_size']:,}")
+    
+    if create_csv:
+        pd.DataFrame(advanced_results['word_counts'].most_common(top_n), 
+                     columns=['word', 'count']).to_csv(
+            os.path.join(output_dir, 'advanced_filtering.csv'), index=False
+        )
+    
+    # Create top words visualization
+    if create_visualizations:
+        top_words = pd.DataFrame(advanced_results['word_counts'].most_common(25), 
+                                columns=['word', 'count'])
+        plt.figure(figsize=(12, 10))
+        plt.barh(top_words['word'], top_words['count'], color='steelblue')
+        plt.title('Top 25 Words After Comprehensive Filtering')
+        plt.xlabel('Count')
+        plt.ylabel('Word')
+        plt.gca().invert_yaxis()  # Put the largest at the top
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'top_words_comprehensive.png'))
+        plt.close()
+        print("Visualization saved to 'top_words_comprehensive.png'")
+    
+    # Class-specific analysis if labels are provided
+    if labels is not None and label_names is not None:
+        print("\n======= CLASS-SPECIFIC ANALYSIS =======")
+        
+        # Create a DataFrame to store class-specific word frequencies
+        class_word_freqs = {}
+        
+        for class_name in label_names:
+            # Filter texts for this class
+            class_texts = [text for text, label in zip(texts, labels) if label == class_name]
+            
+            if not class_texts:
+                continue
+                
+            # Analyze vocabulary for this class
+            class_analysis = vocabulary_analysis(
+                class_texts,
+                remove_stopwords=True,
+                remove_numbers=True,
+                remove_financial_terms=True,
+                min_word_length=min_word_length,
+                n_most_common=top_n,
+                plot=False
+            )
+            
+            # Store top words for this class
+            class_word_freqs[class_name] = [
+                f"{word} ({count:,})" for word, count in 
+                class_analysis['word_counts'].most_common(top_n)
+            ]
+        
+        # Convert to DataFrame
+        max_length = max(len(words) for words in class_word_freqs.values())
+        for class_name in class_word_freqs:
+            class_word_freqs[class_name] += [''] * (max_length - len(class_word_freqs[class_name]))
+        
+        results['advanced_class'] = pd.DataFrame(class_word_freqs)
+        
+        if create_csv:
+            results['advanced_class'].to_csv(
+                os.path.join(output_dir, 'advanced_class_words.csv'), index=False
+            )
+    
+    return results
