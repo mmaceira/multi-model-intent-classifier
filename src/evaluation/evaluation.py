@@ -228,7 +228,7 @@ def run_evaluations(
             plot_confusion_matrix(single_model_predictions, split_out_dir)
             plot_precision_recall_curves(single_model_predictions, split_out_dir)
             visualize_error_distribution(single_model_predictions, split_out_dir)
-            generate_detailed_error_report(single_model_predictions, split_out_dir)
+            generate_detailed_error_report(single_model_predictions, split_out_dir, only_split=split_name)
             
             # Additional analyses for test set
             if split_name == "test" and "text" in df.columns:

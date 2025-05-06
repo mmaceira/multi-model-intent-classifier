@@ -64,45 +64,47 @@ def plot_label_distribution(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all unique labels from test sets
+    # Get all unique labels from both train and test sets
     all_labels = set()
     for splits in predictions_dict.values():
-        if 'test' in splits:
-            df = splits['test']
-            all_labels.update(df['y_true'].unique())
-            all_labels.update(df['y_pred'].unique())
+        for split_name in ['train', 'test']:
+            if split_name in splits:
+                df = splits[split_name]
+                all_labels.update(df['y_true'].unique())
+                all_labels.update(df['y_pred'].unique())
     
     all_labels = sorted(all_labels)
     
     for model_name, splits in predictions_dict.items():
-        if 'test' in splits:
-            df = splits['test']
-            
-            # Compute label distributions
-            true_counts = pd.Series(df['y_true']).value_counts().reindex(all_labels, fill_value=0)
-            pred_counts = pd.Series(df['y_pred']).value_counts().reindex(all_labels, fill_value=0)
-            
-            df_dist = pd.DataFrame({
-                'True': true_counts,
-                'Predicted': pred_counts
-            })
-            
-            # Create plot
-            fig, ax = plt.subplots(figsize=(12, 6))
-            df_dist.plot(kind='bar', ax=ax)
-            
-            # Configure plot
-            ax.set_title(f'Label Distribution - {model_name} (Test Set)')
-            ax.set_ylabel('Count')
-            ax.set_xlabel('Class')
-            ax.legend(['True', 'Predicted'])
-            ax.grid(alpha=0.3)
-            plt.xticks(rotation=45, ha='right')
-            
-            # Save plot
-            plt.tight_layout()
-            plt.savefig(output_dir / f'{model_name}_label_distribution.png')
-            plt.close(fig)
+        for split_name in ['train', 'test']:
+            if split_name in splits:
+                df = splits[split_name]
+                
+                # Compute label distributions
+                true_counts = pd.Series(df['y_true']).value_counts().reindex(all_labels, fill_value=0)
+                pred_counts = pd.Series(df['y_pred']).value_counts().reindex(all_labels, fill_value=0)
+                
+                df_dist = pd.DataFrame({
+                    'True': true_counts,
+                    'Predicted': pred_counts
+                })
+                
+                # Create plot
+                fig, ax = plt.subplots(figsize=(12, 6))
+                df_dist.plot(kind='bar', ax=ax)
+                
+                # Configure plot
+                ax.set_title(f'Label Distribution - {model_name} ({split_name.capitalize()} Set)')
+                ax.set_ylabel('Count')
+                ax.set_xlabel('Class')
+                ax.legend(['True', 'Predicted'])
+                ax.grid(alpha=0.3)
+                plt.xticks(rotation=45, ha='right')
+                
+                # Save plot
+                plt.tight_layout()
+                plt.savefig(output_dir / f'{model_name}_{split_name}_label_distribution.png')
+                plt.close(fig)
 
 def plot_roc_curves(
     y_true_bin: np.ndarray,
@@ -185,64 +187,68 @@ def plot_precision_recall_curves(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all unique labels from test sets
+    # Get all unique labels from both train and test sets
     all_labels = set()
     for splits in predictions_dict.values():
-        if 'test' in splits:
-            df = splits['test']
-            all_labels.update(df['y_true'].unique())
+        for split_name in ['train', 'test']:
+            if split_name in splits:
+                df = splits[split_name]
+                all_labels.update(df['y_true'].unique())
     
     all_labels = sorted(all_labels)
     
     for model_name, splits in predictions_dict.items():
-        if 'test' in splits and 'probabilities' in splits['test'].columns:
-            df = splits['test']
-            
-            # Convert probabilities string to numpy array
-            y_prob = np.array([eval(p) for p in df['probabilities']])
-            
-            # Create binary labels for each class
-            y_true_bin = label_binarize(df['y_true'], classes=all_labels)
-            
-            # Plot curves
-            fig, ax = plt.subplots(figsize=(10, 8))
-            
-            # For each class, plot its curve
-            ap_scores = []
-            for i, cls in enumerate(all_labels):
-                precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_prob[:, i])
-                ap = average_precision_score(y_true_bin[:, i], y_prob[:, i])
-                ap_scores.append(ap)
-                ax.plot(recall, precision, label=f"{cls} (AP={ap:.3f})")
-            
-            # Plot micro-average precision-recall curve
-            precision, recall, _ = precision_recall_curve(y_true_bin.ravel(), y_prob.ravel())
-            ap_micro = average_precision_score(y_true_bin.ravel(), y_prob.ravel())
-            ax.plot(recall, precision, 'b--', 
-                    label=f'Micro-average (AP={ap_micro:.3f})', 
-                    lw=2, alpha=0.8)
-            
-            # Configure plot
-            ax.set(
-                title=f"Precision-Recall Curves - {model_name} (Test Set)",
-                xlabel="Recall",
-                ylabel="Precision",
-            )
-            ax.grid(alpha=0.3)
-            ax.legend(loc="lower left")
-            
-            # Save plot
-            plt.tight_layout()
-            plt.savefig(output_dir / f'{model_name}_precision_recall.png')
-            plt.close(fig)
+        for split_name in ['train', 'test']:
+            if split_name in splits and 'probabilities' in splits[split_name].columns:
+                df = splits[split_name]
+                
+                # Get true labels and probabilities
+                y_true = df['y_true']
+                y_prob = df['probabilities']
+                
+                # Binarize the labels
+                y_true_bin = label_binarize(y_true, classes=all_labels)
+                
+                # Plot precision-recall curves for each class
+                fig, ax = plt.subplots(figsize=(10, 8))
+                
+                for i, label in enumerate(all_labels):
+                    precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_prob[:, i])
+                    ap_score = average_precision_score(y_true_bin[:, i], y_prob[:, i])
+                    ax.plot(recall, precision, label=f'{label} (AP={ap_score:.3f})')
+                
+                # Add micro-average curve
+                precision, recall, _ = precision_recall_curve(
+                    y_true_bin.ravel(), y_prob.ravel()
+                )
+                ap_score = average_precision_score(y_true_bin.ravel(), y_prob.ravel())
+                ax.plot(recall, precision, 'k--', 
+                        label=f'Micro-average (AP={ap_score:.3f})',
+                        lw=2, alpha=0.8)
+                
+                # Configure plot
+                ax.set(
+                    title=f'Precision-Recall Curves - {model_name} ({split_name.capitalize()} Set)',
+                    xlabel='Recall',
+                    ylabel='Precision',
+                    xlim=[0.0, 1.0],
+                    ylim=[0.0, 1.05]
+                )
+                ax.grid(alpha=0.3)
+                ax.legend(loc='lower left')
+                
+                # Save plot
+                plt.tight_layout()
+                plt.savefig(output_dir / f'{model_name}_{split_name}_precision_recall.png')
+                plt.close(fig)
 
 def plot_confusion_matrix(
     predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
     output_dir: str | Path,
 ) -> None:
-    """Plot confusion matrices for each model's test set predictions.
+    """Plot confusion matrices for each model's train and test set predictions.
     
-    Generates both normalized and non-normalized versions of the confusion matrix.
+    Generates separate files for normalized and non-normalized versions of the confusion matrix.
     
     Parameters
     ----------
@@ -255,75 +261,52 @@ def plot_confusion_matrix(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get unique labels from all test sets
+    # Get unique labels from all train and test sets
     classes = set()
     for model_predictions in predictions_dict.values():
-        if 'test' in model_predictions:
-            classes.update(model_predictions['test']['y_true'].unique())
+        for split_name in ['train', 'test']:
+            if split_name in model_predictions:
+                classes.update(model_predictions[split_name]['y_true'].unique())
     classes = sorted(classes)
     
-    # Process each model
     for model_name, model_predictions in predictions_dict.items():
-        if 'test' not in model_predictions:
-            continue
-            
-        df = model_predictions['test']
-        y_true = df['y_true'].values
-        y_pred = df['y_pred'].values
-        
-        # Compute confusion matrix
-        cm = confusion_matrix(y_true, y_pred, labels=classes)
-        
-        # Create non-normalized confusion matrix
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(
-            cm,
-            annot=True,
-            fmt='d',
-            cmap='Blues',
-            xticklabels=classes,
-            yticklabels=classes,
-            square=True
-        )
-        
-        plt.title(f'Confusion Matrix - {model_name} (Test Set)')
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
-        plt.tight_layout()
-        
-        # Save non-normalized plot
-        plt.savefig(output_dir / f"{model_name}_confusion_matrix.png")
-        plt.close()
-        
-        # Create normalized confusion matrix
-        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        cm_normalized = np.nan_to_num(cm_normalized)
-        
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(
-            cm_normalized,
-            annot=True,
-            fmt='.2f',
-            cmap='Blues',
-            xticklabels=classes,
-            yticklabels=classes,
-            square=True
-        )
-        
-        plt.title(f'Normalized Confusion Matrix - {model_name} (Test Set)')
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
-        plt.tight_layout()
-        
-        # Save normalized plot
-        plt.savefig(output_dir / f"{model_name}_confusion_matrix_normalized.png")
-        plt.close()
+        for split_name in ['train', 'test']:
+            if split_name in model_predictions:
+                df = model_predictions[split_name]
+                y_true = df['y_true']
+                y_pred = df['y_pred']
+                
+                # Compute confusion matrix
+                cm = confusion_matrix(y_true, y_pred, labels=classes)
+                
+                # Plot non-normalized confusion matrix
+                plt.figure(figsize=(10, 8))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                          xticklabels=classes, yticklabels=classes)
+                plt.title(f'Confusion Matrix - {model_name} ({split_name.capitalize()} Set)')
+                plt.xlabel('Predicted')
+                plt.ylabel('True')
+                plt.tight_layout()
+                plt.savefig(output_dir / f'{model_name}_{split_name}_confusion_matrix.png')
+                plt.close()
+                
+                # Plot normalized confusion matrix
+                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+                plt.figure(figsize=(10, 8))
+                sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Blues',
+                          xticklabels=classes, yticklabels=classes)
+                plt.title(f'Normalized Confusion Matrix - {model_name} ({split_name.capitalize()} Set)')
+                plt.xlabel('Predicted')
+                plt.ylabel('True')
+                plt.tight_layout()
+                plt.savefig(output_dir / f'{model_name}_{split_name}_confusion_matrix_normalized.png')
+                plt.close()
 
 def plot_model_comparisons(
     predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
     output_dir: str | Path,
 ) -> None:
-    """Generate comparison plots for multiple models.
+    """Generate comparison plots for multiple models across train and test sets.
     
     Parameters
     ----------
@@ -336,199 +319,297 @@ def plot_model_comparisons(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Extract metrics for each model
+    # Extract metrics for each model and split
     metrics = []
     for model_name, model_predictions in predictions_dict.items():
-        if 'test' not in model_predictions:
-            continue
-            
-        df = model_predictions['test']
-        y_true = df['y_true'].values
-        y_pred = df['y_pred'].values
-        
-        metrics.append({
-            'Model': model_name,
-            'Accuracy': accuracy_score(y_true, y_pred),
-            'Macro F1': f1_score(y_true, y_pred, average='macro'),
-            'Weighted F1': f1_score(y_true, y_pred, average='weighted')
-        })
+        for split_name in ['train', 'test']:
+            if split_name in model_predictions:
+                df = model_predictions[split_name]
+                y_true = df['y_true'].values
+                y_pred = df['y_pred'].values
+                
+                metrics.append({
+                    'Model': model_name,
+                    'Split': split_name.capitalize(),
+                    'Accuracy': accuracy_score(y_true, y_pred),
+                    'Macro F1': f1_score(y_true, y_pred, average='macro'),
+                    'Weighted F1': f1_score(y_true, y_pred, average='weighted')
+                })
     
     metrics_df = pd.DataFrame(metrics)
     
-    # Create bar plots for each metric
+    # Create separate plots for each metric
     for metric in ['Accuracy', 'Macro F1', 'Weighted F1']:
-        plt.figure(figsize=(10, 6))
-        sns.barplot(data=metrics_df, x='Model', y=metric)
+        plt.figure(figsize=(12, 6))
+        sns.barplot(data=metrics_df, x='Model', y=metric, hue='Split')
         plt.title(f'Model Comparison - {metric}')
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.savefig(output_dir / f"model_comparison_{metric.lower().replace(' ', '_')}.png")
         plt.close()
-
-def plot_top_misclassifications(
-    predictions_df: pd.DataFrame,
-    output_path: Path,
-    top_n: int = 10,
-) -> pd.DataFrame:
-    """Plot and save top misclassifications with their text content.
     
-    Parameters
-    ----------
-    predictions_df : pd.DataFrame
-        DataFrame containing predictions and text data with 'text', 'y_true', and 'y_pred' columns
-    output_path : Path
-        Path to save the misclassifications CSV
-    top_n : int, optional
-        Number of top misclassifications to save, by default 10
+    # Create combined subplot figure with train and test side by side
+    metrics_list = ['Accuracy', 'Macro F1', 'Weighted F1']
+    n_metrics = len(metrics_list)
+    
+    fig, axes = plt.subplots(n_metrics, 2, figsize=(12, 4*n_metrics))
+    
+    for i, metric in enumerate(metrics_list):
+        # Train set
+        train_df = metrics_df[metrics_df['Split'] == 'Train']
+        sns.barplot(data=train_df, y='Model', x=metric, ax=axes[i, 0])
+        axes[i, 0].set_title(f'{metric} (Train)')
+        axes[i, 0].set_yticklabels(axes[i, 0].get_yticklabels(), rotation=0)
         
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing the top misclassifications
-    """
-    # Filter misclassifications
-    df = predictions_df[predictions_df['y_true'] != predictions_df['y_pred']].copy()
+        # Test set
+        test_df = metrics_df[metrics_df['Split'] == 'Test']
+        sns.barplot(data=test_df, y='Model', x=metric, ax=axes[i, 1])
+        axes[i, 1].set_title(f'{metric} (Test)')
+        axes[i, 1].set_yticklabels(axes[i, 1].get_yticklabels(), rotation=0)
+        
+        # Set x-axis limits to be the same for train and test
+        x_min = min(axes[i, 0].get_xlim()[0], axes[i, 1].get_xlim()[0])
+        x_max = max(axes[i, 0].get_xlim()[1], axes[i, 1].get_xlim()[1])
+        axes[i, 0].set_xlim(x_min, x_max)
+        axes[i, 1].set_xlim(x_min, x_max)
     
-    # Save to CSV
-    df.head(top_n).to_csv(output_path, index=False)
-    
-    return df
-
-def visualize_error_distribution(predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path):
-    """Create visualizations of error distributions across models and classes.
-    
-    Saves visualizations to the output directory.
-    
-    Parameters
-    ----------
-    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
-        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
-    output_dir : Path
-        Directory where visualizations will be saved.
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Combine all predictions for comparison
-    model_results = []
-    class_error_rates = []
-    
-    for model_name, splits in predictions_dict.items():
-        # We'll only analyze test set for visualization
-        if 'test' in splits:
-            df = splits['test']
-            # Calculate overall accuracy
-            accuracy = (df['y_true'] == df['y_pred']).mean()
-            model_results.append({'model': model_name, 'accuracy': accuracy})
-            
-            # Calculate per-class error rates
-            for class_name in df['y_true'].unique():
-                class_df = df[df['y_true'] == class_name]
-                error_rate = (class_df['y_true'] != class_df['y_pred']).mean()
-                class_error_rates.append({
-                    'model': model_name,
-                    'class': class_name,
-                    'error_rate': error_rate,
-                    'count': len(class_df)
-                })
-    
-    if not model_results:
-        return
-    
-    # Plot per-class error rates
-    class_df = pd.DataFrame(class_error_rates)
-    plt.figure(figsize=(12, 8))
-    sns.barplot(x='class', y='error_rate', hue='model', data=class_df)
-    plt.title('Error Rate by Class and Model (Test Set)')
-    plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(output_dir / 'error_rate_by_class.png', dpi=300)
+    plt.savefig(output_dir / "model_comparison_metrics_combined.png")
     plt.close()
 
-def generate_detailed_error_report(predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path):
-    """Generate an HTML report with detailed analysis of classification errors.
-    
-    Includes example text snippets and patterns.
+def plot_top_misclassifications(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    output_dir: Path,
+    top_n: int = 10,
+) -> None:
+    """Plot and save top misclassifications with their text content for both train and test sets.
     
     Parameters
     ----------
     predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
-        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
     output_dir : Path
-        Directory where the report will be saved.
+        Directory to save the misclassifications or direct path to output file
+    top_n : int, optional
+        Number of top misclassifications to save, by default 10
+    """
+    output_dir = Path(output_dir)
+    
+    # Handle both directory and file paths
+    if output_dir.suffix == '.csv':
+        # If output_dir is a file path, use it directly
+        output_path = output_dir
+        # Get the model name and split from the parent directory
+        parent_dir = output_dir.parent
+        model_name = parent_dir.parent.name
+        split_name = parent_dir.name
+        
+        # Find the corresponding DataFrame
+        if model_name in predictions_dict and split_name in predictions_dict[model_name]:
+            df = predictions_dict[model_name][split_name]
+            # Filter misclassifications
+            misclass_df = df[df['y_true'] != df['y_pred']].copy()
+            # Save to CSV
+            misclass_df.head(top_n).to_csv(output_path, index=False)
+    else:
+        # If output_dir is a directory, create it and save files for each model and split
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        for model_name, splits in predictions_dict.items():
+            for split_name in ['train', 'test']:
+                if split_name in splits:
+                    df = splits[split_name]
+                    # Filter misclassifications
+                    misclass_df = df[df['y_true'] != df['y_pred']].copy()
+                    # Save to CSV
+                    misclass_df.head(top_n).to_csv(
+                        output_dir / f'{model_name}_{split_name}_top_{top_n}_misclassifications.csv',
+                        index=False
+                    )
+
+def plot_top_error_types(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    output_dir: Path,
+    n: int = 10
+) -> None:
+    """Plot and save the top n error types (true_label -> pred_label) for both train and test sets.
+    
+    Parameters
+    ----------
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
+    output_dir : Path
+        Directory to save the plots
+    n : int, optional
+        Number of top error types to plot, by default 10
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get consistently misclassified examples
-    misclass_df = consistently_misclassified(predictions_dict)
-    
-    # Get common error patterns
-    error_patterns_df = analyse_error_patterns(predictions_dict)
-    
-    # Create HTML report
-    html = []
-    html.append('<html><head><title>Detailed Error Analysis</title>')
-    html.append('<style>body{font-family:Arial;max-width:1200px;margin:0 auto;padding:20px}')
-    html.append('table{border-collapse:collapse;width:100%;margin-bottom:20px}')
-    html.append('th,td{border:1px solid #ddd;padding:8px}')
-    html.append('th{background-color:#f2f2f2;text-align:left}')
-    html.append('tr:nth-child(even){background-color:#f9f9f9}')
-    html.append('h1,h2,h3{color:#333}</style></head><body>')
-    
-    html.append('<h1>Detailed Classification Error Analysis</h1>')
-    
-    # Common error patterns
-    html.append('<h2>Common Error Patterns</h2>')
-    if not error_patterns_df.empty:
-        html.append('<table><tr><th>Error Type</th><th>Count</th></tr>')
-        for _, row in error_patterns_df.head(10).iterrows():
-            html.append(f'<tr><td>{row["error_type"]}</td><td>{row["total_count"]}</td></tr>')
-        html.append('</table>')
-    else:
-        html.append('<p>No error patterns found.</p>')
-    
-    # Consistently misclassified examples
-    html.append('<h2>Consistently Misclassified Examples</h2>')
-    if not misclass_df.empty:
-        html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th><th>Models</th></tr>')
-        for _, row in misclass_df.head(20).iterrows():
-            models = [name for name in predictions_dict.keys() if row.get(name, False)]
-            html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td>')
-            html.append(f'<td>{row["y_pred"]}</td><td>{", ".join(models)}</td></tr>')
-        html.append('</table>')
-    else:
-        html.append('<p>No consistently misclassified examples found.</p>')
-    
-    # Model-specific analyses
-    html.append('<h2>Model-Specific Error Analysis</h2>')
     for model_name, splits in predictions_dict.items():
-        # We'll only analyze test set for the report
-        if 'test' in splits:
-            df = splits['test']
-            errors = df[df['y_true'] != df['y_pred']]
-            html.append(f'<h3>{model_name}</h3>')
-            
-            # Error count by class
-            error_by_class = errors.groupby('y_true').size().reset_index(name='count')
-            html.append('<h4>Error Count by True Class</h4>')
-            html.append('<table><tr><th>Class</th><th>Error Count</th></tr>')
-            for _, row in error_by_class.sort_values('count', ascending=False).iterrows():
-                html.append(f'<tr><td>{row["y_true"]}</td><td>{row["count"]}</td></tr>')
-            html.append('</table>')
-            
-            # Sample errors
-            html.append('<h4>Sample Errors</h4>')
-            html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th></tr>')
-            for _, row in errors.head(5).iterrows():
-                html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td><td>{row["y_pred"]}</td></tr>')
-            html.append('</table>')
+        for split_name in ['train', 'test']:
+            if split_name in splits:
+                df = splits[split_name]
+                
+                # Create error type column
+                error_df = df[df['y_true'] != df['y_pred']].copy()
+                error_df['error_type'] = error_df['y_true'].astype(str) + ' -> ' + error_df['y_pred'].astype(str)
+                
+                # Get top n error types
+                error_counts = error_df['error_type'].value_counts().head(n)
+                
+                # Create and save plot
+                plt.figure(figsize=(12, 6))
+                plt.bar(error_counts.index, error_counts.values)
+                plt.title(f'Top {n} Error Types - {model_name} ({split_name.capitalize()} Set)')
+                plt.xlabel('Error Type (True → Predicted)')
+                plt.ylabel('Count')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                plt.savefig(output_dir / f'{model_name}_{split_name}_top_{n}_error_types.png')
+                plt.close()
+
+def visualize_error_distribution(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    output_dir: Path
+) -> None:
+    """Create visualizations of error distributions across models and classes for both train and test sets.
     
-    html.append('</body></html>')
+    Parameters
+    ----------
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
+    output_dir : Path
+        Directory where visualizations will be saved
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save the report
-    with open(output_dir / 'detailed_error_report.html', 'w') as f:
-        f.write('\n'.join(html))
+    for split_name in ['train', 'test']:
+        # Combine all predictions for comparison
+        model_results = []
+        class_error_rates = []
+        
+        for model_name, splits in predictions_dict.items():
+            if split_name in splits:
+                df = splits[split_name]
+                # Calculate overall accuracy
+                accuracy = (df['y_true'] == df['y_pred']).mean()
+                model_results.append({'model': model_name, 'accuracy': accuracy})
+                
+                # Calculate per-class error rates
+                for class_name in df['y_true'].unique():
+                    class_df = df[df['y_true'] == class_name]
+                    error_rate = (class_df['y_true'] != class_df['y_pred']).mean()
+                    class_error_rates.append({
+                        'model': model_name,
+                        'class': class_name,
+                        'error_rate': error_rate,
+                        'count': len(class_df)
+                    })
+        
+        if not model_results:
+            continue
+        
+        # Plot per-class error rates
+        class_df = pd.DataFrame(class_error_rates)
+        plt.figure(figsize=(12, 8))
+        sns.barplot(x='class', y='error_rate', hue='model', data=class_df)
+        plt.title(f'Error Rate by Class and Model ({split_name.capitalize()} Set)')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(output_dir / f'error_rate_by_class_{split_name}.png', dpi=300)
+        plt.close()
+
+def generate_detailed_error_report(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    output_dir: Path,
+    only_split: str = None
+) -> None:
+    """Generate an HTML report with detailed analysis of classification errors for both train and test sets.
+    
+    Parameters
+    ----------
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
+    output_dir : Path
+        Directory where the report will be saved
+    only_split : str, optional
+        Which split to analyze ('train' or 'test'), by default None (both splits)
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    splits_to_generate = [only_split] if only_split else ['train', 'test']
+    for split_name in splits_to_generate:
+        # Get consistently misclassified examples
+        misclass_df = consistently_misclassified(predictions_dict, split_name=split_name)
+        
+        # Get common error patterns
+        error_patterns_df = analyse_error_patterns(predictions_dict, split_name=split_name)
+        
+        # Create HTML report
+        html = []
+        html.append('<html><head><title>Detailed Error Analysis</title>')
+        html.append('<style>body{font-family:Arial;max-width:1200px;margin:0 auto;padding:20px}')
+        html.append('table{border-collapse:collapse;width:100%;margin-bottom:20px}')
+        html.append('th,td{border:1px solid #ddd;padding:8px}')
+        html.append('th{background-color:#f2f2f2;text-align:left}')
+        html.append('tr:nth-child(even){background-color:#f9f9f9}')
+        html.append('h1,h2,h3{color:#333}</style></head><body>')
+        
+        html.append(f'<h1>Detailed Classification Error Analysis ({split_name.capitalize()} Set)</h1>')
+        
+        # Common error patterns
+        html.append('<h2>Common Error Patterns</h2>')
+        if not error_patterns_df.empty:
+            html.append('<table><tr><th>Error Type</th><th>Count</th></tr>')
+            for _, row in error_patterns_df.head(10).iterrows():
+                html.append(f'<tr><td>{row["error_type"]}</td><td>{row["total_count"]}</td></tr>')
+            html.append('</table>')
+        else:
+            html.append('<p>No error patterns found.</p>')
+        
+        # Consistently misclassified examples
+        html.append('<h2>Consistently Misclassified Examples</h2>')
+        if not misclass_df.empty:
+            html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th><th>Models</th></tr>')
+            for _, row in misclass_df.head(20).iterrows():
+                models = [name for name in predictions_dict.keys() if row.get(name, False)]
+                html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td>')
+                html.append(f'<td>{row["y_pred"]}</td><td>{", ".join(models)}</td></tr>')
+            html.append('</table>')
+        else:
+            html.append('<p>No consistently misclassified examples found.</p>')
+        
+        # Model-specific analyses
+        html.append('<h2>Model-Specific Error Analysis</h2>')
+        for model_name, splits in predictions_dict.items():
+            if split_name in splits:
+                df = splits[split_name]
+                errors = df[df['y_true'] != df['y_pred']]
+                html.append(f'<h3>{model_name}</h3>')
+                
+                # Error count by class
+                error_by_class = errors.groupby('y_true').size().reset_index(name='count')
+                html.append('<h4>Error Count by True Class</h4>')
+                html.append('<table><tr><th>Class</th><th>Error Count</th></tr>')
+                for _, row in error_by_class.sort_values('count', ascending=False).iterrows():
+                    html.append(f'<tr><td>{row["y_true"]}</td><td>{row["count"]}</td></tr>')
+                html.append('</table>')
+                
+                # Sample errors
+                html.append('<h4>Sample Errors</h4>')
+                html.append('<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th></tr>')
+                for _, row in errors.head(5).iterrows():
+                    html.append(f'<tr><td>{row["text"]}</td><td>{row["y_true"]}</td><td>{row["y_pred"]}</td></tr>')
+                html.append('</table>')
+        
+        html.append('</body></html>')
+        
+        # Save the report
+        with open(output_dir / f'detailed_error_report_{split_name}.html', 'w') as f:
+            f.write('\n'.join(html))
 
 def plot_confusion_matrices(experiment_dir: str | Path, figsize: Tuple[int, int] = (15, 15)) -> None:
     """Plot confusion matrices for all models in the experiment.
@@ -631,4 +712,99 @@ def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig(output_path)
-    plt.close() 
+    plt.close()
+
+def consistently_misclassified(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    split_name: str = "test"
+) -> pd.DataFrame:
+    """Find examples that are consistently misclassified across models for a specific split.
+    
+    Parameters
+    ----------
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
+    split_name : str, optional
+        Which split to analyze ('train' or 'test'), by default "test"
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing consistently misclassified examples
+    """
+    # Initialize DataFrame to store results
+    misclass_df = None
+    
+    for model_name, splits in predictions_dict.items():
+        if split_name in splits:
+            df = splits[split_name]
+            # Get misclassifications for this model
+            model_misclass = df[df['y_true'] != df['y_pred']].copy()
+            
+            if misclass_df is None:
+                # Initialize with first model's misclassifications
+                misclass_df = model_misclass.copy()
+                misclass_df[model_name] = True
+            else:
+                # Merge with existing misclassifications
+                misclass_df = misclass_df.merge(
+                    model_misclass[['text', 'y_true', 'y_pred']],
+                    on=['text', 'y_true', 'y_pred'],
+                    how='outer'
+                )
+                misclass_df[model_name] = misclass_df[model_name].fillna(False)
+    
+    if misclass_df is None:
+        return pd.DataFrame()
+    
+    # Sort by number of models that misclassified
+    misclass_df['n_models'] = misclass_df[list(predictions_dict.keys())].sum(axis=1)
+    misclass_df = misclass_df.sort_values('n_models', ascending=False)
+    
+    return misclass_df
+
+def analyse_error_patterns(
+    predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+    split_name: str = "test"
+) -> pd.DataFrame:
+    """Analyze common error patterns across models for a specific split.
+    
+    Parameters
+    ----------
+    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
+        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
+    split_name : str, optional
+        Which split to analyze ('train' or 'test'), by default "test"
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing error patterns and their frequencies
+    """
+    error_patterns = []
+    
+    for model_name, splits in predictions_dict.items():
+        if split_name in splits:
+            df = splits[split_name]
+            # Get misclassifications
+            misclass = df[df['y_true'] != df['y_pred']]
+            
+            # Count error patterns
+            error_counts = misclass.groupby(['y_true', 'y_pred']).size().reset_index(name='count')
+            error_counts['model'] = model_name
+            error_patterns.append(error_counts)
+    
+    if not error_patterns:
+        return pd.DataFrame()
+    
+    # Combine error patterns from all models
+    error_patterns_df = pd.concat(error_patterns, ignore_index=True)
+    
+    # Create error type column
+    error_patterns_df['error_type'] = error_patterns_df['y_true'].astype(str) + ' -> ' + error_patterns_df['y_pred'].astype(str)
+    
+    # Aggregate across models
+    error_patterns_df = error_patterns_df.groupby(['y_true', 'y_pred', 'error_type'])['count'].sum().reset_index()
+    error_patterns_df = error_patterns_df.rename(columns={'count': 'total_count'})
+    
+    return error_patterns_df.sort_values('total_count', ascending=False) 

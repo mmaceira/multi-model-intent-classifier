@@ -63,7 +63,6 @@ RUN_NAME = config_vars.get("GENERAL_RUN_NAME")
 DATA_EXPLORATION_DIR = config_vars.get("PATHS_DATA_EXPLORATION_DIR")
 EMB_DIR = config_vars.get("PATHS_EMBEDDINGS_DIR") 
 MODELS_DIR = config_vars.get("PATHS_MODELS_DIR")
-PREDICTIONS_DIR = config_vars.get("PATHS_PREDICTIONS_DIR")
 RESULTS_DIR = config_vars.get("PATHS_RESULTS_DIR")
 
 # Set environment variables

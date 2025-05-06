@@ -14,7 +14,6 @@ paths:
   data_exploration_dir: "output/${general.run_name}/data_exploration"  # raw + processed sub-dirs live here
   embeddings_dir: "output/${general.run_name}/embeddings"
   models_dir: "output/${general.run_name}/models"
-  predictions_dir: "output/${general.run_name}/predictions"
   results_dir: "output/${general.run_name}/results"
 
 # Model configuration
