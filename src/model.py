@@ -1,30 +1,74 @@
-"""\
-Model module for text classification.
+"""
+Text Classification Model Module
 
-This module provides the base text classifier interface and common
-functionality for all text classification models in the project.
-It defines the abstract base class that all classifiers must implement.
+This module provides the foundational architecture for text classification models in the project.
+It defines an abstract base class that standardizes the interface and implements common functionality
+for all text classifiers, ensuring consistency and interoperability across different model implementations.
+
+Key Features:
+- Abstract base class for text classifiers
+- Scikit-learn compatibility through BaseEstimator
+- Flexible text vectorization support
+- Type hints and comprehensive error handling
+- Consistent API across model implementations
+- Parameter management for model persistence
 
 Classes:
-- TextClassifier: Abstract base class for text classifiers
+- TextClassifier: Abstract base class that all text classifiers must inherit from
+  - Implements common functionality for text vectorization
+  - Provides scikit-learn compatible parameter handling
+  - Enforces consistent interface through abstract methods
+  - Manages model state and validation
 
-Functions:
-- None
+Abstract Methods (to be implemented by subclasses):
+- _fit_model: Train the model on vectorized features
+- _predict_model: Make predictions using vectorized features
 
-Created: 2025-05-03
+Concrete Methods:
+- fit: Train the classifier on raw text data
+- predict: Make predictions on raw text data
+- vectorize: Convert raw text to feature vectors
+- get_params: Get model parameters (scikit-learn compatibility)
+- set_params: Set model parameters (scikit-learn compatibility)
+
+Dependencies:
+- abc (Abstract Base Classes)
+- typing
+- numpy
+- sklearn.base
+
+Example Usage:
+    >>> # Create a custom classifier
+    >>> class MyClassifier(TextClassifier):
+    ...     def __init__(self, vectorizer):
+    ...         super().__init__(vectorizer)
+    ...         
+    ...     def _fit_model(self, X_vec, y):
+    ...         # Implement training logic
+    ...         pass
+    ...         
+    ...     def _predict_model(self, X_vec):
+    ...         # Implement prediction logic
+    ...         pass
+    ...         
+    >>> # Use the classifier
+    >>> clf = MyClassifier(vectorizer=CountVectorizer())
+    >>> clf.fit(X_train, y_train)
+    >>> predictions = clf.predict(X_test)
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Any, Dict, Optional
+from typing import List, Any, Dict, Optional, Union
 import numpy as np
 from sklearn.base import BaseEstimator
+
 
 class TextClassifier(ABC, BaseEstimator):
     """Abstract base class for text classifiers.
     
-    This class defines the interface that all text classifiers must
-    implement. It provides common functionality for text vectorization
-    and ensures a consistent API across different classifier types.
+    This class defines the interface that all text classifiers must implement. It provides
+    common functionality for text vectorization and ensures a consistent API across different
+    classifier types.
     
     Attributes:
         vectorizer: Text vectorization component
@@ -39,21 +83,29 @@ class TextClassifier(ABC, BaseEstimator):
         ...         # Implement prediction
         ...         pass
     """
-    def __init__(self, vectorizer: Any):
+    
+    def __init__(self, vectorizer: Any) -> None:
         """Initialize the text classifier.
         
         Args:
-            vectorizer: Text vectorization component
+            vectorizer: Text vectorization component that converts raw text to feature vectors.
+                       Must implement either a transform() method or be callable.
+        
+        Note:
+            For BaseEstimator compatibility, parameters should be stored as attributes with
+            the same name as the parameter. The vectorizer is stored as _vectorizer since
+            it's not a constructor parameter in subclasses.
         """
-        # NOTE: For BaseEstimator compatibility, parameters should be stored
-        # as attributes with the same name as the parameter.
-        # Don't store vectorizer directly, as it's not a constructor parameter in subclasses.
         self._vectorizer = vectorizer
         self._is_fitted = False
     
     @property
-    def vectorizer(self):
-        """Get the vectorizer."""
+    def vectorizer(self) -> Any:
+        """Get the vectorizer instance.
+        
+        Returns:
+            The vectorizer component used for text feature extraction.
+        """
         return self._vectorizer
         
     def get_params(self, deep: bool = True) -> Dict[str, Any]:
@@ -67,8 +119,6 @@ class TextClassifier(ABC, BaseEstimator):
         Returns:
             Parameter names mapped to their values
         """
-        # Only include params that are actually constructor parameters
-        # The BaseEstimator looks at constructor signature, not at instance attributes
         params = {}
         
         # Get parameters from constructor (__init__ method)
@@ -76,10 +126,8 @@ class TextClassifier(ABC, BaseEstimator):
         init_signature = inspect.signature(self.__init__)
         
         for parameter_name in init_signature.parameters:
-            # Skip 'self' parameter
-            if parameter_name != 'self':
-                if hasattr(self, parameter_name):
-                    params[parameter_name] = getattr(self, parameter_name)
+            if parameter_name != 'self' and hasattr(self, parameter_name):
+                params[parameter_name] = getattr(self, parameter_name)
                     
         return params
     
@@ -93,8 +141,13 @@ class TextClassifier(ABC, BaseEstimator):
             
         Returns:
             Self
+            
+        Raises:
+            ValueError: If any parameter is invalid
         """
         for key, value in params.items():
+            if not hasattr(self, key):
+                raise ValueError(f"Invalid parameter '{key}' for estimator {self.__class__.__name__}")
             setattr(self, key, value)
                     
         return self
@@ -102,9 +155,9 @@ class TextClassifier(ABC, BaseEstimator):
     def fit(self, X_raw: List[str], y: np.ndarray) -> 'TextClassifier':
         """Train the text classifier.
         
-        This method trains the classifier on the provided text data.
-        It first vectorizes the text using the provided vectorizer,
-        then calls the subclass-specific _fit_model method.
+        This method trains the classifier on the provided text data. It first vectorizes
+        the text using the provided vectorizer, then calls the subclass-specific _fit_model
+        method.
         
         Args:
             X_raw: List of raw text documents
@@ -115,9 +168,16 @@ class TextClassifier(ABC, BaseEstimator):
             
         Raises:
             ValueError: If the input data is invalid
+            TypeError: If the input data types are incorrect
         """
+        if not isinstance(X_raw, list):
+            raise TypeError("X_raw must be a list of strings")
+        if not isinstance(y, np.ndarray):
+            raise TypeError("y must be a numpy array")
         if not X_raw or not y:
             raise ValueError("Input data cannot be empty")
+        if len(X_raw) != len(y):
+            raise ValueError("X_raw and y must have the same length")
             
         # Fit vectorizer if it has a fit method
         if hasattr(self._vectorizer, "fit"):
@@ -131,9 +191,9 @@ class TextClassifier(ABC, BaseEstimator):
     def predict(self, X_raw: List[str]) -> np.ndarray:
         """Make predictions using the trained classifier.
         
-        This method makes predictions on the provided text data.
-        It first vectorizes the text using the provided vectorizer,
-        then calls the subclass-specific _predict_model method.
+        This method makes predictions on the provided text data. It first vectorizes
+        the text using the provided vectorizer, then calls the subclass-specific
+        _predict_model method.
         
         Args:
             X_raw: List of raw text documents
@@ -143,9 +203,14 @@ class TextClassifier(ABC, BaseEstimator):
             
         Raises:
             RuntimeError: If the model hasn't been trained
+            ValueError: If the input data is invalid
         """
         if not self._is_fitted:
             raise RuntimeError("Model must be fitted before making predictions")
+        if not isinstance(X_raw, list):
+            raise TypeError("X_raw must be a list of strings")
+        if not X_raw:
+            raise ValueError("Input data cannot be empty")
             
         X_vec = self.vectorize(X_raw)
         return self._predict_model(X_vec)
@@ -153,45 +218,55 @@ class TextClassifier(ABC, BaseEstimator):
     def vectorize(self, texts: List[str]) -> np.ndarray:
         """Convert raw text documents to feature vectors.
         
-        This method uses the provided vectorizer to convert raw text
-        documents into numerical feature vectors that can be used by
-        the classifier.
+        This method uses the provided vectorizer to convert raw text documents into
+        numerical feature vectors that can be used by the classifier.
         
         Args:
             texts: List of raw text documents
             
         Returns:
             Array of feature vectors
+            
+        Raises:
+            ValueError: If the vectorizer doesn't support transformation
         """
         if hasattr(self._vectorizer, "transform"):
             return self._vectorizer.transform(texts)
-        else:
+        elif callable(self._vectorizer):
             return self._vectorizer(texts)
+        else:
+            raise ValueError("Vectorizer must implement transform() or be callable")
 
     @abstractmethod
     def _fit_model(self, X_vec: np.ndarray, y: np.ndarray) -> None:
         """Train the model on vectorized features.
         
-        This method must be implemented by subclasses to provide
-        model-specific training logic.
+        This method must be implemented by subclasses to provide model-specific
+        training logic.
         
         Args:
             X_vec: Array of feature vectors
             y: Array of labels
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
         """
-        pass
+        raise NotImplementedError("Subclasses must implement _fit_model")
 
     @abstractmethod
     def _predict_model(self, X_vec: np.ndarray) -> np.ndarray:
         """Make predictions using vectorized features.
         
-        This method must be implemented by subclasses to provide
-        model-specific prediction logic.
+        This method must be implemented by subclasses to provide model-specific
+        prediction logic.
         
         Args:
             X_vec: Array of feature vectors
             
         Returns:
             Array of predicted labels
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
         """
-        pass
+        raise NotImplementedError("Subclasses must implement _predict_model")

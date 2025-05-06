@@ -14,11 +14,14 @@ Functions:
 Created: 2025-05-03
 """
 
+import numpy as np
+from scipy.special import softmax
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from src.model import TextClassifier
 
 class LinearSVMClassifier(TextClassifier):
+    _expects_vectors = False
     """TF-IDF + Linear SVM classifier.
     
     This class implements a text classifier using TF-IDF features and
@@ -51,8 +54,11 @@ class LinearSVMClassifier(TextClassifier):
         
         # Initialize classifier
         self.clf = LinearSVC(C=C)
+        self.classes_ = None
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the SVM classifier.
         
         Args:
@@ -60,6 +66,7 @@ class LinearSVMClassifier(TextClassifier):
             y: Labels
         """
         self.clf.fit(X_vec, y)
+        self.classes_ = self.clf.classes_
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.
@@ -71,8 +78,55 @@ class LinearSVMClassifier(TextClassifier):
             List of predicted labels
         """
         return self.clf.predict(X_vec)
+        
+    def predict_proba(self, X_raw):
+        """Generate probability estimates for each class.
+        
+        This method approximates probability estimates by applying
+        softmax to the decision function scores from LinearSVC.
+        
+        Parameters
+        ----------
+        X_raw : list of str
+            Raw text documents to classify
+            
+        Returns
+        -------
+        np.ndarray : array of shape (n_samples, n_classes)
+            The class probabilities of the input samples.
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Model must be fitted before predicting probabilities")
+        
+        X_vec = self.vectorize(X_raw)
+        
+        # Get decision scores
+        decision_scores = self.clf.decision_function(X_vec)
+        
+        # Check if classes_ is set, if not, try to get it from the classifier
+        if not hasattr(self, 'classes_') or self.classes_ is None:
+            if hasattr(self.clf, 'classes_'):
+                self.classes_ = self.clf.classes_
+            else:
+                # Infer number of classes from decision function output
+                if decision_scores.ndim == 1:
+                    self.classes_ = np.array([0, 1])  # Binary classification
+                else:
+                    # Multi-class, assume classes are 0...n-1
+                    self.classes_ = np.arange(decision_scores.shape[1])
+        
+        # For binary classification, reshape the decision scores
+        if len(self.classes_) == 2:
+            decision_scores = np.column_stack([-decision_scores, decision_scores])
+        
+        # Convert to probabilities using softmax with temperature scaling
+        temperature = 1.0  # Adjust this for calibration if needed
+        probabilities = softmax(decision_scores / temperature, axis=1)
+        
+        return probabilities
 
 class LinearSVMBigrams(TextClassifier):
+    _expects_vectors = False
     """TF-IDF with bigrams + Linear SVM classifier.
     
     This class extends the basic LinearSVMClassifier by using both
@@ -110,8 +164,11 @@ class LinearSVMBigrams(TextClassifier):
         
         # Initialize classifier
         self.clf = LinearSVC(C=C)
+        self.classes_ = None
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the SVM classifier.
         
         Args:
@@ -119,6 +176,7 @@ class LinearSVMBigrams(TextClassifier):
             y: Labels
         """
         self.clf.fit(X_vec, y)
+        self.classes_ = self.clf.classes_
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.
@@ -130,3 +188,49 @@ class LinearSVMBigrams(TextClassifier):
             List of predicted labels
         """
         return self.clf.predict(X_vec)
+        
+    def predict_proba(self, X_raw):
+        """Generate probability estimates for each class.
+        
+        This method approximates probability estimates by applying
+        softmax to the decision function scores from LinearSVC.
+        
+        Parameters
+        ----------
+        X_raw : list of str
+            Raw text documents to classify
+            
+        Returns
+        -------
+        np.ndarray : array of shape (n_samples, n_classes)
+            The class probabilities of the input samples.
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Model must be fitted before predicting probabilities")
+        
+        X_vec = self.vectorize(X_raw)
+        
+        # Get decision scores
+        decision_scores = self.clf.decision_function(X_vec)
+        
+        # Check if classes_ is set, if not, try to get it from the classifier
+        if not hasattr(self, 'classes_') or self.classes_ is None:
+            if hasattr(self.clf, 'classes_'):
+                self.classes_ = self.clf.classes_
+            else:
+                # Infer number of classes from decision function output
+                if decision_scores.ndim == 1:
+                    self.classes_ = np.array([0, 1])  # Binary classification
+                else:
+                    # Multi-class, assume classes are 0...n-1
+                    self.classes_ = np.arange(decision_scores.shape[1])
+        
+        # For binary classification, reshape the decision scores
+        if len(self.classes_) == 2:
+            decision_scores = np.column_stack([-decision_scores, decision_scores])
+        
+        # Convert to probabilities using softmax with temperature scaling
+        temperature = 1.0  # Adjust this for calibration if needed
+        probabilities = softmax(decision_scores / temperature, axis=1)
+        
+        return probabilities

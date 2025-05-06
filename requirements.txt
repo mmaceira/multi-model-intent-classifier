@@ -1,5 +1,8 @@
-fastapi==0.115.12
+aiofiles==24.1.0
+backoff==2.2.1
 faiss-cpu==1.11.0
+fastapi==0.115.12
+gradio==5.29.0
 ipykernel==6.29.5
 ipython==9.2.0
 matplotlib==3.10.1
@@ -9,9 +12,14 @@ openai==1.77.0
 pandas==2.2.3
 pydantic==2.11.4
 python-dotenv==1.1.0
+python-multipart==0.0.20
+pyyaml
+ray==2.45.0
+ray[rllib]
 scikit-learn==1.6.1
 seaborn==0.13.2
 sentence-transformers==4.1.0
+shap==0.45.0
 tqdm==4.67.1
+umap-learn==0.5.5
 uvicorn==0.34.2
-backoff==2.2.1

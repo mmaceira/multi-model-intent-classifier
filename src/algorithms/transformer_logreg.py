@@ -22,8 +22,10 @@ import logging
 from src.model import TextClassifier
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 class TransformerLogReg(TextClassifier):
+    _expects_vectors = False
     """Transformer embeddings + Logistic Regression classifier.
     
     This class implements a text classifier using transformer-based
@@ -86,6 +88,8 @@ class TransformerLogReg(TextClassifier):
         return self.embedder.encode(texts)
 
     def _fit_model(self, X_vec, y):
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, 'classes_', None)
         """Train the logistic regression classifier.
         
         Args:
