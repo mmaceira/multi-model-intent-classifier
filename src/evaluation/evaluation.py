@@ -219,6 +219,17 @@ def run_evaluations(
             # Store metrics
             model_results.update(metrics)
             
+            # Generate visualizations for this split
+            logger.info(f"Generating visualizations for {name} - {split_name}")
+            single_model_predictions = {name: {split_name: df}}
+            
+            # Generate split-specific visualizations
+            plot_label_distribution(single_model_predictions, split_out_dir)
+            plot_confusion_matrix(single_model_predictions, split_out_dir)
+            plot_precision_recall_curves(single_model_predictions, split_out_dir)
+            visualize_error_distribution(single_model_predictions, split_out_dir)
+            generate_detailed_error_report(single_model_predictions, split_out_dir)
+            
             # Additional analyses for test set
             if split_name == "test" and "text" in df.columns:
                 logger.info(f"Processing top misclassifications for {name}")
@@ -267,30 +278,6 @@ def run_evaluations(
     
     # Save summary metrics
     summary_df.to_csv(output_dir / "summary_metrics.csv")
-    
-    # Generate visualizations for each model
-    logger.info("Generating visualizations for each model...")
-    for name, model_predictions in predictions_dict.items():
-        if name not in model_names:
-            continue
-            
-        model_out_dir = ensure_dir(output_dir / name)
-        logger.info(f"Generating visualizations for model {name}")
-        
-        # Process each split (train and test)
-        for split_name, df in model_predictions.items():
-            split_out_dir = ensure_dir(model_out_dir / split_name)
-            logger.info(f"  - Processing {split_name} set visualizations")
-            
-            # Create a predictions dict with just this model and split
-            single_model_predictions = {name: {split_name: df}}
-            
-            # Generate split-specific visualizations
-            plot_label_distribution(single_model_predictions, split_out_dir)
-            plot_confusion_matrix(single_model_predictions, split_out_dir)
-            plot_precision_recall_curves(single_model_predictions, split_out_dir)
-            visualize_error_distribution(single_model_predictions, split_out_dir)
-            generate_detailed_error_report(single_model_predictions, split_out_dir)
     
     # Generate model comparison visualizations if multiple models
     if len(model_names) > 1:

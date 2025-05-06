@@ -1,53 +1,7 @@
 """
-Utility Functions for Model Evaluation
+Utility functions for the evaluation package.
 
-This module provides essential utility functions for the evaluation package,
-supporting various aspects of model assessment and analysis.
-
-Key Features:
-- Logging configuration and management
-- Prediction file loading and processing
-- Error pattern analysis
-- Consistent misclassification detection
-- Results export and visualization
-
-Functions:
-    setup_logging: Configures logging for the evaluation process
-    load_all_prediction_files: Loads prediction files from model directories
-    analyse_error_patterns: Analyzes common error patterns across models
-    consistently_misclassified: Identifies consistently misclassified examples
-    export_analysis_results: Exports analysis results to files
-
-Dependencies:
-    logging: For progress tracking and error reporting
-    pandas: For data manipulation
-    numpy: For numerical operations
-    matplotlib: For visualization
-    seaborn: For enhanced visualization
-    pathlib: For file system operations
-
-Example Usage:
-    >>> from pathlib import Path
-    >>> from evaluation.utils import setup_logging, load_all_prediction_files
-    >>> 
-    >>> # Set up logging
-    >>> logger = setup_logging(verbose=True)
-    >>> 
-    >>> # Load prediction files
-    >>> predictions = load_all_prediction_files(Path("experiments/model1"))
-    >>> 
-    >>> # Analyze error patterns
-    >>> error_patterns = analyse_error_patterns(predictions)
-    >>> 
-    >>> # Export results
-    >>> export_analysis_results(
-    ...     results={
-    ...         "error_patterns": error_patterns,
-    ...         "misclassified_examples": misclassified_examples,
-    ...         "text_features": text_features
-    ...     },
-    ...     output_dir=Path("results/analysis")
-    ... )
+This module provides helper functions used across the evaluation package.
 """
 
 import logging
@@ -61,27 +15,17 @@ import seaborn as sns
 from src.utils.file_ops import ensure_dir
 
 def setup_logging(verbose: bool = True) -> logging.Logger:
-    """
-    Set up logging configuration for the evaluation process.
-    
-    This function configures the logging system with appropriate formatting
-    and verbosity levels for model evaluation tasks.
+    """Set up logging configuration.
     
     Parameters
     ----------
     verbose : bool, optional
         Whether to enable verbose logging, by default True.
-        When True, sets logging level to INFO, otherwise WARNING.
         
     Returns
     -------
     logging.Logger
-        Configured logger instance for use in evaluation functions.
-        
-    Example
-    -------
-    >>> logger = setup_logging(verbose=True)
-    >>> logger.info("Starting model evaluation")
+        Configured logger instance.
     """
     # Configure logging
     logging.basicConfig(
@@ -94,41 +38,17 @@ def setup_logging(verbose: bool = True) -> logging.Logger:
     return logger
 
 def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str, pd.DataFrame]]:
-    """
-    Load prediction files from all model directories in an experiment.
-    
-    This function recursively searches for prediction files in model directories
-    and loads them into a structured dictionary. It handles both train and test
-    predictions, adding necessary metadata and ensuring consistent structure.
+    """Load every CSV prediction file from model directories into a dict.
     
     Parameters
     ----------
     experiment_dir : str or Path
         Directory containing model directories with prediction files.
-        Each model directory should contain 'train_predictions.csv' and/or
-        'test_predictions.csv' files.
         
     Returns
     -------
     Dict[str, Dict[str, pd.DataFrame]]
         Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
-        Each DataFrame contains:
-        - id: Unique identifier for each example
-        - text: Input text (or placeholder if not available)
-        - y_true: True labels
-        - y_pred: Predicted labels
-        - model: Model name
-        - Additional columns from the prediction files
-        
-    Raises
-    ------
-    FileNotFoundError
-        If no prediction files are found in the experiment directory
-        
-    Example
-    -------
-    >>> predictions = load_all_prediction_files(Path("experiments/model1"))
-    >>> print(predictions["model1"]["test"].head())
     """
     exp = Path(experiment_dir)
     dfs: Dict[str, Dict[str, pd.DataFrame]] = {}
@@ -168,35 +88,7 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
     return dfs
 
 def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
-    """
-    Analyze and summarize error patterns across models and splits.
-    
-    This function identifies common error patterns by analyzing misclassifications
-    across different models and data splits. It helps understand systematic errors
-    and model behavior.
-    
-    Parameters
-    ----------
-    pred_dfs : Dict[str, Dict[str, pd.DataFrame]]
-        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
-        Each DataFrame should contain:
-        - y_true: True labels
-        - y_pred: Predicted labels
-        
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing error pattern analysis with columns:
-        - error_type: String describing the error (true_label -> predicted_label)
-        - total_count: Number of times the error occurred
-        - model: Model that made the error
-        - split: Data split where the error occurred
-        
-    Example
-    -------
-    >>> error_patterns = analyse_error_patterns(predictions)
-    >>> print(error_patterns.head())
-    """
+    """Return dataframe with a row per distinct (true -> pred) error."""
     frames = []
     for name, splits in pred_dfs.items():
         for split_name, df in splits.items():
@@ -213,26 +105,13 @@ def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.D
                   .rename(columns={'size': 'total_count'})
                   .sort_values('total_count', ascending=False))
 
-def consistently_misclassified(
-    pred_dfs: Dict[str, Dict[str, pd.DataFrame]],
-    min_models: int = 2
-) -> pd.DataFrame:
-    """
-    Identify examples that are consistently misclassified by multiple models.
-    
-    This function finds documents that are misclassified in the same way by
-    at least a specified number of models, helping to identify particularly
-    challenging or ambiguous examples.
+def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min_models: int = 2):
+    """Docs misclassified by >= min_models models in exactly the same way.
     
     Parameters
     ----------
     pred_dfs : Dict[str, Dict[str, pd.DataFrame]]
         Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
-        Each DataFrame should contain:
-        - id: Unique identifier for each example
-        - text: Input text
-        - y_true: True labels
-        - y_pred: Predicted labels
     min_models : int, optional
         Minimum number of models that must misclassify a document in the same way,
         by default 2.
@@ -240,17 +119,8 @@ def consistently_misclassified(
     Returns
     -------
     pd.DataFrame
-        DataFrame containing consistently misclassified examples with columns:
-        - id: Example identifier
-        - text: Input text
-        - y_true: True label
-        - y_pred: Predicted label
-        - model_columns: Boolean columns indicating which models misclassified the example
-        
-    Example
-    -------
-    >>> misclassified = consistently_misclassified(predictions, min_models=3)
-    >>> print(misclassified.head())
+        DataFrame containing consistently misclassified examples with their true and
+        predicted labels, and which models misclassified them.
     """
     combined = None
     for name, splits in pred_dfs.items():
@@ -268,41 +138,15 @@ def consistently_misclassified(
     mask = combined.drop(columns=['id', 'text', 'y_true', 'y_pred']).sum(1) >= min_models
     return combined[mask]
 
-def export_analysis_results(
-    results: Dict[str, Any],
-    output_dir: Union[str, Path]
-) -> None:
-    """
-    Export analysis results to various file formats.
-    
-    This function saves different types of analysis results to appropriate
-    file formats in the specified output directory.
+def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path]) -> None:
+    """Export analysis results to files.
     
     Parameters
     ----------
-    results : Dict[str, Any]
-        Dictionary containing analysis results with keys:
-        - error_patterns: DataFrame with error pattern analysis
-        - misclassified_examples: DataFrame with misclassified examples
-        - text_features: DataFrame with text feature analysis
-    output_dir : Union[str, Path]
-        Directory where results will be saved
-        
-    Returns
-    -------
-    None
-        This function saves files but does not return any values.
-        
-    Example
-    -------
-    >>> export_analysis_results(
-    ...     results={
-    ...         "error_patterns": error_patterns,
-    ...         "misclassified_examples": misclassified_examples,
-    ...         "text_features": text_features
-    ...     },
-    ...     output_dir=Path("results/analysis")
-    ... )
+    results : dict
+        Dictionary with analysis results
+    output_dir : str or Path
+        Directory to save results
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

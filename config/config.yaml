@@ -1,6 +1,6 @@
 # General Configuration
 general:
-  run_name: "experiment_with_4_classes"     # used as experiment id
+  run_name: "experiment_with_05_classes"     # used as experiment id
   seed: 42
 
 # Dataset configuration
