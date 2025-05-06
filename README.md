@@ -78,7 +78,15 @@ Built on the Reuters-21578 corpus, it provides a production-ready solution for n
 ```
 reuters-rag-classifier/
 ├── config/              # Configuration files
+│   ├── config.yaml     # Main configuration file
+│   └── notebook_setup.py # Notebook configuration
 ├── notebooks/           # Jupyter notebooks for analysis
+│   ├── 00_Data_Loading.ipynb          # Initial data loading and preprocessing
+│   ├── 01_Exploratory_Analysis.ipynb  # Data exploration and visualization
+│   ├── 02_Build_Embeddings.ipynb # Embedding generation and LLM integration
+│   ├── 03_Model_Training.ipynb        # Model training and optimization
+│   ├── 04_Model_Evaluation.ipynb      # Model evaluation and metrics
+│   └── README.md                      # Notebook documentation
 ├── output/             # Model outputs and results
 ├── scripts/            # Utility scripts
 ├── src/                # Main source code
@@ -98,12 +106,15 @@ reuters-rag-classifier/
 
 ### Model Comparison
 
-| Model | Architecture | Accuracy (Macro-F1) | Use Case |
-|-------|--------------|-------------------|----------|
-| Multinomial Naive Bayes | TF-IDF + Naive Bayes | 0.73 | Fast, lightweight classification |
-| Linear SVM | TF-IDF + SVM | 0.82 | Balanced speed and accuracy |
-| MiniLM + LogReg | Transformer + Logistic Regression | 0.87 | High-accuracy classification |
-| RAG (FAISS) | FAISS + LLM | 0.87 NDCG | Semantic search and Q&A |
+| Model | Architecture |  Use Case |
+|-------|--------------|---------|
+| Multinomial Naive Bayes | TF-IDF + Naive Bayes | Fast, lightweight classification |
+| Linear SVM | TF-IDF + SVM | Balanced speed and accuracy |
+| MiniLM + LogReg | Transformer + Logistic Regression | High-accuracy classification |
+
+| RAG-CentroidNN | FAISS + Nearest Neighbors | Semantic search and classification |
+| RAG-LLM (local) | FAISS + Local LLM | Context-aware classification |
+| RAG-LLM (OpenAI) | FAISS + OpenAI LLM | Advanced semantic understanding |
 
 ### Technical Specifications
 
@@ -158,7 +169,6 @@ reuters-rag-classifier/
   - Query Speed: 200 QPS
   - Resources: 16GB RAM + LLM
 
-
 ## 💡 Key Features
 
 ### 1. Intelligent Document Processing
@@ -187,21 +197,38 @@ reuters-rag-classifier/
 
 ## 📊 Performance Metrics
 
-### Technical Performance
-| Capability | Metric | Impact |
-|------------|--------|--------|
-| Article Tagging | 94% accuracy | Reduced manual effort |
-| Semantic Search | 200 QPS | Fast document retrieval |
-| Classification | 0.87 Macro-F1 | High accuracy |
-| Resource Usage | < 16GB RAM | Efficient deployment |
+### 10-Class Experiment Results
 
-### Business Impact
-| Capability | Metric Moved | Why it Matters |
-|------------|--------------|----------------|
-| Article Tagging | +9% editorial throughput | Fewer manual labels per shift |
-| Bigram SVM | +3pp Macro-F1 | Closes 60% of gap to transformers |
-| Semantic Search | -12% time-to-answer | Faster analyst workflows |
-| Cross-Encoder | -7% bounce rate | More relevant first results |
+| Model | Architecture | Accuracy | Macro-F1 | Training Time | Inference Speed | Resource Usage |
+|-------|--------------|----------|----------|---------------|-----------------|----------------|
+| Naive Bayes | TF-IDF + Naive Bayes | 0.82 | 0.73 | ~2 min | 60k docs/s | < 2GB RAM |
+| Linear SVM | TF-IDF + SVM | 0.87 | 0.82 | 7-8 min | 12-15k docs/s | < 5GB RAM |
+| MiniLM + LogReg | Transformer + Logistic Regression | 0.89 | 0.87 | ~45 min | 1k docs/s | 12GB GPU |
+| RAG-CentroidNN | FAISS + Nearest Neighbors | 0.85 | 0.83 | ~25 min | 200 QPS | 16GB RAM |
+| RAG-LLM (local) | FAISS + Local LLM | 0.84 | 0.82 | ~30 min | 150 QPS | 16GB RAM |
+| RAG-LLM (OpenAI) | FAISS + OpenAI LLM | 0.86 | 0.84 | ~35 min | 180 QPS | 16GB RAM |
+
+### Common Error Patterns
+The most frequent misclassifications across models:
+1. `earn -> acq` (191 instances)
+2. `interest -> money-fx` (169 instances)
+3. `acq -> earn` (164 instances)
+4. `dlr -> money-fx` (100 instances)
+5. `corn -> grain` (99 instances)
+
+### Model Strengths
+- **Naive Bayes**: Fastest inference, suitable for real-time applications
+- **Linear SVM**: Best balance of speed and accuracy
+- **MiniLM + LogReg**: Highest accuracy, best for precision-critical tasks
+- **RAG Models**: Best for semantic understanding and context-aware classification
+
+### Resource Requirements
+| Model | CPU | RAM | GPU | Storage |
+|-------|-----|-----|-----|---------|
+| Naive Bayes | ✓ | 2GB | - | 500MB |
+| Linear SVM | ✓ | 5GB | - | 1GB |
+| MiniLM + LogReg | - | 8GB | 12GB | 2GB |
+| RAG Models | ✓ | 16GB | - | 5GB |
 
 ## 🧮 Scaling Guidance
 
@@ -248,22 +275,6 @@ pytest --cov=src
 - Run `make docs` to build documentation
 - View documentation at `docs/_build/html/index.html`
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests and ensure they pass
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-### Pull Request Process
-1. Update the README.md with details of changes
-2. Update the documentation if needed
-3. Ensure all tests pass
-4. Request review from maintainers
-
 ## 🙏 Acknowledgments
 
 - Reuters-21578 corpus
@@ -274,3 +285,43 @@ pytest --cov=src
 ---
 
 <b>© Reuters-RAG-Classifier Project</b>
+
+## 📊 Dataset Configuration
+
+### Dataset Features
+- **Source**: Reuters-21578 corpus (10,788 newswire articles)
+- **License**: Open license for research/commercial use
+- **Content**: Financial and commodities news articles
+- **Labels**: Economic topics with rich domain-specific text
+
+### Loading Options
+The dataset can be loaded in two modes:
+
+1. **Standard Split** (`split_type="standard"`)
+   - Uses NLTK's standard train/test split
+   - Configurable number of classes (`n_classes`)
+   - Full dataset or top N most frequent classes
+
+2. **Test Split** (`split_type="test"`)
+   - Balanced dataset with equal samples per class
+   - Configurable number of classes and samples
+   - 70/30 train/test split per class
+   - Ideal for testing and development
+
+### Configuration Parameters
+```yaml
+dataset:
+  split_type: "test"                         # [standard | test]
+  n_classes: 25                              # number of classes to classify
+  n_samples_per_class: 100                   # samples per class (null for all)
+```
+
+### Data Exploration
+The project includes comprehensive data analysis tools:
+- Class distribution analysis
+- Text length statistics
+- Vocabulary analysis
+- Stopword analysis
+- Vocabulary drift analysis
+- Publication-ready visualizations
+- CSV export capabilities
