@@ -1,15 +1,47 @@
-"""Embedding generation utilities."""
+"""Embedding generation utilities.
+
+This module provides functionality for generating text embeddings using OpenAI's
+API. It includes batch processing capabilities and retry logic for handling
+API rate limits and temporary failures.
+
+Classes:
+- EmbeddingGenerator: Handles the generation of text embeddings using OpenAI's API
+"""
 
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import numpy as np
 from openai import OpenAI
 from src.utils.retry import with_retry
 
+
 logger = logging.getLogger(__name__)
 
+
 class EmbeddingGenerator:
+    """A class for generating text embeddings using OpenAI's API.
+    
+    This class provides methods for generating embeddings for text data,
+    with support for batch processing and automatic retries for failed
+    API calls. It uses exponential backoff to handle rate limits and
+    temporary failures.
+    
+    Attributes
+    ----------
+    client : OpenAI
+        OpenAI client instance for making API calls.
+        
+    model : str
+        Name of the embedding model to use.
+        
+    batch_size : int
+        Number of texts to process in each batch.
+        
+    max_retries : int
+        Maximum number of retry attempts for API calls.
+    """
+    
     def __init__(
         self,
         api_key: str,
@@ -22,13 +54,24 @@ class EmbeddingGenerator:
         Parameters
         ----------
         api_key : str
-            OpenAI API key
-        model : str, optional
-            Model to use for embeddings, by default "text-embedding-3-small"
-        batch_size : int, optional
-            Number of texts to process in each batch, by default 100
-        max_retries : int, optional
-            Maximum number of retry attempts for API calls, by default 3
+            OpenAI API key for authentication.
+            
+        model : str, default="text-embedding-3-small"
+            Name of the embedding model to use. Must be a valid OpenAI
+            embedding model name.
+            
+        batch_size : int, default=100
+            Number of texts to process in each batch. Larger batch sizes
+            can improve throughput but may increase the risk of rate
+            limiting.
+            
+        max_retries : int, default=3
+            Maximum number of retry attempts for failed API calls.
+            
+        Examples
+        --------
+        >>> generator = EmbeddingGenerator(api_key="your-api-key")
+        >>> embeddings = generator.generate_embeddings(["Hello, world!"])
         """
         self.client = OpenAI(api_key=api_key)
         self.model = model
@@ -45,15 +88,31 @@ class EmbeddingGenerator:
     def _get_embeddings_batch(self, texts: List[str]) -> np.ndarray:
         """Get embeddings for a batch of texts.
         
+        This method processes a single batch of texts through the OpenAI
+        API, with retry logic for handling temporary failures. It includes
+        input validation and cleaning to ensure the API call succeeds.
+        
         Parameters
         ----------
         texts : List[str]
-            List of texts to embed
+            List of texts to generate embeddings for.
             
         Returns
         -------
         np.ndarray
-            Array of embeddings
+            Array of embeddings, one for each input text.
+            
+        Raises
+        ------
+        Exception
+            If the API call fails after all retry attempts.
+            
+        Examples
+        --------
+        >>> generator = EmbeddingGenerator(api_key="your-api-key")
+        >>> embeddings = generator._get_embeddings_batch(["Hello", "World"])
+        >>> embeddings.shape
+        (2, 1536)  # For text-embedding-3-small model
         """
         # Ensure texts is a list of strings and clean them
         if isinstance(texts, np.ndarray):
@@ -90,17 +149,35 @@ class EmbeddingGenerator:
     ) -> np.ndarray:
         """Generate embeddings for a list of texts.
         
+        This method processes a list of texts in batches, generating
+        embeddings for each text using the OpenAI API. It includes
+        progress tracking and error handling.
+        
         Parameters
         ----------
         texts : List[str]
-            List of texts to embed
-        show_progress : bool, optional
-            Whether to show progress information, by default True
+            List of texts to generate embeddings for.
+            
+        show_progress : bool, default=True
+            Whether to log progress information during processing.
             
         Returns
         -------
         np.ndarray
-            Array of embeddings
+            Array of embeddings, one for each input text.
+            
+        Raises
+        ------
+        Exception
+            If any batch fails after all retry attempts.
+            
+        Examples
+        --------
+        >>> generator = EmbeddingGenerator(api_key="your-api-key")
+        >>> texts = ["First text", "Second text", "Third text"]
+        >>> embeddings = generator.generate_embeddings(texts)
+        >>> embeddings.shape
+        (3, 1536)  # For text-embedding-3-small model
         """
         embeddings = []
         total_batches = (len(texts) + self.batch_size - 1) // self.batch_size

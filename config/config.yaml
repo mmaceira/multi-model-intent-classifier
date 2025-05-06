@@ -6,8 +6,8 @@ general:
 # Dataset configuration
 dataset:
   split_type: "test"                         # [standard | test]
-  n_classes: 5                               # number of classes to classify
-  n_samples_per_class: 10                  # number of samples per class (null for all)
+  n_classes: 25                               # number of classes to classify
+  n_samples_per_class: 100                  # number of samples per class (null for all)
 
 # Paths (all are resolved relative to repo root)
 paths:

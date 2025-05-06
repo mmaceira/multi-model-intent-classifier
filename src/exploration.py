@@ -1,35 +1,35 @@
 """
 Text Dataset Exploration Module
 
-This module provides comprehensive tools for analyzing and visualizing text classification datasets,
-with a focus on Reuters news articles. It includes functionality for analyzing class distributions,
-text length statistics, vocabulary patterns, and stopword analysis.
+Version: 1.0.0
+Author: Reuters RAG Classifier Team
+License: MIT
 
-Key Features:
-- Class distribution analysis and visualization
-- Text length statistics and distribution plots
-- Vocabulary analysis with multiple filtering options
-- Stopword impact analysis
+Provides tools for analyzing and visualizing text classification datasets:
+- Class distribution analysis
+- Text length statistics
+- Vocabulary analysis
+- Stopword analysis
+- Vocabulary drift analysis
 - Publication-ready visualizations
-- Detailed statistical summaries
 - CSV export capabilities
 
-Functions:
-- class_frequency: Analyze and visualize class distribution
-- length_distribution: Analyze text length patterns
-- vocabulary_analysis: Comprehensive vocabulary analysis
-- stopword_analysis: Analyze impact of stopwords
-- vocabulary_drift: Analyze vocabulary differences between splits
-
 Dependencies:
-- numpy
-- pandas
-- matplotlib
-- seaborn
-- typing
-- os
-- collections
-- re
+- numpy>=1.21.0
+- pandas>=1.3.0
+- matplotlib>=3.4.0
+- seaborn>=0.11.0
+- typing>=3.7.4
+- os, collections, re (standard library)
+
+Usage:
+    >>> from exploration import comprehensive_analysis
+    >>> results = comprehensive_analysis(
+    ...     texts=documents,
+    ...     labels=class_labels,
+    ...     label_names=class_names,
+    ...     output_dir='./analysis_results'
+    ... )
 """
 
 from __future__ import annotations
@@ -71,14 +71,19 @@ def class_frequency(labels: np.ndarray, plot: bool = True,
     
     Args:
         labels: Array of class labels
-        plot: Whether to create a visualization (default: True)
-        save_path: Path to save the plot (default: None)
-        top_n: Number of top classes to show (default: None)
+        plot: Whether to create visualization
+        save_path: Path to save plot
+        top_n: Number of top classes to show
         
     Returns:
-        Dictionary containing:
+        Dict with:
         - counts: Series of class counts
         - proportions: Series of class proportions
+        
+    Raises:
+        ValueError: Empty labels array
+        TypeError: Invalid input type
+        FileNotFoundError: Invalid save path
     """
     # Compute class counts and proportions
     counts = pd.Series(labels).value_counts()
@@ -120,19 +125,24 @@ def class_frequency(labels: np.ndarray, plot: bool = True,
 def length_distribution(texts: List[str], save_path: Optional[str] = None, 
                      output_dir: Optional[str] = None, 
                      percentiles: List[int] = [25, 50, 75, 90, 95, 99]) -> Dict[str, Any]:
-    """Analyze and visualize text length distribution.
+    """Analyze text length distribution.
     
     Args:
         texts: List of text documents
-        save_path: Path to save the plot (default: None)
-        output_dir: Directory to save additional output files (default: None)
-        percentiles: List of percentiles to calculate (default: [25, 50, 75, 90, 95, 99])
+        save_path: Path to save plot
+        output_dir: Directory for output files
+        percentiles: List of percentiles to calculate
         
     Returns:
-        Dictionary containing:
+        Dict with:
         - lengths: Array of text lengths
-        - stats: Dictionary of summary statistics
-        - percentile_stats: List of dictionaries with percentile information
+        - stats: Summary statistics
+        - percentile_stats: Percentile information
+        
+    Raises:
+        ValueError: Empty texts list
+        TypeError: Invalid input type
+        FileNotFoundError: Invalid save path
     """
     # Compute text lengths
     lengths = np.array([len(text.split()) for text in texts])
@@ -222,23 +232,27 @@ def vocabulary_analysis(texts: List[str], remove_stopwords: bool = True,
                        min_word_length: int = 1,
                        n_most_common: int = 30, plot: bool = True, 
                        figsize: Tuple[int, int] = (12, 8)) -> Dict:
-    """Analyze vocabulary distribution with various filtering options.
+    """Analyze vocabulary distribution.
     
     Args:
         texts: List of text documents
-        remove_stopwords: Whether to remove common English stopwords
-        remove_numbers: Whether to remove numeric tokens
-        remove_financial_terms: Whether to remove common financial terms
-        min_word_length: Minimum length of words to include
-        n_most_common: Number of most common words to return
-        plot: Whether to create a visualization
-        figsize: Figure size for the plot
+        remove_stopwords: Remove common stopwords
+        remove_numbers: Remove numeric tokens
+        remove_financial_terms: Remove financial terms
+        min_word_length: Minimum word length
+        n_most_common: Number of top words
+        plot: Create visualization
+        figsize: Figure size
         
     Returns:
-        Dictionary containing:
-        - vocab_size: Total unique words in vocabulary
-        - word_counts: Counter object with word frequencies
-        - top_words: DataFrame of n most common words
+        Dict with:
+        - vocab_size: Total unique words
+        - word_counts: Word frequencies
+        - top_words: DataFrame of common words
+        
+    Raises:
+        ValueError: Invalid input
+        TypeError: Invalid input type
     """
     # Tokenize and count words
     words = []
@@ -298,17 +312,22 @@ def vocabulary_analysis(texts: List[str], remove_stopwords: bool = True,
 def vocabulary_drift(train_texts: Sequence[str], test_texts: Sequence[str], 
                    top_k: int = 2000, min_freq: int = 10,
                    output_path: Optional[str] = None) -> pd.DataFrame:
-    """Compute token frequency drift between train and test splits.
+    """Analyze vocabulary differences between train and test sets.
     
     Args:
         train_texts: Training documents
         test_texts: Test documents
-        top_k: Number of most frequent tokens to consider
-        min_freq: Minimum number of times a token must appear
+        top_k: Number of frequent tokens
+        min_freq: Minimum token frequency
         output_path: Path to save results
         
     Returns:
         DataFrame with token frequencies and drift metrics
+        
+    Raises:
+        ValueError: Invalid input
+        TypeError: Invalid input type
+        FileNotFoundError: Invalid output path
     """
     def _tokenize(s: str):
         return s.lower().split()
@@ -349,20 +368,25 @@ def comprehensive_analysis(texts: List[str], labels: Optional[List[str]] = None,
                          top_n: int = 30,
                          create_visualizations: bool = True,
                          create_csv: bool = True) -> Dict:
-    """Perform comprehensive vocabulary analysis with enhanced filtering.
+    """Perform comprehensive text analysis.
     
     Args:
-        texts: List of text documents to analyze
-        labels: Optional list of class labels for class-specific analysis
-        label_names: Optional list of label names for the classes
-        output_dir: Directory to save output files
-        min_word_length: Minimum length of words to include
-        top_n: Number of top words to return
-        create_visualizations: Whether to create and save visualizations
-        create_csv: Whether to save results to CSV files
+        texts: List of text documents
+        labels: Optional class labels
+        label_names: Optional label names
+        output_dir: Output directory
+        min_word_length: Minimum word length
+        top_n: Number of top words
+        create_visualizations: Create plots
+        create_csv: Save CSV files
         
     Returns:
-        Dictionary containing the results of all analyses
+        Dict with results from all analyses
+        
+    Raises:
+        ValueError: Invalid input
+        TypeError: Invalid input type
+        FileNotFoundError: Invalid output directory
     """
     os.makedirs(output_dir, exist_ok=True)
     results = {}
