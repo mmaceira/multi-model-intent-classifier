@@ -50,7 +50,7 @@ def get_dataset(
             - "standard": Use NLTK's train/test split
             - "test": Small balanced dataset with equal samples per class
         n_classes: Number of most frequent classes to include (None for all)
-        n_samples_per_class: Maximum samples per class (only used with "test" split)
+        n_samples_per_class: Maximum samples per class (None for all available samples)
         random_seed: Random seed for reproducibility in sampling
     
     Returns:
@@ -66,7 +66,7 @@ def get_dataset(
     logger.info(f"  - Split type: {split_type}")
     logger.info(f"  - Number of classes: {n_classes if n_classes is not None else 'all'}")
     if split_type == "test":
-        logger.info(f"  - Samples per class: {n_samples_per_class or 20}")
+        logger.info(f"  - Samples per class: {n_samples_per_class if n_samples_per_class is not None else 'all available'}")
     logger.info(f"  - Random seed: {random_seed}")
     
     # Set random seed if provided
@@ -82,7 +82,7 @@ def get_dataset(
         return _load_standard_split(n_classes)
     elif split_type == "test":
         return _load_small_test_dataset(
-            n_samples_per_class or 20,
+            n_samples_per_class,  # Pass None directly to use all samples
             n_classes or 7
         )
     else:
@@ -188,18 +188,18 @@ def _load_standard_split(n_classes: Optional[int] = None) -> DatasetSplit:
     return _prepare_dataset(train_ids, test_ids)
 
 
-def _load_small_test_dataset(n_samples_per_class: int = 20, n_classes: int = 7) -> DatasetSplit:
+def _load_small_test_dataset(n_samples_per_class: Optional[int] = None, n_classes: int = 7) -> DatasetSplit:
     """
     Load a small balanced dataset with equal samples per class for testing purposes.
     
     Args:
-        n_samples_per_class: Maximum number of samples per class (default: 20)
+        n_samples_per_class: Maximum number of samples per class (None for all available samples)
         n_classes: Number of classes to include (default: 7)
     
     Returns:
         X_train, y_train, X_test, y_test, classes
     """
-    logger.info(f"Loading small test dataset with {n_samples_per_class} samples per class across {n_classes} classes")
+    logger.info(f"Loading small test dataset with {n_samples_per_class if n_samples_per_class is not None else 'all available'} samples per class across {n_classes} classes")
     
     # Get all file IDs
     all_ids = reuters.fileids()
@@ -222,8 +222,9 @@ def _load_small_test_dataset(n_samples_per_class: int = 20, n_classes: int = 7) 
         # Shuffle documents
         random.shuffle(docs)
         
-        # Limit to n_samples_per_class docs per class
-        docs = docs[:n_samples_per_class]
+        # Only limit docs if n_samples_per_class is specified
+        if n_samples_per_class is not None:
+            docs = docs[:n_samples_per_class]
         
         # Split into train/test (70/30 split)
         train_size = int(0.7 * len(docs))

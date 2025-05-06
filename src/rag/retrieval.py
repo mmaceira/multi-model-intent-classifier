@@ -7,22 +7,27 @@ query embeddings.
 
 Key Features:
 - Efficient nearest neighbor search
-- Support for multiple embedding types
-- Performance logging
+- Support for multiple embedding types (OpenAI and SentenceTransformer)
+- Performance logging and monitoring
 - Default configuration loading
+- Flexible vector store integration
 
 Classes:
-- Retriever: Main class for document retrieval
+    Retriever: Main class for document retrieval
+        - Handles document similarity search
+        - Supports different embedding types
+        - Provides performance monitoring
+        - Offers default configuration setup
 
 Functions:
-- None (Class methods only)
+    None (Class methods only)
 
 Dependencies:
-- numpy
-- logging
-- time
-- vector_store
-- get_index_paths
+    numpy: For numerical operations
+    logging: For performance monitoring
+    time: For timing operations
+    vector_store: For vector storage and search
+    get_index_paths: For default path configuration
 
 Example Usage:
     >>> # Create a default retriever
@@ -40,18 +45,60 @@ Example Usage:
 import time
 import logging
 import numpy as np
+from typing import List, Dict
 from .vector_store import VectorStore
 from . import get_index_paths
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
+
 class Retriever:
-    def __init__(self, store: VectorStore):
+    """
+    A class for retrieving similar documents from a vector store.
+    
+    This class provides functionality for efficient document retrieval based on
+    vector similarity search. It supports different embedding types and includes
+    performance monitoring capabilities.
+    
+    Attributes:
+        store (VectorStore): The vector store instance used for document retrieval
+        
+    Methods:
+        top_k: Retrieve the k most similar documents
+        from_default: Create a retriever with default configuration
+    """
+    
+    def __init__(self, store: VectorStore) -> None:
+        """
+        Initialize the retriever with a vector store.
+        
+        Args:
+            store (VectorStore): The vector store instance to use for retrieval
+        """
         self.store = store
 
-    def top_k(self, q_emb: np.ndarray, k: int) -> list[dict]:
+    def top_k(self, q_emb: np.ndarray, k: int) -> List[Dict]:
+        """
+        Retrieve the k most similar documents for a given query embedding.
+        
+        Args:
+            q_emb (np.ndarray): Query embedding vector
+            k (int): Number of similar documents to retrieve
+            
+        Returns:
+            List[Dict]: List of dictionaries containing retrieved documents and their metadata
+            
+        Example:
+            >>> retriever = Retriever.from_default()
+            >>> results = retriever.top_k(query_embedding, k=5)
+            >>> for doc in results:
+            ...     print(f"Document ID: {doc['id']}, Score: {doc['score']}")
+        """
         start_time = time.time()
         logger.debug(f"Starting retrieval for top-{k} neighbors")
         
@@ -64,14 +111,25 @@ class Retriever:
         return results
 
     @classmethod
-    def from_default(cls, use_openai: bool = False):
-        """Create a retriever with the default index and meta files.
+    def from_default(cls, use_openai: bool = False) -> 'Retriever':
+        """
+        Create a retriever with the default index and meta files.
+        
+        This method provides a convenient way to create a retriever with default
+        configuration, supporting both OpenAI and SentenceTransformer embeddings.
         
         Args:
-            use_openai: Whether to use OpenAI index files
+            use_openai (bool): Whether to use OpenAI index files (default: False)
             
         Returns:
-            Retriever instance
+            Retriever: A configured retriever instance
+            
+        Example:
+            >>> # Create a retriever with OpenAI embeddings
+            >>> retriever = Retriever.from_default(use_openai=True)
+            >>> 
+            >>> # Create a retriever with SentenceTransformer embeddings
+            >>> retriever = Retriever.from_default(use_openai=False)
         """
         logger.info(f"Loading {'OpenAI' if use_openai else 'SentenceTransformer'} retriever")
         start_time = time.time()

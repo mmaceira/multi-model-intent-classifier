@@ -4,6 +4,7 @@ A production-ready NLP pipeline for automated news article classification and se
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-available-blue)](docs/)
 
 ## Table of Contents
 - [Quick Start](#-quick-start)
@@ -15,19 +16,50 @@ A production-ready NLP pipeline for automated news article classification and se
 - [Scaling Guidance](#-scaling-guidance)
 - [Development](#-development)
 - [Contributing](#-contributing)
+- [License](#-license)
 
 ## 🚀 Quick Start
 
-```bash
-# 1. Create and activate virtual environment
-python -m venv venv/reuters-rag-classifier
-source venv/reuters-rag-classifier/bin/activate
+### Prerequisites
+- Python 3.8 or higher
+- pip package manager
+- Virtual environment (recommended)
 
-# 2. Install dependencies
+### Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/yourusername/reuters-rag-classifier.git
+cd reuters-rag-classifier
+
+# 2. Create and activate virtual environment
+python -m venv venv/reuters-rag-classifier
+source venv/reuters-rag-classifier/bin/activate  # On Windows: venv\reuters-rag-classifier\Scripts\activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# 3. Run the analysis notebooks
+# 4. Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# 5. Run the analysis notebooks
 jupyter notebook notebooks/
+```
+
+### Basic Usage
+
+```python
+from src.model import ReutersClassifier
+
+# Initialize the classifier
+classifier = ReutersClassifier(model_type="bert_lr")
+
+# Classify a news article
+text = "Your news article text here..."
+result = classifier.predict(text)
+print(f"Predicted topic: {result['topic']}")
+print(f"Confidence: {result['confidence']}")
 ```
 
 ## 📋 Overview
@@ -36,6 +68,8 @@ This project implements a comprehensive NLP pipeline for:
 - Automated topic classification of news articles
 - Semantic search and document retrieval
 - Business insights generation
+- Real-time document similarity matching
+- Multi-language support
 
 Built on the Reuters-21578 corpus, it provides a production-ready solution for news analysis and information retrieval.
 
@@ -180,22 +214,62 @@ reuters-rag-classifier/
 
 ## 🛠️ Development
 
+### Environment Setup
+1. Install development dependencies:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. Set up pre-commit hooks:
+   ```bash
+   pre-commit install
+   ```
+
 ### Code Style
 - Follow PEP 8 guidelines
 - Use type hints
 - Document all public functions
+- Run `black` and `flake8` before committing
 
 ### Testing
-- Unit tests for core functionality
-- Integration tests for pipeline components
-- Performance benchmarks
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_model.py
+
+# Run with coverage
+pytest --cov=src
+```
+
+### Documentation
+- API documentation is generated using Sphinx
+- Run `make docs` to build documentation
+- View documentation at `docs/_build/html/index.html`
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Submit a pull request
+4. Run tests and ensure they pass
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+### Pull Request Process
+1. Update the README.md with details of changes
+2. Update the documentation if needed
+3. Ensure all tests pass
+4. Request review from maintainers
+
+## 🙏 Acknowledgments
+
+- Reuters-21578 corpus
+- Hugging Face Transformers
+- FAISS for similarity search
+- OpenAI for embedding models
 
 ---
 

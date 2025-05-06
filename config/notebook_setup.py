@@ -54,10 +54,10 @@ for section_key, section_value in cfg.items():
 
 # Set frequently used variables as top-level for backward compatibility
 # These are common variables that may be used directly in code
-N_CLASSES = config_vars.get("GENERAL_N_CLASSES")
+N_CLASSES = config_vars.get("DATASET_N_CLASSES")
+N_SAMPLES_PER_CLASS = config_vars.get("DATASET_N_SAMPLES_PER_CLASS")
 SEED = config_vars.get("GENERAL_SEED")
 RUN_NAME = config_vars.get("GENERAL_RUN_NAME")
-GENERAL_CUTOFF_YEAR = config_vars.get("DATASET_CUTOFF_YEAR")
 
 # Path variables with shorter names for backward compatibility
 DATA_EXPLORATION_DIR = config_vars.get("PATHS_DATA_EXPLORATION_DIR")
