@@ -48,19 +48,21 @@ Created: 2025-05-04
 Author: ChatGPT
 License: Proprietary
 """
+
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
-import time
-from typing import Callable, Iterable, List, Sequence, Tuple, Dict, Any
+from typing import Callable, Iterable, List, Sequence
 
 import numpy as np
-import openai
 from dotenv import load_dotenv
-from openai import AsyncOpenAI, RateLimitError, BadRequestError
+from litellm import acompletion
+from litellm.exceptions import RateLimitError
+
 from src.utils.retry import with_retry
 
 from .classifier_base import RagClassifierBase
@@ -77,10 +79,13 @@ logger.setLevel(logging.INFO)
 # Load environment variables from .env file
 load_dotenv()
 
-# Verify OpenAI API key is set
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+# Disable litellm's proxy-related logging to avoid import errors
+# These errors occur because litellm tries to import proxy modules
+# even when not using the proxy, and those modules have optional dependencies
+os.environ.setdefault(
+    "LITELLM_LOG", "ERROR"
+)  # Only show errors, not warnings about missing modules
+os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")  # Suppress litellm's verbose logging
 
 # System prompt for the LLM classification task
 _PROMPT_SYSTEM = """You are a news-topic classifier. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
@@ -91,31 +96,32 @@ DO NOT use code blocks, markdown, or explanations. Return ONLY valid JSON with E
 
 def _exponential_backoff(attempt: int) -> float:
     """Calculate exponential backoff wait time with jitter.
-    
+
     Args:
         attempt: The current retry attempt number (0-indexed)
-        
+
     Returns:
         float: Delay time in seconds, exponentially increasing with retry attempts
               but capped at 30 seconds maximum. Includes randomization to prevent
               synchronized retries across multiple clients.
     """
-    delay = min((2 ** attempt) + random.random(), 30.0)
+    delay = min((2**attempt) + random.random(), 30.0)
     return delay
+
 
 # ---------------------------------------------------------------------------
 # Main class
 # ---------------------------------------------------------------------------
 class RagLLM(RagClassifierBase):
     """RAG-style news classifier with production-ready features.
-    
+
     This classifier combines retrieval-augmented generation with LLM-based classification.
     It includes robust error handling, rate limiting, and optimized batch processing
     to balance throughput with API usage.
-    
+
     Attributes:
         retriever: Component that retrieves semantically similar examples
-        model: The OpenAI model identifier to use for classification
+        model: The LLM model identifier to use for classification (default: "ollama/llama3.1:8b")
         top_k: Number of similar examples to retrieve for context
         batch_size: Number of documents to classify in a single LLM call
         max_retries: Maximum number of retry attempts for failed API calls
@@ -127,7 +133,7 @@ class RagLLM(RagClassifierBase):
         retriever: Retriever,
         labels: Sequence[str],
         *,
-        model: str = "gpt-4o-mini",
+        model: str = "ollama/llama3.1:8b",
         top_k: int = 5,
         batch_size: int = 8,
         max_concurrency: int = 2,
@@ -136,11 +142,11 @@ class RagLLM(RagClassifierBase):
         max_retries: int = 5,
     ):
         """Initialize the RAG LLM classifier.
-        
+
         Args:
             retriever: The retrieval component that finds similar examples
             labels: List of valid classification labels
-            model: OpenAI model identifier (default: "gpt-4o-mini")
+            model: LLM model identifier (default: "ollama/llama3.1:8b")
             top_k: Number of similar examples to retrieve for context (default: 5)
             batch_size: Number of documents to process in a single API call (default: 8)
             max_concurrency: Maximum number of concurrent API requests (default: 2)
@@ -154,7 +160,6 @@ class RagLLM(RagClassifierBase):
         self.top_k = top_k
         self.batch_size = batch_size
         self._sem = asyncio.Semaphore(max_concurrency)
-        self._client = AsyncOpenAI(api_key=openai_api_key)
         self.embedder = embedder
         self.max_retries = max_retries
         # Calculate minimum interval between API calls based on rate limit
@@ -163,22 +168,22 @@ class RagLLM(RagClassifierBase):
     @classmethod
     def load_default(cls, *, use_openai: bool = False, **kwargs):
         """Create a classifier with default configuration.
-        
+
         This factory method simplifies creation with sensible defaults,
         automatically loading the retriever and extracting labels.
-        
+
         Args:
             use_openai: Whether to use OpenAI's embedding API instead of local models (default: False)
             **kwargs: Additional parameters to override default RagLLM initialization
-            
+
         Returns:
             RagLLM: A configured classifier instance ready for prediction
-            
+
         Example:
             ```python
             # Basic usage with defaults
             classifier = RagLLM.load_default()
-            
+
             # With custom parameters
             classifier = RagLLM.load_default(
                 use_openai=True,
@@ -188,19 +193,19 @@ class RagLLM(RagClassifierBase):
             ```
         """
         retriever = Retriever.from_default(use_openai=use_openai)
-        labels = sorted({m['label'] for m in retriever.store.meta})
+        labels = sorted({str(m["label"]) for m in retriever.store.meta})
         return cls(retriever, labels, **kwargs)
 
     def _embed(self, docs: Sequence[str]) -> np.ndarray:
         """Generate embeddings for input documents.
-        
+
         This method provides flexible embedding options:
         1. Custom embedder provided at initialization
         2. Fallback to default sentence transformer model
-        
+
         Args:
             docs: List of text documents to embed
-            
+
         Returns:
             np.ndarray: Matrix of document embeddings with shape (n_docs, embedding_dim)
         """
@@ -210,52 +215,55 @@ class RagLLM(RagClassifierBase):
             return np.array(self.embedder.encode(list(docs)), dtype="float32")
         return np.array(self.embedder(list(docs)), dtype="float32")
 
-    @with_retry(
-        max_retries=3,
-        initial_delay=1.0,
-        max_delay=10.0,
-        backoff_factor=2.0,
-        logger=logger
-    )
+    @with_retry(max_retries=3, initial_delay=1.0, max_delay=10.0, backoff_factor=2.0, logger=logger)
     def get_completion(self, prompt: str, **kwargs) -> str:
         """Get a completion from the LLM.
-        
+
         Parameters
         ----------
         prompt : str
             The prompt to send to the LLM
         **kwargs
             Additional arguments to pass to the completion API
-            
+
         Returns
         -------
         str
             The completion text
         """
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs
-        )
-        return response.choices[0].message.content
+        import asyncio
 
-    async def _chat_with_retry(self, messages) -> openai.chat.completion.ChatCompletion:
-        """Send a request to the OpenAI API with robust error handling.
-        
+        async def _get_completion_async():
+            response = await acompletion(
+                model=self.model, messages=[{"role": "user", "content": prompt}], **kwargs
+            )
+            return response.choices[0].message.content
+
+        try:
+            return asyncio.run(_get_completion_async())
+        except RuntimeError:
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(_get_completion_async())
+
+    async def _chat_with_retry(self, messages):
+        """Send a request to the LLM API with robust error handling.
+
         Features:
         - Rate limiting with minimum interval enforcement
         - Exponential backoff with jitter for retries
         - Detailed error logging
-        
+
         Args:
             messages: List of message dictionaries with 'role' and 'content' keys
-            
+
         Returns:
-            ChatCompletion: The API response
-            
+            Response object from litellm with choices[0].message.content
+
         Raises:
             RateLimitError: If rate limit is exceeded after all retries
-            BadRequestError: If the request is invalid
             APIError: For other API-related errors
         """
         attempt = 0
@@ -264,53 +272,57 @@ class RagLLM(RagClassifierBase):
                 # Ensure minimum interval between API calls
                 if attempt > 0:
                     await asyncio.sleep(self._min_interval)
-                
-                # Make the API call with the new format
-                response = await self._client.chat.completions.create(
+
+                # Make the API call using litellm
+                response = await acompletion(
                     model=self.model,
                     messages=messages,
                     response_format={"type": "json_object"},
-                    temperature=0.0
+                    temperature=0.0,
                 )
                 return response
-                
+
             except RateLimitError as e:
                 attempt += 1
                 if attempt >= self.max_retries:
                     logger.error(f"Rate limit exceeded after {attempt} attempts: {e}")
                     raise
                 delay = _exponential_backoff(attempt)
-                logger.warning(f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})")
+                logger.warning(
+                    f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})"
+                )
                 await asyncio.sleep(delay)
-                
+
             except Exception as e:
                 attempt += 1
                 if attempt >= self.max_retries:
                     logger.error(f"API error after {attempt} attempts: {e}")
                     raise
                 delay = _exponential_backoff(attempt)
-                logger.warning(f"API error, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})")
+                logger.warning(
+                    f"API error, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})"
+                )
                 await asyncio.sleep(delay)
 
     async def _classify_batch(
         self, docs: List[str], vectors: List[np.ndarray], return_probas: bool = False
     ) -> List[str]:
         """Classify a batch of documents using the LLM with retrieved context.
-        
+
         This method implements the core RAG classification logic:
         1. Retrieve similar examples for each document
         2. Build a prompt with documents and their contexts
         3. Call the LLM to classify all documents in one batch
         4. Parse and validate the response with fallbacks
-        
+
         Args:
             docs: List of documents to classify
             vectors: List of document embedding vectors
             return_probas: Whether to return probability estimates
-            
+
         Returns:
             List[str]: Predicted labels for each document in the batch
-            
+
         Note:
             This method includes extensive error handling to ensure robustness
             in production. If classification fails, it falls back to using the
@@ -322,30 +334,31 @@ class RagLLM(RagClassifierBase):
             try:
                 # Pass the numpy array directly to the retriever
                 neigh = self.retriever.top_k(vec, self.top_k)
-                contexts.append("\n\n".join(n['text'] for n in neigh))
+                contexts.append("\n\n".join(n["text"] for n in neigh))
             except Exception as e:
                 logger.error(f"Error retrieving neighbors: {e}")
                 contexts.append("")  # Use empty context if retrieval fails
 
         # build a single prompt with multiple items
-        allowed = ", ".join(self.labels)
+        # Ensure all labels are strings (handles cases where labels might be integers)
+        allowed = ", ".join(str(label) for label in self.labels)
         lines = []
-        for i, (doc, ctx) in enumerate(zip(docs, contexts), start=1):
+        for i, (doc, ctx) in enumerate(zip(docs, contexts, strict=False), start=1):
             # Ensure doc is a string and not empty
             doc_text = str(doc).strip() if doc else " "
             ctx_text = str(ctx).strip() if ctx else " "
             lines.append(f"{i}. Article: {doc_text}\nContext:\n{ctx_text}")
-        
+
         # Create the examples part of the JSON structure
-        examples_json = ', '.join(f'"{self.labels[0]}"' for _ in range(min(3, len(docs))))
+        examples_json = ", ".join(f'"{self.labels[0]}"' for _ in range(min(3, len(docs))))
         if len(docs) > 3:
-            examples_json += '...'
-            
+            examples_json += "..."
+
         user_content = (
             f"Classify these {len(docs)} news articles into ONE of these categories: {allowed}\n\n"
             + "\n\n".join(lines)
             + f"\n\nRespond with a JSON object that has a 'labels' property containing an array with EXACTLY {len(docs)} labels, one for each article in order."
-            + f" For example with {len(docs)} articles: {{\"labels\": [{examples_json}]}}."
+            + f' For example with {len(docs)} articles: {{"labels": [{examples_json}]}}.'
             + " Each position in the array corresponds to the article with the same position number."
             + " No explanation, no markdown formatting, just valid JSON."
         )
@@ -354,26 +367,21 @@ class RagLLM(RagClassifierBase):
             {"role": "user", "content": user_content},
         ]
 
-        # Add a specific response format instruction with the exact expected format
-        messages.append({
-            "role": "assistant", 
-            "content": f"I'll respond with only a JSON object with exactly {len(docs)} labels: {{\"labels\": [{examples_json}]}}"
-        })
-
         try:
             resp = await self._chat_with_retry(messages)
             text = resp.choices[0].message.content.strip()
-            
+
             # Improved JSON parsing with better error handling
-            import json
             response_data = json.loads(text)
-            
+
             # Check if the response has a 'labels' property
-            if isinstance(response_data, dict) and 'labels' in response_data:
-                labels_out = response_data['labels']
+            if isinstance(response_data, dict) and "labels" in response_data:
+                labels_out = response_data["labels"]
                 # Ensure labels_out is a list
                 if not isinstance(labels_out, list):
-                    logger.error(f"Expected 'labels' to be a list but got {type(labels_out)}: {labels_out}")
+                    logger.error(
+                        f"Expected 'labels' to be a list but got {type(labels_out)}: {labels_out}"
+                    )
                     # Convert single string to list if that's what we got
                     if isinstance(labels_out, str):
                         labels_out = [labels_out]
@@ -394,16 +402,20 @@ class RagLLM(RagClassifierBase):
                     # Look for any string that might be a valid label
                     for key, value in response_data.items():
                         if isinstance(value, str) and value in self.labels:
-                            logger.warning(f"Found single label '{value}' at key '{key}', using for all documents")
+                            logger.warning(
+                                f"Found single label '{value}' at key '{key}', using for all documents"
+                            )
                             return [value] * len(docs)
-                    
+
                     logger.error(f"No valid labels found in response: {response_data}")
                     return [self.labels[0]] * len(docs)
-            
+
             if isinstance(labels_out, list):
                 # Handle case where number of labels doesn't match docs
                 if len(labels_out) != len(docs):
-                    logger.warning(f"Expected {len(docs)} labels but got {len(labels_out)}. Adjusting...")
+                    logger.warning(
+                        f"Expected {len(docs)} labels but got {len(labels_out)}. Adjusting..."
+                    )
                     # Extend with first label if too short
                     if len(labels_out) < len(docs):
                         # Use the last label for extension if available
@@ -411,8 +423,8 @@ class RagLLM(RagClassifierBase):
                         labels_out.extend([extension_label] * (len(docs) - len(labels_out)))
                     # Truncate if too long
                     else:
-                        labels_out = labels_out[:len(docs)]
-                
+                        labels_out = labels_out[: len(docs)]
+
                 # Validate that all labels are in allowed list
                 return [lab if lab in self.labels else self.labels[0] for lab in labels_out]
             else:
@@ -422,25 +434,25 @@ class RagLLM(RagClassifierBase):
             logger.error(f"Failed parsing JSON batch response: {text} | Error: {e}")
         except Exception as e:
             logger.error(f"Unexpected error handling batch response: {text} | Error: {e}")
-            
+
         # fallback: label all with first
         return [self.labels[0]] * len(docs)
 
     def predict(self, docs: Sequence[str]) -> List[str]:
         """Classify multiple documents with batched processing.
-        
+
         This is the main public API method for classification. It:
         1. Embeds all documents
         2. Divides them into batches for efficient processing
         3. Classifies each batch with concurrency control
         4. Handles asyncio runtime details to work in any environment
-        
+
         Args:
             docs: Sequence of document texts to classify
-            
+
         Returns:
             List[str]: Predicted labels for each document
-            
+
         Example:
             ```python
             classifier = RagLLM.load_default()
@@ -450,18 +462,25 @@ class RagLLM(RagClassifierBase):
             ])
             ```
         """
+
         async def _run_all() -> List[str]:
             """Internal async implementation of batch prediction."""
-            logger.info(f"Starting prediction for {len(docs)} documents with batch size {self.batch_size}")
+            logger.info(
+                f"Starting prediction for {len(docs)} documents with batch size {self.batch_size}"
+            )
             embeddings = self._embed(docs)
-            batches = [docs[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
-            vec_batches = [embeddings[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
+            batches = [docs[i : i + self.batch_size] for i in range(0, len(docs), self.batch_size)]
+            vec_batches = [
+                embeddings[i : i + self.batch_size] for i in range(0, len(docs), self.batch_size)
+            ]
             logger.info(f"Split into {len(batches)} batches")
             results: List[str] = []
-            for i, (docs_batch,vec_batch) in enumerate(zip(batches,vec_batches), 1):
+            for i, (docs_batch, vec_batch) in enumerate(zip(batches, vec_batches, strict=False), 1):
                 logger.info(f"Processing batch {i}/{len(batches)} with {len(docs_batch)} documents")
                 async with self._sem:
-                    preds = await self._classify_batch(docs_batch, list(vec_batch), return_probas=False)
+                    preds = await self._classify_batch(
+                        docs_batch, list(vec_batch), return_probas=False
+                    )
                 results.extend(preds)
             return results
 
@@ -472,7 +491,7 @@ class RagLLM(RagClassifierBase):
         except RuntimeError:  # Handle "event loop is already running" error
             # Solution for environments like Jupyter notebooks where an event loop is already running
             import nest_asyncio
-            
+
             nest_asyncio.apply()  # Patch the running loop
             # Get the current event loop instead of creating a new thread
             loop = asyncio.get_event_loop()
@@ -480,17 +499,17 @@ class RagLLM(RagClassifierBase):
 
     def predict_proba(self, docs: Sequence[str]) -> np.ndarray:
         """Generate probability estimates for each class.
-        
+
         This method returns probability estimates for each document across all classes
         by using a similarity-based approach with the retrieved examples.
-        
+
         Args:
             docs: Sequence of document texts to classify
-            
+
         Returns:
             np.ndarray: An array of shape (n_samples, n_classes) containing
                         probability estimates for each class.
-                        
+
         Example:
             ```python
             classifier = RagLLM.load_default()
@@ -500,47 +519,51 @@ class RagLLM(RagClassifierBase):
             # Returns array of shape (1, n_classes) with probabilities for each class
             ```
         """
+
         async def _run_all_proba() -> np.ndarray:
             """Internal async implementation for probability prediction."""
             logger.info(f"Starting probability prediction for {len(docs)} documents")
             embeddings = self._embed(docs)
-            batches = [docs[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
-            vec_batches = [embeddings[i:i+self.batch_size] for i in range(0,len(docs),self.batch_size)]
+            batches = [docs[i : i + self.batch_size] for i in range(0, len(docs), self.batch_size)]
+            vec_batches = [
+                embeddings[i : i + self.batch_size] for i in range(0, len(docs), self.batch_size)
+            ]
             logger.info(f"Split into {len(batches)} batches")
-            
+
             # Initialize the results array
             sorted_labels = sorted(self.labels)
             label_to_idx = {label: i for i, label in enumerate(sorted_labels)}
             all_probas = np.zeros((len(docs), len(sorted_labels)))
-            
+
             # Process each batch
             batch_start = 0
-            for i, (docs_batch, vec_batch) in enumerate(zip(batches, vec_batches), 1):
+            for i, (docs_batch, vec_batch) in enumerate(zip(batches, vec_batches, strict=False), 1):
                 logger.info(f"Processing batch {i}/{len(batches)} with {len(docs_batch)} documents")
                 async with self._sem:
                     # For similarity-based probability estimation
-                    batch_results = []
-                    for j, (doc, vec) in enumerate(zip(docs_batch, vec_batch)):
+                    for j, (_doc, vec) in enumerate(zip(docs_batch, vec_batch, strict=False)):
                         try:
                             # Pass the numpy array directly to the retriever
                             neighbors = self.retriever.top_k(vec, self.top_k)
                             # Count label occurrences
                             label_counts = {}
                             for neighbor in neighbors:
-                                label = neighbor['label']
+                                label = neighbor["label"]
                                 label_counts[label] = label_counts.get(label, 0) + 1
-                            
+
                             # Convert to probabilities
                             for label, count in label_counts.items():
                                 if label in label_to_idx:
-                                    all_probas[batch_start + j, label_to_idx[label]] = count / self.top_k
+                                    all_probas[batch_start + j, label_to_idx[label]] = (
+                                        count / self.top_k
+                                    )
                         except Exception as e:
                             logger.error(f"Error processing document {j} in batch {i}: {e}")
                             # If there's an error, assign equal probabilities to all classes
                             all_probas[batch_start + j, :] = 1.0 / len(sorted_labels)
-                
+
                 batch_start += len(docs_batch)
-            
+
             return all_probas
 
         # Run async function in appropriate environment
@@ -550,9 +573,8 @@ class RagLLM(RagClassifierBase):
         except RuntimeError:  # Handle "event loop is already running" error
             # Solution for environments like Jupyter notebooks where an event loop is already running
             import nest_asyncio
-            
+
             nest_asyncio.apply()  # Patch the running loop
             # Get the current event loop instead of creating a new thread
             loop = asyncio.get_event_loop()
             return loop.run_until_complete(_run_all_proba())
-

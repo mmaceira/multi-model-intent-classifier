@@ -31,7 +31,7 @@ Example Usage:
     ...     def predict(self, docs: Sequence[str], **kwargs) -> list[str]:
     ...         # Implement prediction logic
     ...         return predictions
-    ...     
+    ...
     ...     def predict_proba(self, docs: Sequence[str], **kwargs) -> np.ndarray:
     ...         # Implement probability estimation
     ...         return probabilities
@@ -39,44 +39,45 @@ Example Usage:
 
 from abc import ABC, abstractmethod
 from typing import Sequence
+
 import numpy as np
 
 
 class RagClassifierBase(ABC):
     """
     Abstract base class for RAG classifiers.
-    
+
     This class defines the common interface and functionality that all RAG classifiers
     must implement. It provides basic label management and utility methods for
     majority voting.
-    
+
     Attributes:
         labels (list[str]): List of possible class labels for classification
-        
+
     Methods:
         predict: Abstract method for making predictions (must be implemented)
         predict_proba: Abstract method for probability estimates (must be implemented)
         _majority_vote: Utility method for majority voting
     """
-    
+
     def __init__(self, labels: Sequence[str]) -> None:
         """
         Initialize the classifier with a set of possible labels.
-        
+
         Args:
             labels (Sequence[str]): List of possible class labels
         """
-        self.labels = list(labels)
+        self.labels = [str(label) for label in labels]
 
     @abstractmethod
     def predict(self, docs: Sequence[str], **kwargs) -> list[str]:
         """
         Abstract method for making predictions on input documents.
-        
+
         Args:
             docs (Sequence[str]): Sequence of documents to classify
             **kwargs: Additional arguments specific to the implementation
-            
+
         Returns:
             list[str]: List of predicted labels for each document
         """
@@ -86,11 +87,11 @@ class RagClassifierBase(ABC):
     def predict_proba(self, docs: Sequence[str], **kwargs) -> np.ndarray:
         """
         Abstract method for estimating class probabilities.
-        
+
         Args:
             docs (Sequence[str]): Sequence of documents to classify
             **kwargs: Additional arguments specific to the implementation
-            
+
         Returns:
             np.ndarray: Array of probability estimates for each class
         """
@@ -99,13 +100,13 @@ class RagClassifierBase(ABC):
     def _majority_vote(self, neighbor_labels: Sequence[str]) -> str:
         """
         Perform majority voting on a sequence of labels.
-        
+
         Args:
             neighbor_labels (Sequence[str]): Sequence of labels to vote on
-            
+
         Returns:
             str: The most frequent label in the sequence
-            
+
         Example:
             >>> classifier = RagClassifierBase(['A', 'B', 'C'])
             >>> classifier._majority_vote(['A', 'B', 'A', 'C', 'A'])

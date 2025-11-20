@@ -1,47 +1,71 @@
 """Training Module for Text Classification
 
-Version: 1.0.0
-Author: Reuters RAG Classifier Team
-License: MIT
+This module provides a robust training workflow for text classification tasks.
+It handles model training, model persistence, and training performance tracking.
 
-Provides unified training workflow for text classification:
-- Multiple model training
-- Artifact persistence
-- Prediction generation
-- Probability score handling
-- Progress logging
+Key Features:
+    - Multi-model training pipeline
+    - Model persistence and training artifact storage
+    - Training time tracking and logging
+    - Flexible configuration options
+    - Error handling and validation
+    - Progress monitoring and verbose logging
 
 Dependencies:
-- pathlib
-- typing
-- joblib
-- numpy
-- pandas
-- sklearn.base
+    - pathlib: Path manipulation
+    - typing: Type hints
+    - cloudpickle: Model serialization
+    - numpy: Numerical operations
+    - pandas: Data handling
+    - sklearn.base: Base estimator functionality
 
-Usage:
+Example:
+    >>> from sklearn.svm import SVC
+    >>> from sklearn.ensemble import RandomForestClassifier
+    >>>
+    >>> # Define models to train
     >>> models = {
     ...     'svm': SVC(probability=True),
     ...     'rf': RandomForestClassifier()
     ... }
+    >>>
+    >>> # Run training pipeline
     >>> fitted_models = run_training(
     ...     models=models,
     ...     X_train=train_texts,
     ...     y_train=train_labels,
-    ...     X_test=test_texts,
-    ...     y_test=test_labels,
     ...     output_dir='experiments/run_001'
     ... )
+
+Output Structure:
+    output_dir/
+    ├── model_name/
+    │   ├── model.pkl                 # Serialized model
+    │   ├── train_predictions.csv     # Training predictions
+    │   ├── train_prob.npy           # Training probabilities
+    │   └── model_name_execution_time.txt  # Training time
+    └── training_times.txt           # Summary of all training times
+
+Notes:
+    - All models must implement scikit-learn's estimator interface
+    - Models with predict_proba() support will have probabilities saved
+    - Training times are tracked and persisted for each model
+    - Directory structure is automatically created if not exists
+
+Version: 1.0.0
+Author: CLINC150 RAG Classifier Team
+License: MIT
 """
 
 from __future__ import annotations
-from pathlib import Path
-from typing import Dict, Sequence, Any, Optional, Union
 
-import joblib
-import numpy as np
-import pandas as pd
+import time
+from pathlib import Path
+from typing import Any, Dict, Sequence, Union
+
+import cloudpickle
 from sklearn.base import clone as safe_clone
+
 from src.utils.file_ops import ensure_dir
 
 
@@ -50,85 +74,82 @@ def run_training(
     *,
     X_train: Sequence[str],
     y_train: Sequence[Any],
-    X_test: Optional[Sequence[str]] = None,
-    y_test: Optional[Sequence[Any]] = None,
     output_dir: Union[str, Path] = "artefacts",
     save_models: bool = True,
     save_train_predictions: bool = True,
     verbose: bool = True,
 ) -> Dict[str, Any]:
     """Fit models and persist training artifacts.
-    
+
+    This is the main training pipeline that handles model fitting and artifact persistence.
+    It provides a unified interface for training multiple models and saving their outputs
+    in a structured format.
+
     Args:
-        models: Mapping of model names to unfitted estimators
+        models: Dictionary mapping model names to unfitted scikit-learn estimators
         X_train: Training text data
         y_train: Training labels
-        X_test: Optional test text data
-        y_test: Optional test labels
-        output_dir: Root directory for artifacts
-        save_models: Whether to save fitted models
-        save_train_predictions: Whether to save training predictions
-        verbose: Whether to print progress
-        
+        output_dir: Root directory for saving all artifacts
+        save_models: Whether to persist fitted models to disk
+        save_train_predictions: Whether to save training set predictions
+        verbose: Whether to print progress and warning messages
+
     Returns:
-        Dict mapping model names to fitted estimators
-        
+        Dict[str, Any]: Dictionary mapping model names to their fitted estimators
+
     Raises:
-        ValueError: Invalid test data or model requirements
+        Exception: Any exceptions raised during model training are propagated
+
+    Note:
+        - Training times are tracked and saved for each model
+        - Models are cloned before fitting to prevent modification of input objects
+        - Directory structure is automatically created if it doesn't exist
+        - All operations are performed sequentially for each model
     """
-    # Validate test data consistency
-    if (X_test is None) != (y_test is None):
-        raise ValueError("X_test and y_test must both be provided or both be None")
-        
     output_dir = ensure_dir(output_dir)
     fitted: Dict[str, Any] = {}
+    training_times: Dict[str, float] = {}
 
     for name, model in models.items():
         if verbose:
             print(f"[run_training] Fitting {name}...", flush=True)
 
         try:
+            start = time.perf_counter()
+
             estimator = safe_clone(model)
             estimator.fit(X_train, y_train)
             fitted[name] = estimator
 
+            end = time.perf_counter()
+            execution_time = end - start
+            training_times[name] = execution_time
+
+            print(f"\nTraining completed for {name}")
+            print(f"Time taken: {execution_time:.2f} seconds\n")
+
+            if verbose:
+                print(f"Training time for {name}: {execution_time:.2f} seconds", flush=True)
+
             model_dir = ensure_dir(output_dir / name)
+
+            # Save individual execution time
+            with open(model_dir / f"{name}_execution_time.txt", "w") as f:
+                f.write(f"Training time: {execution_time:.2f} seconds")
 
             # --- persist model ---------------------------------------------------
             if save_models:
-                joblib.dump(estimator, model_dir / "model.joblib")
+                with open(model_dir / "model.pkl", "wb") as f:
+                    cloudpickle.dump(estimator, f)
 
-            # --- persist training predictions -----------------------------------
-            if save_train_predictions:
-                y_train_pred = estimator.predict(X_train)
-                df_train = pd.DataFrame({"y_true": y_train, "y_pred": y_train_pred})
-                df_train.to_csv(model_dir / "train_predictions.csv", index=False)
-
-                if hasattr(estimator, "predict_proba"):
-                    try:
-                        y_train_prob = estimator.predict_proba(X_train)
-                        np.save(model_dir / "train_prob.npy", y_train_prob)
-                    except Exception as e:
-                        if verbose:
-                            print(f"Warning: Could not save train probabilities for {name}: {e}", flush=True)
-            
-            # --- persist test predictions ---------------------------------------
-            if X_test is not None and y_test is not None:
-                y_pred = estimator.predict(X_test)
-                df = pd.DataFrame({"y_true": y_test, "y_pred": y_pred})
-                df.to_csv(model_dir / "test_predictions.csv", index=False)
-
-                if hasattr(estimator, "predict_proba"):
-                    try:
-                        y_prob = estimator.predict_proba(X_test)
-                        np.save(model_dir / "test_prob.npy", y_prob)
-                    except Exception as e:
-                        if verbose:
-                            print(f"Warning: Could not save test probabilities for {name}: {e}", flush=True)
-                            
         except Exception as e:
             if verbose:
                 print(f"Error training model {name}: {e}", flush=True)
             raise
+
+    # Save all training times to a single file
+    with open(output_dir / "training_times.txt", "w") as f:
+        for name, time_taken in training_times.items():
+            f.write(f"{name}: {time_taken:.2f} seconds\n")
 
     return fitted

@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+"""
+05 – Model Evaluation
+
+This script evaluates persisted predictions – no models are loaded. It generates
+comprehensive evaluation metrics and visualizations.
+"""
+
+import sys
+from pathlib import Path
+
+# Infer repo root from the location of this file
+repo_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(repo_root))  # allow `import src.*`
+
+# Import config setup
+from config.notebook_setup import *
+
+# Import dataset and evaluation modules
+from src.datasets.dataset import get_dataset
+from src.evaluation import display_detailed_results, run_evaluations
+from src.utils.model_loader import load_models_from_config
+
+
+def main():
+    """Main function to evaluate models."""
+
+    print("=" * 60)
+    print("Model Evaluation")
+    print("=" * 60)
+
+    # Load dataset
+    print("\nLoading dataset...")
+    X_train, y_train, X_test, y_test, classes = get_dataset(
+        dataset_name="clinc150",
+        use_oos=False,  # Set to True to include out-of-scope examples as an extra class
+    )
+
+    print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
+    print(f"Test set contains {len(X_test)} utterances")
+
+    # Load models (for metadata)
+    print("\n" + "=" * 60)
+    print("Loading Model Configuration")
+    print("=" * 60)
+    try:
+        models = load_models_from_config()
+        if not models:
+            print("⚠️  Warning: No models found in configuration.")
+            return
+        print(f"✅ Loaded configuration for {len(models)} model(s)")
+    except Exception as e:
+        print(f"❌ Error loading model configuration: {e}")
+        raise
+
+    # Check if predictions exist
+    if not PREDICTIONS_DIR.exists() or not any(PREDICTIONS_DIR.iterdir()):
+        print(f"\n⚠️  Warning: No predictions found in {PREDICTIONS_DIR}")
+        print("   Please run 04_model_prediction.py first.")
+        return
+
+    # Run evaluation
+    print("\n" + "=" * 60)
+    print("Running Evaluations")
+    print("=" * 60)
+    try:
+        results = run_evaluations(
+            models,
+            artefacts_root=PREDICTIONS_DIR,
+            output_dir=RESULTS_DIR,
+            verbose=True,
+        )
+        if not results:
+            print("⚠️  Warning: No evaluation results generated.")
+            return
+        print(f"✅ Evaluated {len(results)} model(s)")
+    except Exception as e:
+        print(f"❌ Error during evaluation: {e}")
+        raise
+
+    # Make comparison plots sorted by model name
+    print("\n" + "=" * 60)
+    print("Generating Comparison Plots")
+    print("=" * 60)
+
+    # Define the desired model order
+    model_order = [
+        "Naive Bayes",
+        "Linear SVM",
+        "TF-IDF bigrams + SVM",
+        "MiniLM + LogReg",
+        "OpenAI + LogReg",
+        "RAG-CentroidNN",
+        "RAG-kMajority",
+        "RAG-LLM",  # Uses Ollama LLM by default, can be configured for OpenAI
+    ]
+
+    # Display results in the specified order
+    try:
+        display_detailed_results(results, model_order=model_order, output_dir=RESULTS_DIR)
+        print("✅ Comparison plots generated successfully")
+    except Exception as e:
+        print(f"⚠️  Warning: Error generating comparison plots: {e}")
+        print("   Evaluation results are still available.")
+
+    print("\n✅ Evaluation complete!")
+    print(f"Results saved to: {RESULTS_DIR}")
+
+
+if __name__ == "__main__":
+    main()

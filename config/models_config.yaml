@@ -1,0 +1,65 @@
+# Model Selection Configuration
+# This file defines which models to train in the experiment
+
+models:
+  # Text Classification Models
+  naive_bayes:
+    enabled: true
+    name: "Naive Bayes"
+    class: "NaiveBayesClassifier"
+
+  linear_svm:
+    enabled: true
+    name: "Linear SVM"
+    class: "LinearSVMClassifier"
+
+  linear_svm_bigrams:
+    enabled: true
+    name: "TF-IDF bigrams + SVM"
+    class: "LinearSVMBigrams"
+
+  transformer_logreg:
+    enabled: true
+    name: "MiniLM + LogReg"
+    class: "TransformerLogReg"
+
+  openai_logreg:
+    enabled: false  # Disabled by default - requires OPENAI_API_KEY. Set to true and provide API key to enable.
+    name: "OpenAI + LogReg"
+    class: "OpenAIEmbedLogReg"
+
+  # RAG-based models
+  rag_kmajority:
+    enabled: true
+    name: "RAG-kMajority"
+    class: "RagSklearnAdapter"
+    params:
+      method: "kmajority"
+      top_k: "${model.rag_top_k}"
+      use_openai: false
+
+  rag_centroid:
+    enabled: true
+    name: "RAG-CentroidNN"
+    class: "RagSklearnAdapter"
+    params:
+      method: "centroid"
+      top_k: "${model.rag_top_k}"
+
+  rag_llm:
+    enabled: true  # Enabled by default - uses Ollama LLM with local SBERT embeddings (no API keys needed)
+    name: "RAG-LLM"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # LLM model configuration:
+      # - Default: Uses Ollama (ollama/llama3.1:8b) from config.yaml - no API keys needed
+      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
+      # - To use other providers: See litellm docs for supported models
+      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from config.yaml)
+      # Embedding configuration:
+      # - use_openai: false (default) - Uses local SBERT embeddings (no API key needed)
+      # - use_openai: true - Uses OpenAI embeddings (requires OPENAI_API_KEY)
+      use_openai: false  # Default: false (uses SBERT). Set to true for OpenAI embeddings
+      embedder_model: "${model.sbert_model_name}"  # Used when use_openai: false

@@ -1,39 +1,33 @@
 # General Configuration
 general:
-  run_name: "experiment_with_05_classes"     # used as experiment id
+  run_name: "experiment_10_classes"     # used as experiment id
   seed: 42
 
 # Dataset configuration
 dataset:
-  split_type: "test"                         # [standard | test]
-  n_classes: 25                               # number of classes to classify
-  n_samples_per_class: 100                  # number of samples per class (null for all)
+  name: "clinc150"                           # dataset name (CLINC150 intent classification)
+  use_oos: false                             # include out-of-scope examples
 
 # Paths (all are resolved relative to repo root)
 paths:
   data_exploration_dir: "output/${general.run_name}/data_exploration"  # raw + processed sub-dirs live here
   embeddings_dir: "output/${general.run_name}/embeddings"
   models_dir: "output/${general.run_name}/models"
+  predictions_dir: "output/${general.run_name}/predictions"
   results_dir: "output/${general.run_name}/results"
 
 # Model configuration
 model:
   # Embedding options
   embedding_backend: "sbert"                  # [sbert | openai]
-  sbert_model_name: "sentence-transformers/all-MiniLM-L12-v2"
+  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
   openai_model_name: "text-embedding-3-small"
-  
+
   # Classifier options
   classifier: "linear_svm"                    # [linear_svm | naive_bayes | transformer_logreg]
-  rag_top_k: 5                                # for RAG voting / centroids
-  use_llm_refine: false                       # optional GPT-3.5 refinement pass
+  rag_top_k: 25                               # for RAG voting / centroids
 
-# Training hyper-parameters
-training:
-  batch_size: 32
-  max_epochs: 10
-  learning_rate: 1e-3
-
-# Evaluation
-evaluation:
-  metrics: ["accuracy", "macro_f1", "auc_ovr"]
+  # LLM options (for RAG-LLM models)
+  # Supported: Ollama (e.g., "ollama/llama3.1:8b"), OpenAI (e.g., "gpt-4o-mini", "gpt-4o"), Anthropic, etc.
+  # See litellm documentation for full list: https://docs.litellm.ai/
+  llm_model: "ollama/llama3.1:8b"             # Default LLM model for RAG-LLM classification

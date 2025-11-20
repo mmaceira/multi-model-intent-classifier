@@ -19,30 +19,59 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
 env/
 ENV/
+.venv/
+env.bak/
+venv.bak/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb_checkpoints/
 
-# Model files 
+# Model files and artifacts
 *.pkl
+*.joblib
 *.h5
+*.hdf5
 *.model
 *.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.tflite
+*.pb
+
+# Embeddings and vector stores
+*.faiss
+*.index
+*.meta.jsonl
+embeddings/
+*.npy
+*.npz
 
 # Distribution / packaging
 .env
-.venv
+.env.local
+.env.*.local
+*.env
 
 # Testing
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
+.pytest_cache/
+.hypothesis/
+*.cover
+*.log
 
 # IDEs and editors
 .idea/
@@ -50,12 +79,67 @@ htmlcov/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
 
 # OS specific
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Project specific
 data/interim/
 data/processed/
-outputs/ 
+outputs/
+output/
+*.csv
+!tests/**/*.csv
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Cache
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Large files (if needed)
+*.zip
+*.tar.gz
+*.rar
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Lock files (uncomment if you don't want to track them)
+# uv.lock
+# poetry.lock
+# Pipfile.lock
+# requirements*.txt

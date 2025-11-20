@@ -1,0 +1,85 @@
+[project]
+name = "multi-model-intent-classifier"
+version = "0.1.0"
+description = "A production-ready NLP pipeline for automated intent classification and semantic search, built on the CLINC150 dataset."
+authors = [
+  { name = "Marc Maceira" },
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles==24.1.0",
+    "apscheduler==3.10.4",
+    "backoff==2.2.1",
+    "cloudpickle==3.0.0",
+    "cryptography>=41.0.0",
+    "dataframe_image==0.2.7",
+    "email-validator>=2.0.0",
+    "fastapi-sso>=0.3.0",
+    "faiss-cpu==1.11.0",
+    "fastapi==0.115.12",
+    "gradio==5.29.0",
+    "kaleido==0.2.1",
+    "litellm[proxy]>=1.0.0",
+    "matplotlib==3.10.1",
+    "nest-asyncio==1.6.0",
+    "numpy==2.2.5",
+    "openai==1.77.0",
+    "pandas==2.2.3",
+    "pydantic==2.11.4",
+    "python-dotenv==1.1.0",
+    "python-multipart==0.0.20",
+    "pyyaml",
+    "ray==2.45.0",
+    "ray[rllib]",
+    "scikit-learn==1.6.1",
+    "seaborn==0.13.2",
+    "sentence-transformers==4.1.0",
+    "shap==0.45.0",
+    "tqdm==4.67.1",
+    "umap-learn==0.5.5",
+    "uvicorn[standard]==0.34.2",
+    "datasets>=2.0.0",
+]
+
+[project.scripts]
+multi-model-api = "scripts.api.main_api:main"
+multi-model-pipeline = "scripts.pipeline.run_all:main"
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit",
+  "ruff",
+  "black",
+  "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# 👇 NEW: tell setuptools which packages to include/exclude
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+exclude = ["setup*", "tests*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+combine-as-imports = true
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]

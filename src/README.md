@@ -1,84 +1,176 @@
 # Source Code Documentation
 
-This directory contains the core source code for the Reuters RAG Classifier project. The code is organized into several modules, each responsible for a specific aspect of the system.
+This directory contains the core source code for the CLINC150 RAG Classifier project. The code is organized into several modules, each responsible for a specific aspect of the system.
 
 ## Directory Structure
 
 ```
 src/
 ├── algorithms/     # Machine learning algorithms implementation
-├── analysis/       # Data analysis and visualization modules
 ├── datasets/       # Dataset handling and preprocessing
 ├── embeddings/     # Embedding generation and management
 ├── evaluation/     # Model evaluation and metrics
-├── rag/           # RAG implementation and utilities
-└── utils/         # Utility functions and helpers
+├── exploration.py  # Data exploration and visualization
+├── model.py        # Core model interfaces and implementations
+├── prediction.py   # Prediction utilities and inference pipeline
+├── rag/            # RAG implementation and utilities
+├── training.py     # Training utilities and pipeline
+└── utils/          # Utility functions and helpers
 ```
 
+## Core Modules
+
+### model.py
+
+The central model definitions and interfaces:
+
+- `TextClassifier` (abstract base class): Core interface for all text classifiers
+- `TextClassifier`: Main classifier implementation with model factory functionality
+- `NBClassifier`: Naive Bayes classifier implementation
+- `SVMClassifier`: Support Vector Machine classifier implementation
+- `BERTClassifier`: Transformer-based classifier implementation
+
+```python
+# Example usage
+from src.model import TextClassifier
+from src.algorithms.linear_svm import LinearSVMClassifier
+
+# Create a classifier instance
+classifier = LinearSVMClassifier()
+
+# Train the classifier
+classifier.fit(X_train, y_train)
+
+# Make predictions
+predictions = classifier.predict(X_test)
+```
+
+### prediction.py
+
+Handles all aspects of model inference and prediction:
+
+- `classify_text`: End-to-end text classification function
+- `TextPredictionPipeline`: Reusable prediction pipeline
+- `ModelRegistry`: Factory pattern for model instantiation
+- `ModelCache`: Caching system for efficient model loading
+
+```python
+# Example usage
+from src.prediction import classify_text
+
+# Classify a single document
+result = classify_text("What is the weather today?", model_type="bert_lr")
+print(f"Predicted class: {result['class']}")
+print(f"Confidence: {result['confidence']}")
+```
+
+### training.py
+
+Manages model training and hyperparameter optimization:
+
+- `train_model`: High-level training function
+- `ModelTrainer`: Configurable training pipeline
+- `TrainingConfig`: Configuration dataclass
+- `evaluate_during_training`: Training-time evaluation
+
+```python
+# Example usage
+from src.training import train_model
+from sklearn.model_selection import train_test_split
+
+# Split data
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+
+# Train model
+model, metrics = train_model(
+    X_train, y_train,
+    X_val, y_val,
+    model_type="svm_linear"
+)
+```
+
+### exploration.py
+
+Tools for dataset exploration and visualization:
+
+- `DataExplorer`: Main class for data exploration
+- `visualize_class_distribution`: Topic visualization
+- `analyze_text_lengths`: Text length analysis
+- `generate_wordclouds`: Word cloud generation
+- `export_analysis`: Export analysis results
+
 ## Module Documentation
-
-### algorithms/
-
-Contains implementations of various machine learning algorithms used for classification:
-
-- `naive_bayes.py`: Multinomial Naive Bayes implementation
-- `svm.py`: Support Vector Machine implementation
-- `logistic_regression.py`: Logistic Regression with transformer embeddings
-- `ensemble.py`: Ensemble methods and model stacking
-
-### analysis/
-
-Data analysis and visualization tools:
-
-- `topic_analysis.py`: Topic distribution and evolution analysis
-- `text_analysis.py`: Text preprocessing and feature extraction
-- `visualization.py`: Plotting and visualization utilities
-- `trend_analysis.py`: Time-series analysis of topics
-
-### datasets/
-
-Dataset handling and preprocessing:
-
-- `reuters.py`: Reuters-21578 dataset loader
-- `preprocessing.py`: Text preprocessing pipeline
-- `augmentation.py`: Data augmentation techniques
-- `validation.py`: Data validation and quality checks
-
-### embeddings/
-
-Embedding generation and management:
-
-- `transformer.py`: Transformer-based embeddings
-- `faiss_index.py`: FAISS index management
-- `embedding_utils.py`: Embedding utilities and helpers
-- `cache.py`: Embedding caching system
-
-### evaluation/
-
-Model evaluation and metrics:
-
-- `metrics.py`: Custom evaluation metrics
-- `cross_validation.py`: Cross-validation utilities
-- `error_analysis.py`: Error analysis tools
-- `benchmark.py`: Performance benchmarking
-
-### rag/
-
-RAG implementation and utilities:
-
-- `retriever.py`: Document retrieval system
-- `generator.py`: LLM-based answer generation
-- `pipeline.py`: End-to-end RAG pipeline
-- `optimization.py`: RAG optimization techniques
 
 ### utils/
 
 Utility functions and helpers:
 
-- `logging.py`: Logging configuration
-- `config.py`: Configuration management
-- `file_utils.py`: File handling utilities
-- `time_utils.py`: Time-related utilities
+- `logging.py`: Logging configuration with rotating file handlers
+- `config.py`: Configuration management with YAML support
+- `file_utils.py`: File handling and IO operations
+- `time_utils.py`: Time measurement and benchmarking
+- `nlp_utils.py`: NLP-specific utilities
+
+### datasets/
+
+Dataset handling and preprocessing:
+
+- `clinc150.py`: CLINC150 intent classification dataset loader
+- `dataset.py`: Main dataset loading interface
+- `preprocessing.py`: Text preprocessing pipeline with multiple cleaning options
+- `augmentation.py`: Data augmentation techniques for expanded training
+- `validation.py`: Data validation and quality checking tools
+
+### embeddings/
+
+Embedding generation and management:
+
+- `transformer.py`: Transformer-based embeddings with model providers
+- `faiss_index.py`: FAISS index management for efficient similarity search
+- `embedding_utils.py`: Utility functions for embedding manipulation
+- `cache.py`: Caching system for embedding reuse and persistence
+
+### algorithms/
+
+Contains implementations of various machine learning algorithms used for classification:
+
+- `naive_bayes.py`: Multinomial Naive Bayes implementation with custom smoothing
+- `svm.py`: Support Vector Machine with optimized hyperparameters
+- `logistic_regression.py`: Logistic Regression with transformer embeddings
+- `ensemble.py`: Ensemble methods including voting and stacking
+
+### rag/
+
+RAG implementation and utilities:
+
+- `__init__.py`: Module initialization and configuration
+- `adapter_sklearn.py`: Scikit-learn compatibility adapter
+- `rag_kmajority.py`: K-Majority RAG implementation
+- `rag_llm.py`: LLM-based RAG implementation
+- `centroid_nn.py`: Centroid-based nearest neighbors
+- `build_index.py`: Index building utilities
+- `vector_store.py`: Vector store implementation
+- `retrieval.py`: Document retrieval system
+- `classifier_base.py`: Base class for RAG classifiers
+
+### evaluation/
+
+Model evaluation and metrics:
+
+- `metrics.py`: Custom evaluation metrics beyond standard sklearn
+- `cross_validation.py`: Stratified cross-validation for imbalanced datasets
+- `error_analysis.py`: In-depth error analysis and misclassification detection
+- `benchmark.py`: Performance benchmarking across hardware configurations
+
+## Design Patterns
+
+The codebase implements several design patterns to ensure maintainability and extensibility:
+
+1. **Factory Pattern**: Used in `model.py` to create different classifier types
+2. **Strategy Pattern**: Used for different vectorization strategies
+3. **Adapter Pattern**: Used in RAG to adapt between different APIs
+4. **Singleton Pattern**: Used for configuration and logging
+5. **Builder Pattern**: Used for complex pipeline construction
 
 ## Code Style Guide
 
@@ -93,58 +185,8 @@ Utility functions and helpers:
    - Use type hints for function parameters and return values
    - Document complex algorithms with comments
 
-3. **Testing**
-   - Write unit tests for all public functions
-   - Include integration tests for major components
-   - Maintain test coverage above 80%
-
-## Development Workflow
-
-1. **Adding New Features**
-   - Create a new branch from `main`
-   - Add tests for new functionality
-   - Update documentation
-   - Submit pull request
-
-2. **Code Review**
-   - Ensure code follows style guide
-   - Verify test coverage
-   - Check documentation completeness
-   - Review performance implications
-
-3. **Deployment**
-   - Update version numbers
-   - Update dependencies
-   - Run full test suite
-   - Generate documentation
-
-## Dependencies
-
-Core dependencies are listed in `requirements.txt`. Additional development dependencies are in `requirements-dev.txt`.
-
-## Contributing
-
-When contributing to the source code:
-
-1. Follow the established code style
-2. Add comprehensive tests
-3. Update relevant documentation
-4. Ensure backward compatibility
-5. Consider performance implications
-
-## Performance Considerations
-
-1. **Memory Usage**
-   - Use generators for large datasets
-   - Implement proper cleanup
-   - Monitor memory usage
-
-2. **Processing Speed**
-   - Use vectorized operations
-   - Implement caching where appropriate
-   - Consider parallel processing
-
-3. **API Usage**
-   - Implement rate limiting
-   - Use connection pooling
-   - Handle timeouts gracefully 
+3. **Code Structure**
+   - Follow the Single Responsibility Principle
+   - Keep functions focused and concise
+   - Use meaningful variable names
+   - Limit line length to 100 characters
