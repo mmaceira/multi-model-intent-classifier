@@ -60,8 +60,6 @@ class LinearSVMClassifier(TextClassifier):
         self.classes_ = None
 
     def _fit_model(self, X_vec, y):
-        # Keep scikit‑learn compatibility
-        self.classes_ = getattr(self.clf, "classes_", None)
         """Train the SVM classifier.
 
         Args:
@@ -69,7 +67,8 @@ class LinearSVMClassifier(TextClassifier):
             y: Labels
         """
         self.clf.fit(X_vec, y)
-        self.classes_ = self.clf.classes_
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, "classes_", None)
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.
@@ -169,8 +168,6 @@ class LinearSVMBigrams(TextClassifier):
         self.classes_ = None
 
     def _fit_model(self, X_vec, y):
-        # Keep scikit‑learn compatibility
-        self.classes_ = getattr(self.clf, "classes_", None)
         """Train the SVM classifier.
 
         Args:
@@ -178,7 +175,8 @@ class LinearSVMBigrams(TextClassifier):
             y: Labels
         """
         self.clf.fit(X_vec, y)
-        self.classes_ = self.clf.classes_
+        # Keep scikit‑learn compatibility
+        self.classes_ = getattr(self.clf, "classes_", None)
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.

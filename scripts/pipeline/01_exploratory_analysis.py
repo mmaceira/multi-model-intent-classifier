@@ -49,7 +49,11 @@ def main():
     print("\nLoading dataset...")
     X_train, y_train, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
-        use_oos=False,  # Set to True to include out-of-scope examples as an extra class
+        use_oos=config_vars.get("DATASET_USE_OOS", False),
+        max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
+        max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
+        max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
+        seed=config_vars.get("GENERAL_SEED", 42),
     )
 
     print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")

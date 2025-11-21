@@ -1,3 +1,10 @@
+import pytest
+
+try:
+    from datasets import load_dataset  # noqa: F401
+except ImportError:
+    pytest.skip("datasets not installed; skipping CLINC150 tests", allow_module_level=True)
+
 from src.datasets.dataset import get_dataset
 
 

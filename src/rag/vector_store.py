@@ -118,14 +118,27 @@ class VectorStore:
                 for line in f:
                     self._meta.append(json.loads(line))
 
-            # Initialize embedder for search functionality
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise EnvironmentError("OPENAI_API_KEY not set in environment")
+            # Determine embedding type from path (sbert vs openai)
+            # If path contains "sbert", use SBERT embeddings; otherwise check for OpenAI
+            use_openai_embeddings = "openai" in str(index_path).lower()
 
-            self.embedder = EmbeddingGenerator(
-                api_key=api_key, model="text-embedding-3-small", batch_size=100, max_retries=3
-            )
+            if use_openai_embeddings:
+                # Initialize OpenAI embedder for search functionality
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                self.embedder = EmbeddingGenerator(
+                    api_key=api_key, model="text-embedding-3-small", batch_size=100, max_retries=3
+                )
+            else:
+                # Use SBERT embeddings - no API key needed
+                # We'll use the static embed method when needed
+                self.embedder = None
+                # Default SBERT model (can be overridden in search calls)
+                self._embed_model = kwargs.get(
+                    "embed_model", "sentence-transformers/all-MiniLM-L6-v2"
+                )
+
             self.vectors = {}
             self.metadata = {}
         else:
@@ -218,7 +231,12 @@ class VectorStore:
         """
         # Handle both string queries and embedding vectors
         if isinstance(query, str):
-            query_embedding = self.embedder.generate_embeddings([query])[0]
+            if self.embedder is not None:
+                # Use OpenAI embedder
+                query_embedding = self.embedder.generate_embeddings([query])[0]
+            else:
+                # Use SBERT embeddings
+                query_embedding = self.embed(self._embed_model, [query])[0]
         elif isinstance(query, np.ndarray):
             query_embedding = query
         else:

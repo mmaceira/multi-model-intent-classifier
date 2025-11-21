@@ -15,7 +15,11 @@ import yaml
 repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
-with open(repo_root / "config" / "config.yaml") as fp:
+# Allow config file to be overridden via environment variable
+config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_path = repo_root / "config" / config_file
+
+with open(config_path) as fp:
     cfg = yaml.safe_load(fp)
 
 
@@ -67,7 +71,7 @@ N_CLASSES = config_vars.get("DATASET_N_CLASSES")
 N_SAMPLES_PER_CLASS = config_vars.get("DATASET_N_SAMPLES_PER_CLASS")
 SEED = config_vars.get("GENERAL_SEED")
 RUN_NAME = config_vars.get("GENERAL_RUN_NAME")
-RAG_TOP_K = int(config_vars.get("MODEL_RAG_TOP_K"))
+RAG_TOP_K = int(config_vars.get("MODEL_RAG_TOP_K", 25))  # Default to 25 if not found
 
 # Path variables with shorter names for backward compatibility
 DATA_EXPLORATION_DIR = config_vars.get("PATHS_DATA_EXPLORATION_DIR")

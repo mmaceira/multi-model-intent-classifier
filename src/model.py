@@ -76,12 +76,19 @@ class TextClassifier(ABC, BaseEstimator):
         vectorizer: Text vectorization component that converts raw text to feature vectors.
                    Must implement either a transform() method or be callable.
         _is_fitted: Boolean flag indicating whether the model has been trained.
+        _expects_vectors: Class attribute (set on the class, not instance) indicating whether
+                         the classifier expects pre-vectorized input. Set to False for classifiers
+                         that work with raw text (the default). Set to True if the classifier
+                         expects vectorized features directly. This is used by the API loader
+                         to determine whether to wrap the model with a vectorizer.
 
     Notes:
         - Subclasses must implement _fit_model and _predict_model methods
         - The class follows scikit-learn's BaseEstimator interface for parameter handling
         - Type checking and validation are performed to ensure robust operation
         - Thread-safety depends on the underlying vectorizer and model implementations
+        - Subclasses should set `_expects_vectors = False` (default) if they work with raw text,
+          or `_expects_vectors = True` if they expect pre-vectorized features
 
     Example:
         >>> from sklearn.feature_extraction.text import CountVectorizer

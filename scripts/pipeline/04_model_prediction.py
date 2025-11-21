@@ -34,7 +34,11 @@ def main():
     print("\nLoading dataset...")
     X_train, y_train, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
-        use_oos=False,  # Set to True to include out-of-scope examples as an extra class
+        use_oos=config_vars.get("DATASET_USE_OOS", False),
+        max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
+        max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
+        max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
+        seed=config_vars.get("GENERAL_SEED", 42),
     )
 
     print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
@@ -86,11 +90,14 @@ def main():
     print("Running Predictions")
     print("=" * 60)
     print(f"Generating predictions for {len(X_test)} test samples...")
+    print(
+        "Note: Only test set predictions are generated (training predictions skipped for efficiency)"
+    )
     try:
         run_prediction(
             models_to_predict,
-            X_train=X_train,
-            y_train=y_train,
+            X_train=None,  # Skip training predictions - they're slow and usually not needed
+            y_train=None,
             X_test=X_test,
             y_test=y_test,
             output_dir=PREDICTIONS_DIR,

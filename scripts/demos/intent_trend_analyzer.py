@@ -1,33 +1,34 @@
 """
-News Trend Analyzer Application
+Intent Trend Analyzer Application
 
-This script provides a Gradio-based web interface for analyzing news trends and topic evolution using semantic search and large language models (LLMs) on the Reuters news corpus.
+This script provides a Gradio-based web interface for analyzing intent trends and evolution using semantic search and large language models (LLMs) on the CLINC150 intent classification dataset.
 
 Key Features:
-- Time-series and trend analysis of news topics
-- Retrieval of semantically similar articles using vector embeddings and FAISS
+- Time-series and trend analysis of user intents
+- Retrieval of semantically similar utterances using vector embeddings and FAISS
 - LLM-powered relevance classification and trend commentary
 - Interactive configuration and visualization of results
 - Clear error handling and informative feedback
 
 Usage:
-- Place this script in the `scripts/` directory of your project
-- Ensure the FAISS index, metadata, and OpenAI API key are correctly set (defaults provided)
-- Run the script: `python scripts/news_trend_analyzer.py`
-- Access the Gradio web interface to analyze news trends interactively
+- Run the script: `python scripts/demos/intent_trend_analyzer.py`
+- Access the Gradio web interface to analyze intent trends interactively
 
-This script is suitable for production and demonstration, enabling users to explore topic evolution and trend analysis in news data.
+This script is suitable for production and demonstration, enabling users to explore intent evolution and trend analysis in user utterance data.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import faiss
 import gradio as gr
 import numpy as np
+import yaml
 from litellm import completion
 from sentence_transformers import SentenceTransformer
 
@@ -37,28 +38,60 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
+# Project root
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Load config to get default paths
+config_path = project_root / "config" / "config.yaml"
+with open(config_path) as f:
+    config = yaml.safe_load(f)
+
+
+def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+    """Replace variable references in string values with their actual values from config."""
+    if isinstance(value, str) and "${" in value:
+        import re
+
+        var_pattern = r"\${([^}]+)}"
+        for var_path in re.findall(var_pattern, value):
+            if "." in var_path:
+                section, var = var_path.split(".", 1)
+                if section in cfg and var in cfg[section]:
+                    value = value.replace(f"${{{var_path}}}", str(cfg[section][var]))
+    return value
+
+
+# Resolve paths from config
+run_name = config["general"]["run_name"]
+embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
+embeddings_path = str(project_root / embeddings_path)
+
 # Default configuration
 DEFAULT_CONFIG = {
-    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-    "index_path": "output/experiment_10_classes/embeddings/sbert/index.faiss",
-    "meta_path": "output/experiment_10_classes/embeddings/sbert/meta.jsonl",
+    "model_name": config.get("model", {}).get(
+        "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
+    ),
+    "index_path": str(Path(embeddings_path) / "sbert" / "index.faiss"),
+    "meta_path": str(Path(embeddings_path) / "sbert" / "meta.jsonl"),
     "top_k": 5,
     "max_tokens": 512,
     "relevance_labels": ("high", "medium", "low"),
-    "classification_model": "ollama/llama3.1:8b",
-    "analysis_model": "ollama/llama3.1:8b",
+    "classification_model": config.get("model", {}).get("llm_model", "ollama/llama3.1:8b"),
+    "analysis_model": config.get("model", {}).get("llm_model", "ollama/llama3.1:8b"),
     "classification_temp": 0.3,
     "analysis_temp": 0.2,
 }
 
 
-class NewsTrendAnalyzer:
+class IntentTrendAnalyzer:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or DEFAULT_CONFIG
         self._initialize_resources()
 
     def _initialize_resources(self):
-        """Initialize required resources (model, index, OpenAI client)."""
+        """Initialize required resources (model, index, LLM client)."""
         logging.info("Initializing resources...")
 
         # Load SBERT model
@@ -87,10 +120,10 @@ class NewsTrendAnalyzer:
     def _classify_relevance(self, query: str, doc: str) -> Tuple[str, str]:
         """Classify relevance of a document to the query using LLM."""
         system = (
-            "You are an expert assistant. Label how relevant this previous news article is to understanding a new article. "
+            "You are an expert assistant. Label how relevant this previous user utterance is to understanding a new utterance. "
             f"Use labels {self.config['relevance_labels']}. Respond in JSON: {{ relevance: label, comment: rationale }}."
         )
-        user = f"New Article:\n{query}\n\nPrevious Article:\n{doc}\n"
+        user = f"New Utterance:\n{query}\n\nPrevious Utterance:\n{doc}\n"
         resp = completion(
             model=self.config["classification_model"],
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -104,19 +137,19 @@ class NewsTrendAnalyzer:
         except json.JSONDecodeError:
             return "low", content.replace("\n", " ")
 
-    def analyze_news_trend(self, article: str, k: int = None) -> str:
-        """Analyze news trends for a given article."""
+    def analyze_intent_trend(self, utterance: str, k: int = None) -> str:
+        """Analyze intent trends for a given utterance."""
         k = k or self.config["top_k"]
 
         # Retrieve similar docs
-        q_emb = self._embed_and_normalize([article])
+        q_emb = self._embed_and_normalize([utterance])
         scores, idxs = self.index.search(q_emb, k)
 
         # Process retrieved documents
         retrieved = []
         for rank, (idx, score) in enumerate(zip(idxs[0], scores[0], strict=False), start=1):
             prev_text = self.meta[idx]["text"]
-            rel, comment = self._classify_relevance(article, prev_text)
+            rel, comment = self._classify_relevance(utterance, prev_text)
             retrieved.append(
                 {
                     "rank": rank,
@@ -129,18 +162,18 @@ class NewsTrendAnalyzer:
 
         # Build context from medium/high relevance articles
         context = "\n\n".join(
-            f"[Article {r['rank']} | {r['rel']}] {r['text']}"
+            f"[Utterance {r['rank']} | {r['rel']}] {r['text']}"
             for r in retrieved
             if r["rel"] in ("high", "medium")
         )
 
         # Generate trend analysis
         system = (
-            "You are a news analyst. Given a new article and context of past articles, "
-            "assess whether the new information is surprising or in line with previous trends, "
+            "You are an intent classification analyst. Given a new user utterance and context of past utterances, "
+            "assess whether the new intent is surprising or in line with previous patterns, "
             "and what we might expect next."
         )
-        prompt = f"New Article:\n{article}\n\nContext of Past Articles:\n{context}\n\nQ: Is this new article surprising compared to past trends? What can we expect next?"
+        prompt = f"New Utterance:\n{utterance}\n\nContext of Past Utterances:\n{context}\n\nQ: Is this new utterance surprising compared to past patterns? What can we expect next?"
         analysis = completion(
             model=self.config["analysis_model"],
             messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
@@ -155,18 +188,18 @@ class NewsTrendAnalyzer:
         )
 
         return (
-            f"New Article Analysis:\n{analysis_text}\n\n"
-            "----\nPrevious Article Commentary:\n"
+            f"New Utterance Analysis:\n{analysis_text}\n\n"
+            "----\nPrevious Utterance Commentary:\n"
             f"{commentary}"
         )
 
 
 def create_demo():
     """Create the Gradio demo interface."""
-    analyzer = NewsTrendAnalyzer()
+    analyzer = IntentTrendAnalyzer()
 
-    with gr.Blocks(title="News Trend Analyzer") as demo:
-        gr.Markdown("# 📰 News Trend Analyzer")
+    with gr.Blocks(title="Intent Trend Analyzer") as demo:
+        gr.Markdown("# 🎯 Intent Trend Analyzer")
 
         with gr.Row():
             with gr.Column(scale=3):
@@ -178,15 +211,15 @@ def create_demo():
                     maximum=20,
                     value=DEFAULT_CONFIG["top_k"],
                     step=1,
-                    label="Number of Similar Articles",
+                    label="Number of Similar Utterances",
                 )
 
             with gr.Column(scale=4):
                 gr.Markdown("### Analysis")
-                article = gr.Textbox(
+                utterance = gr.Textbox(
                     lines=10,
-                    label="Enter News Article",
-                    placeholder="Paste your news article here...",
+                    label="Enter User Utterance",
+                    placeholder="Paste your user utterance here...",
                 )
                 analyze_btn = gr.Button("Analyze Trends", variant="primary")
 
@@ -194,11 +227,13 @@ def create_demo():
                 output = gr.Markdown()
 
         # Analyze button action
-        analyze_btn.click(fn=analyzer.analyze_news_trend, inputs=[article, top_k], outputs=output)
+        analyze_btn.click(
+            fn=analyzer.analyze_intent_trend, inputs=[utterance, top_k], outputs=output
+        )
 
     return demo
 
 
 if __name__ == "__main__":
-    print("[main] Launching news trend analyzer...")
+    print("[main] Launching intent trend analyzer...")
     create_demo().launch()

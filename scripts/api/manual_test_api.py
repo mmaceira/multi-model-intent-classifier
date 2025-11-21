@@ -41,7 +41,7 @@ def get_available_models():
     return available_models
 
 
-def test_model(model_id, text):
+def run_model_test(model_id, text):
     """Send a test request to a specific model."""
     url = "http://127.0.0.1:8000/predict"
     headers = {"Content-Type": "application/json"}
@@ -69,7 +69,7 @@ def main():
     # Test each model
     for model_id, info in models.items():
         print(f"\nTesting model: {info['name']} ({model_id})")
-        result = test_model(model_id, test_text)
+        result = run_model_test(model_id, test_text)
 
         if "error" in result:
             print(f"Error: {result['error']}")

@@ -7,6 +7,7 @@ general:
 dataset:
   name: "clinc150"                           # dataset name (CLINC150 intent classification)
   use_oos: false                             # include out-of-scope examples
+  max_classes: 10                             # Limit to 10 classes for this experiment
 
 # Paths (all are resolved relative to repo root)
 paths:

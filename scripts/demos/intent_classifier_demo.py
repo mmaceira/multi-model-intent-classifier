@@ -1,26 +1,25 @@
 """
-Reuters News Classifier & Semantic Search Demo
+CLINC150 Intent Classifier & Semantic Search Demo
 
-This script launches a Gradio-based web application for interactive news article classification and semantic search using pre-trained models from the Reuters RAG Classifier project.
+This script launches a Gradio-based web application for interactive intent classification and semantic search using pre-trained models from the CLINC150 Intent Classifier project.
 
 Key Features:
 - Select from multiple classification and RAG (Retrieval-Augmented Generation) models
-- Paste or enter news article text or queries for instant topic classification or semantic search
+- Paste or enter user utterances for instant intent classification or semantic search
 - Robust model loading supporting various serialization formats (joblib, pickle, scikit-learn pipelines, or dicts)
 - Automatic handling of both traditional ML and RAG-based models, including FAISS index and passage retrieval
 - Clear error handling and informative feedback for missing or incompatible models
 
 Usage:
-- Place this script in the `scripts/` directory of your project
-- Ensure model and embedding directories are correctly set (defaults provided)
-- Run the script: `python scripts/reuters_news_classifier_demo.py`
+- Run the script: `python scripts/demos/intent_classifier_demo.py`
 - Access the Gradio web interface to interact with the models
 
-This script is designed for production and demonstration purposes, providing a user-friendly interface for exploring news classification and semantic search capabilities.
+This script is designed for production and demonstration purposes, providing a user-friendly interface for exploring intent classification and semantic search capabilities.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import pickle
 import sys
@@ -31,27 +30,53 @@ import faiss
 import gradio as gr
 import joblib
 import numpy as np
-
-# Default directory paths
-DEFAULT_MODELS_PATH = "output/experiment_10_classes/models"
-DEFAULT_EMBEDDINGS_PATH = "output/experiment_10_classes/embeddings"
+import yaml
 
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
 # --------------------------------------------------------------------------- #
-project_root = Path(__file__).resolve().parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from src.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_model_file
 
+# Load config to get default paths
+config_path = project_root / "config" / "config.yaml"
+with open(config_path) as f:
+    config = yaml.safe_load(f)
+
+
+def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+    """Replace variable references in string values with their actual values from config."""
+    if isinstance(value, str) and "${" in value:
+        import re
+
+        var_pattern = r"\${([^}]+)}"
+        for var_path in re.findall(var_pattern, value):
+            if "." in var_path:
+                section, var = var_path.split(".", 1)
+                if section in cfg and var in cfg[section]:
+                    value = value.replace(f"${{{var_path}}}", str(cfg[section][var]))
+    return value
+
+
+# Resolve paths from config
+run_name = config["general"]["run_name"]
+models_path = substitute_vars(config["paths"]["models_dir"], config)
+embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
+
+# Convert to absolute paths
+DEFAULT_MODELS_PATH = str(project_root / models_path)
+DEFAULT_EMBEDDINGS_PATH = str(project_root / embeddings_path)
+
 # --------------------------------------------------------------------------- #
-# 1. Model‑info table (UNCHANGED, but shortened here for clarity)             #
+# 1. Model‑info table                                                         #
 # --------------------------------------------------------------------------- #
 MODELS_INFO = {
     "naive_bayes": {
         "name": "Naive Bayes",
-        "description": "Multinomial Naive Bayes classifier using TF-IDF features. Fast and efficient for text classification.",
+        "description": "Multinomial Naive Bayes classifier using TF-IDF features. Fast and efficient for intent classification.",
         "dir": "Naive Bayes",
         "type": "classifier",
     },
@@ -63,7 +88,7 @@ MODELS_INFO = {
     },
     "tfidf_svm": {
         "name": "TF-IDF + SVM",
-        "description": "SVM classifier using TF-IDF bigram features. Strong performance on news category prediction.",
+        "description": "SVM classifier using TF-IDF bigram features. Strong performance on intent classification.",
         "dir": "TF-IDF bigrams + SVM",
         "type": "classifier",
     },
@@ -81,7 +106,7 @@ MODELS_INFO = {
     },
     "rag_kmajority": {
         "name": "RAG k-Majority",
-        "description": "RAG model with k-majority voting to determine the most relevant documents.",
+        "description": "RAG model with k-majority voting to determine the most relevant intents.",
         "dir": "RAG-kMajority",
         "type": "rag",
     },
@@ -225,8 +250,6 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
         # Load passages from meta.jsonl
         passages = []
         if meta_path.exists():
-            import json
-
             with open(meta_path, "r") as f:
                 for line in f:
                     try:
@@ -253,7 +276,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
 
                     # Initialize appropriate RAG model based on model_id
                     if "kmajority" in model_id:
-                        rag_model = load_kmajority(top_k=5, use_openai="openai" in model_id)
+                        rag_model = load_kmajority(use_openai="openai" in model_id)
                     elif "centroid" in model_id:
                         rag_model = load_centroid(use_openai="openai" in model_id)
                     else:  # LLM-based RAG
@@ -261,7 +284,9 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                             embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
                             rag_model = load_llm(
                                 top_k=5,
-                                model="ollama/llama3.1:8b",
+                                model=config.get("model", {}).get(
+                                    "llm_model", "ollama/llama3.1:8b"
+                                ),
                                 embedder=embedder,
                                 use_openai=True,
                             )
@@ -269,12 +294,17 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                             # For local embeddings, use the same model that was used to create the index
                             def embedder(texts):
                                 return VectorStore.embed(
-                                    "sentence-transformers/all-MiniLM-L6-v2", texts
+                                    config.get("model", {}).get(
+                                        "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
+                                    ),
+                                    texts,
                                 )
 
                             rag_model = load_llm(
                                 top_k=5,
-                                model="ollama/llama3.1:8b",
+                                model=config.get("model", {}).get(
+                                    "llm_model", "ollama/llama3.1:8b"
+                                ),
                                 embedder=embedder,
                                 use_openai=False,
                             )
@@ -352,7 +382,7 @@ def predict(
             try:
                 if hasattr(clf, "predict"):
                     label = clf.predict([text])[0]
-                    classification = f"**Predicted category:** {label}\n\n"
+                    classification = f"**Predicted intent:** {label}\n\n"
 
                     if hasattr(clf, "predict_proba"):
                         probas = clf.predict_proba([text])[0]
@@ -378,7 +408,7 @@ def predict(
         documents = "\n\n".join(f"• {p[:400]}..." for p in retrieved) or "No documents found."
 
         # Combine classification and documents
-        answer = f"{classification}**Retrieved Documents:**\n\n{documents}"
+        answer = f"{classification}**Retrieved Similar Utterances:**\n\n{documents}"
         return answer
 
     # -------------------- Plain classification ----------------------------- #
@@ -386,7 +416,7 @@ def predict(
         pred = model.predict([text])
         label = pred[0] if pred is not None else "unknown"
 
-        result_lines = [f"**Predicted category:** {label}"]
+        result_lines = [f"**Predicted intent:** {label}"]
         if hasattr(model, "predict_proba"):
             probas = model.predict_proba([text])
             if probas is not None:
@@ -414,8 +444,8 @@ def predict(
 
 def create_demo():
     """Create the Gradio demo interface."""
-    with gr.Blocks(title="Reuters News Classifier & Search") as demo:
-        gr.Markdown("# 📰 Reuters News Classifier & Search")
+    with gr.Blocks(title="CLINC150 Intent Classifier & Search") as demo:
+        gr.Markdown("# 🎯 CLINC150 Intent Classifier & Search")
 
         with gr.Row():
             with gr.Column(scale=3):
@@ -469,15 +499,15 @@ def create_demo():
                     maximum=10,
                     value=3,
                     step=1,
-                    label="Number of Documents (for RAG models)",
+                    label="Number of Similar Utterances (for RAG models)",
                 )
 
             with gr.Column(scale=4):
                 gr.Markdown("### Text Input")
                 text_input = gr.Textbox(
                     lines=8,
-                    label="Enter Article Text or Query",
-                    placeholder="Paste news article or query text here...",
+                    label="Enter User Utterance or Query",
+                    placeholder="Paste user utterance or query text here...",
                 )
 
                 analyze_btn = gr.Button("Analyze", variant="primary")

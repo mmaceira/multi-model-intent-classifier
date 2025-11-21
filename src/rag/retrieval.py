@@ -139,7 +139,18 @@ class Retriever:
         index_path, meta_path = get_index_paths(use_openai)
         logger.info(f"Using index: {index_path}, meta: {meta_path}")
 
-        # Create retriever
-        retriever = cls(VectorStore(index_path, meta_path))
+        # Get SBERT model name from config if not using OpenAI
+        embed_model = None
+        if not use_openai:
+            try:
+                from config.notebook_setup import MODEL_SBERT_MODEL_NAME
+
+                embed_model = MODEL_SBERT_MODEL_NAME
+            except (ImportError, AttributeError):
+                # Fallback to default if config not available
+                embed_model = "sentence-transformers/all-MiniLM-L6-v2"
+
+        # Create retriever with appropriate embedder config
+        retriever = cls(VectorStore(index_path, meta_path, embed_model=embed_model))
         logger.info(f"Default retriever loaded in {time.time() - start_time:.2f} seconds")
         return retriever

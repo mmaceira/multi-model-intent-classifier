@@ -11,6 +11,24 @@ from typing import Any, Dict, Union
 import pandas as pd
 
 
+def ensure_dir(path: Union[str, Path]) -> Path:
+    """Ensure a directory exists, creating it if necessary.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to the directory
+
+    Returns
+    -------
+    Path
+        Path object pointing to the directory
+    """
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def setup_logging(verbose: bool = True) -> logging.Logger:
     """Set up logging configuration.
 
@@ -92,7 +110,8 @@ def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.D
     for name, splits in pred_dfs.items():
         for split_name, df in splits.items():
             errs = df[df["y_true"] != df["y_pred"]].copy()
-            errs["error_type"] = errs["y_true"] + " -> " + errs["y_pred"]
+            # Convert to string to handle both string and numeric labels
+            errs["error_type"] = errs["y_true"].astype(str) + " -> " + errs["y_pred"].astype(str)
             errs["model"] = name
             errs["split"] = split_name
             frames.append(errs)

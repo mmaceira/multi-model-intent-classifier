@@ -127,6 +127,18 @@ def load_models_from_config(
     with open(main_config_path) as f:
         main_config = yaml.safe_load(f)
 
+    # Validate configuration structure
+    if not isinstance(models_config, dict):
+        raise ValueError(
+            f"models_config.yaml must contain a YAML dictionary, got {type(models_config)}"
+        )
+
+    if "models" not in models_config:
+        raise ValueError("models_config.yaml is missing a top-level 'models' key")
+
+    if not isinstance(models_config["models"], dict):
+        raise ValueError("models_config.yaml 'models' key must contain a dictionary")
+
     # Initialize results dictionary
     models = {}
 
@@ -166,7 +178,11 @@ def load_models_from_config(
                     )
                     continue
             else:
-                logger.warning(f"Unknown model class '{class_name}' for model '{model_id}'")
+                known_classes = ", ".join(MODEL_CLASSES.keys())
+                logger.warning(
+                    f"Unknown model class '{class_name}' for model '{model_id}'. "
+                    f"Known classes: {known_classes}"
+                )
 
     print(f"Loaded {len(models)} models from configuration:")
     for model_name in models:

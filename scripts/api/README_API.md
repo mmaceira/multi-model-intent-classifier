@@ -7,7 +7,7 @@
 pip install -r requirements.txt
 
 # 2. Test the API
-python scripts/api/test_api.py
+python scripts/api/manual_test_api.py
 
 # 3. Run the server
 MODELS_DIR=output/experiment_with_03_classes/models uvicorn scripts.api.main_api:app --reload
@@ -35,8 +35,8 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ### Test the API
 ```bash
-# Run the test script
-python scripts/api/test_api.py
+# Run the manual test script
+python scripts/api/manual_test_api.py
 
 # Or test manually
 curl -X POST http://127.0.0.1:8000/predict \

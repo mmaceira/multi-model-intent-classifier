@@ -110,6 +110,38 @@ classifier.fit(X_train, y_train)
 predictions = classifier.predict(X_test)
 ```
 
+### Running the Training Pipeline
+
+The easiest way to run the complete training and evaluation pipeline:
+
+```bash
+# Using the entry point (after installation)
+multi-model-pipeline
+
+# Or directly with Python
+python scripts/pipeline/run_all.py
+```
+
+This will execute all pipeline steps in sequence:
+1. **Data Loading** - Load and validate the CLINC150 dataset
+2. **Exploratory Analysis** - Analyze dataset characteristics and generate visualizations
+3. **Build Embeddings** - Generate SBERT embeddings (and OpenAI embeddings if API key is set)
+4. **Model Training** - Train all enabled models from `config/models_config.yaml`
+5. **Model Prediction** - Generate predictions for all trained models
+6. **Model Evaluation** - Evaluate models and generate comparison reports
+
+You can also run individual pipeline steps:
+
+```bash
+# Step-by-step execution
+python scripts/pipeline/00_data_loading.py          # Load and validate dataset
+python scripts/pipeline/01_exploratory_analysis.py   # Analyze dataset characteristics
+python scripts/pipeline/02_build_embeddings.py        # Generate embeddings (SBERT by default)
+python scripts/pipeline/03_model_training.py          # Train models
+python scripts/pipeline/04_model_prediction.py        # Generate predictions
+python scripts/pipeline/05_model_evaluation.py       # Evaluate model performance
+```
+
 ## 📋 Overview
 
 This project implements a comprehensive NLP pipeline for:
@@ -314,7 +346,7 @@ multi-model-intent-classifier/
 ### Environment Setup
 1. Install development dependencies (using uv):
    ```bash
-   uv sync --dev
+   uv sync --extra dev
    ```
    Or using pip:
    ```bash
@@ -326,6 +358,21 @@ multi-model-intent-classifier/
    pre-commit install
    ```
 
+### External Dependencies
+
+The project has several optional dependencies for different features:
+
+| Feature | Required Packages | Notes |
+|---------|------------------|-------|
+| **Base training & evaluation** | `scikit-learn`, `numpy`, `pandas`, `datasets` | Core dependencies for all models |
+| **RAG + FAISS** | `faiss-cpu` | Required for RAG models (CentroidNN, k-Majority, LLM) |
+| **OpenAI / LLM mode** | `litellm`, `openai` | Requires `OPENAI_API_KEY` environment variable |
+| **API server** | `uvicorn`, `fastapi` | For running the REST API (`scripts/api/main_api.py`) |
+| **SBERT embeddings** | `sentence-transformers` | Default embedding backend |
+| **Testing** | `pytest`, `datasets` | Required for running test suite |
+
+**Note**: All dependencies are listed in `pyproject.toml`. The base installation includes most dependencies. For OpenAI features, ensure `OPENAI_API_KEY` is set in your environment or `.env` file.
+
 ### Code Style
 - Follow PEP 8 guidelines
 - Use type hints
@@ -333,6 +380,9 @@ multi-model-intent-classifier/
 - Run `black` and `flake8` before committing
 
 ### Testing
+
+**Important**: Tests require the HuggingFace `datasets` library. Install dev dependencies with `pip install -e .[dev]` or `uv sync --extra dev` before running `pytest`.
+
 ```bash
 # Run all tests
 pytest

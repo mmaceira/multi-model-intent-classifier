@@ -56,6 +56,7 @@ import json
 import logging
 import os
 import random
+from collections import Counter
 from typing import Callable, Iterable, List, Sequence
 
 import numpy as np
@@ -88,9 +89,9 @@ os.environ.setdefault(
 os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")  # Suppress litellm's verbose logging
 
 # System prompt for the LLM classification task
-_PROMPT_SYSTEM = """You are a news-topic classifier. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
-The 'labels' array MUST contain EXACTLY the same number of labels as there are articles to classify.
-For example: {"labels": ["earn", "acq", "grain"]}
+_PROMPT_SYSTEM = """You are an intent classifier for user utterances. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
+The 'labels' array MUST contain EXACTLY the same number of labels as there are utterances to classify.
+For example: {"labels": ["transfer", "balance", "translate"]}
 DO NOT use code blocks, markdown, or explanations. Return ONLY valid JSON with EXACTLY the correct number of labels."""
 
 
@@ -273,13 +274,20 @@ class RagLLM(RagClassifierBase):
                 if attempt > 0:
                     await asyncio.sleep(self._min_interval)
 
+                # Build completion parameters
+                # Ollama doesn't support response_format parameter
+                completion_params = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.0,
+                }
+
+                # Only add response_format for non-Ollama models
+                if not self.model.startswith("ollama/"):
+                    completion_params["response_format"] = {"type": "json_object"}
+
                 # Make the API call using litellm
-                response = await acompletion(
-                    model=self.model,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                    temperature=0.0,
-                )
+                response = await acompletion(**completion_params)
                 return response
 
             except RateLimitError as e:
@@ -328,15 +336,18 @@ class RagLLM(RagClassifierBase):
             in production. If classification fails, it falls back to using the
             first available label for all documents.
         """
-        # prepare contexts
+        # prepare contexts and store neighbors for fallback
         contexts: List[str] = []
+        neighbors_list: List[List[dict]] = []
         for vec in vectors:
             try:
                 # Pass the numpy array directly to the retriever
                 neigh = self.retriever.top_k(vec, self.top_k)
+                neighbors_list.append(neigh)
                 contexts.append("\n\n".join(n["text"] for n in neigh))
             except Exception as e:
                 logger.error(f"Error retrieving neighbors: {e}")
+                neighbors_list.append([])
                 contexts.append("")  # Use empty context if retrieval fails
 
         # build a single prompt with multiple items
@@ -347,19 +358,22 @@ class RagLLM(RagClassifierBase):
             # Ensure doc is a string and not empty
             doc_text = str(doc).strip() if doc else " "
             ctx_text = str(ctx).strip() if ctx else " "
-            lines.append(f"{i}. Article: {doc_text}\nContext:\n{ctx_text}")
+            lines.append(f"{i}. Utterance: {doc_text}\nContext:\n{ctx_text}")
 
         # Create the examples part of the JSON structure
-        examples_json = ", ".join(f'"{self.labels[0]}"' for _ in range(min(3, len(docs))))
+        # Use diverse labels in examples, not just the first one
+        num_examples = min(3, len(docs), len(self.labels))
+        example_labels = [self.labels[i % len(self.labels)] for i in range(num_examples)]
+        examples_json = ", ".join(f'"{label}"' for label in example_labels)
         if len(docs) > 3:
             examples_json += "..."
 
         user_content = (
-            f"Classify these {len(docs)} news articles into ONE of these categories: {allowed}\n\n"
+            f"Classify these {len(docs)} user utterances into ONE of these intent categories: {allowed}\n\n"
             + "\n\n".join(lines)
-            + f"\n\nRespond with a JSON object that has a 'labels' property containing an array with EXACTLY {len(docs)} labels, one for each article in order."
-            + f' For example with {len(docs)} articles: {{"labels": [{examples_json}]}}.'
-            + " Each position in the array corresponds to the article with the same position number."
+            + f"\n\nRespond with a JSON object that has a 'labels' property containing an array with EXACTLY {len(docs)} labels, one for each utterance in order."
+            + f' For example with {len(docs)} utterances: {{"labels": [{examples_json}]}}.'
+            + " Each position in the array corresponds to the utterance with the same position number."
             + " No explanation, no markdown formatting, just valid JSON."
         )
         messages = [
@@ -367,6 +381,7 @@ class RagLLM(RagClassifierBase):
             {"role": "user", "content": user_content},
         ]
 
+        text = None  # Initialize to avoid UnboundLocalError in exception handlers
         try:
             resp = await self._chat_with_retry(messages)
             text = resp.choices[0].message.content.strip()
@@ -426,14 +441,82 @@ class RagLLM(RagClassifierBase):
                         labels_out = labels_out[: len(docs)]
 
                 # Validate that all labels are in allowed list
-                return [lab if lab in self.labels else self.labels[0] for lab in labels_out]
+                # Use fuzzy matching: case-insensitive, handle underscores/spaces
+                validated_labels = []
+                for lab in labels_out:
+                    lab_str = str(lab).strip()
+                    # Exact match
+                    if lab_str in self.labels:
+                        validated_labels.append(lab_str)
+                    else:
+                        # Try case-insensitive match
+                        lab_lower = lab_str.lower()
+                        matched = None
+                        for valid_label in self.labels:
+                            if valid_label.lower() == lab_lower:
+                                matched = valid_label
+                                break
+
+                        # Try matching with underscores/spaces normalized
+                        if matched is None:
+                            lab_normalized = lab_lower.replace(" ", "_").replace("-", "_")
+                            for valid_label in self.labels:
+                                valid_normalized = (
+                                    valid_label.lower().replace(" ", "_").replace("-", "_")
+                                )
+                                if valid_normalized == lab_normalized:
+                                    matched = valid_label
+                                    break
+
+                        if matched:
+                            validated_labels.append(matched)
+                            logger.debug(f"Normalized label '{lab_str}' to '{matched}'")
+                        else:
+                            # Fallback: use majority vote from neighbors for this document
+                            # This is better than always using self.labels[0]
+                            doc_idx = len(validated_labels)
+                            if doc_idx < len(neighbors_list) and neighbors_list[doc_idx]:
+                                # Get majority label from neighbors
+                                neighbor_labels = [n["label"] for n in neighbors_list[doc_idx]]
+                                if neighbor_labels:
+                                    majority_label = Counter(neighbor_labels).most_common(1)[0][0]
+                                    if majority_label in self.labels:
+                                        validated_labels.append(majority_label)
+                                        logger.warning(
+                                            f"LLM returned invalid label '{lab_str}' for doc {doc_idx+1}. "
+                                            f"Using majority vote from neighbors: {majority_label}"
+                                        )
+                                    else:
+                                        validated_labels.append(self.labels[0])
+                                        logger.warning(
+                                            f"LLM returned invalid label '{lab_str}' and neighbor majority "
+                                            f"'{majority_label}' not in valid labels. Using fallback: {self.labels[0]}"
+                                        )
+                                else:
+                                    validated_labels.append(self.labels[0])
+                                    logger.warning(
+                                        f"LLM returned invalid label '{lab_str}' and no neighbors. "
+                                        f"Using fallback: {self.labels[0]}"
+                                    )
+                            else:
+                                validated_labels.append(self.labels[0])
+                                logger.warning(
+                                    f"LLM returned invalid label '{lab_str}'. "
+                                    f"Valid labels: {self.labels}. Using fallback: {self.labels[0]}"
+                                )
+
+                return validated_labels
             else:
                 logger.error(f"Expected list but got {type(labels_out)}: {labels_out}")
                 return [self.labels[0]] * len(docs)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed parsing JSON batch response: {text} | Error: {e}")
+            logger.error(
+                f"Failed parsing JSON batch response: {text if text else 'N/A'} | Error: {e}"
+            )
         except Exception as e:
-            logger.error(f"Unexpected error handling batch response: {text} | Error: {e}")
+            logger.error(
+                f"Unexpected error handling batch response: {text if text else 'N/A'} | Error: {e}"
+            )
 
         # fallback: label all with first
         return [self.labels[0]] * len(docs)

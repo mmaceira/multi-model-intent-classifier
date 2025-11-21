@@ -1,32 +1,65 @@
 """
 Semantic Search Demo Application
 
-This script provides a Gradio-based web interface for semantic search over the Reuters news corpus using vector embeddings and FAISS for efficient similarity search.
+This script provides a Gradio-based web interface for semantic search over the CLINC150 intent classification dataset using vector embeddings and FAISS for efficient similarity search.
 
 Key Features:
-- Search for semantically similar news articles using configurable embedding models
+- Search for semantically similar user utterances using configurable embedding models
 - Adjustable number of results and similarity thresholds
 - Interactive and batch search modes
 - Clear error handling and informative feedback
 
 Usage:
-- Place this script in the `scripts/` directory of your project
-- Ensure the FAISS index and metadata paths are correctly set (defaults provided)
-- Run the script: `python scripts/semantic_search_demo.py`
+- Run the script: `python scripts/demos/semantic_search_demo.py`
 - Access the Gradio web interface to perform semantic searches
 
 This script is suitable for production and demonstration, enabling users to explore semantic search capabilities interactively.
 """
 
 import json
+import sys
+from pathlib import Path
 
 import faiss
 import gradio as gr
+import yaml
 from sentence_transformers import SentenceTransformer
 
+# Project root
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Load config to get default paths
+config_path = project_root / "config" / "config.yaml"
+with open(config_path) as f:
+    config = yaml.safe_load(f)
+
+
+def substitute_vars(value: str, cfg: dict) -> str:
+    """Replace variable references in string values with their actual values from config."""
+    if isinstance(value, str) and "${" in value:
+        import re
+
+        var_pattern = r"\${([^}]+)}"
+        for var_path in re.findall(var_pattern, value):
+            if "." in var_path:
+                section, var = var_path.split(".", 1)
+                if section in cfg and var in cfg[section]:
+                    value = value.replace(f"${{{var_path}}}", str(cfg[section][var]))
+    return value
+
+
+# Resolve paths from config
+embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
+embeddings_path = project_root / embeddings_path
+
 # Default paths
-DEFAULT_INDEX_PATH = "output/experiment_10_classes/embeddings/sbert/index.faiss"
-DEFAULT_META_PATH = "output/experiment_10_classes/embeddings/sbert/meta.jsonl"
+DEFAULT_INDEX_PATH = str(embeddings_path / "sbert" / "index.faiss")
+DEFAULT_META_PATH = str(embeddings_path / "sbert" / "meta.jsonl")
+DEFAULT_MODEL_NAME = config.get("model", {}).get(
+    "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
+)
 
 
 def load_index_and_meta(index_path: str, meta_path: str):
@@ -48,7 +81,7 @@ def search_similar_documents(
     """Search for similar documents using semantic search."""
     try:
         # Load model, index and metadata
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        model = SentenceTransformer(DEFAULT_MODEL_NAME)
         index, meta = load_index_and_meta(index_path, meta_path)
 
         # Encode query
@@ -62,15 +95,19 @@ def search_similar_documents(
         results = []
         for score, idx in zip(distances[0], indices[0], strict=False):
             results.append(
-                {"text": meta[idx]["text"], "label": meta[idx]["label"], "score": float(score)}
+                {
+                    "text": meta[idx]["text"],
+                    "label": meta[idx].get("label", "unknown"),
+                    "score": float(score),
+                }
             )
 
         # Format output for display
         output = []
         for i, result in enumerate(results, 1):
             output.append(f"### Result {i} (Score: {result['score']:.4f})")
-            output.append(f"**Category:** {result['label']}")
-            output.append(f"**Text:** {result['text'][:500]}...")
+            output.append(f"**Intent:** {result['label']}")
+            output.append(f"**Utterance:** {result['text'][:500]}...")
             output.append("---")
 
         return "\n\n".join(output)
@@ -86,8 +123,8 @@ def create_demo():
         with gr.Row():
             with gr.Column(scale=3):
                 gr.Markdown("### Configuration")
-                gr.Textbox(value=DEFAULT_INDEX_PATH, label="FAISS Index Path")
-                gr.Textbox(value=DEFAULT_META_PATH, label="Metadata JSONL Path")
+                index_path = gr.Textbox(value=DEFAULT_INDEX_PATH, label="FAISS Index Path")
+                meta_path = gr.Textbox(value=DEFAULT_META_PATH, label="Metadata JSONL Path")
                 top_k = gr.Slider(minimum=1, maximum=20, value=5, step=1, label="Number of Results")
 
             with gr.Column(scale=4):
