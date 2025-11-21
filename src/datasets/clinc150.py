@@ -132,6 +132,18 @@ def load_clinc150(
     if max_test_samples is not None and len(X_test) > max_test_samples:
         X_test, y_test = _stratified_sample(X_test, y_test, max_test_samples, seed=seed)
 
+    # Recompute classes from final filtered data to ensure consistency
+    classes = sorted(set(y_train_extended) | set(y_test))
+
+    # Assert that all labels in train and test are in the classes list
+    assert all(label in classes for label in y_train_extended), (
+        f"Found label in y_train_extended not in classes: "
+        f"{set(y_train_extended) - set(classes)}"
+    )
+    assert all(
+        label in classes for label in y_test
+    ), f"Found label in y_test not in classes: {set(y_test) - set(classes)}"
+
     return X_train_extended, y_train_extended, X_test, y_test, classes
 
 
@@ -173,7 +185,7 @@ def _stratified_sample(
         # Take at least 1 sample from each of the first max_samples classes
         sampled_texts = []
         sampled_labels = []
-        for i, class_name in enumerate(class_names[:max_samples]):
+        for _i, class_name in enumerate(class_names[:max_samples]):
             if class_to_samples[class_name]:
                 text, label = class_to_samples[class_name][0]
                 sampled_texts.append(text)

@@ -66,9 +66,13 @@ models/
 
 ## ⚠️ Requirements
 
-1. OpenAI API key in `.env` file
-2. Model files in the specified `MODELS_DIR`
-3. Python 3.8+
+1. Model files in the specified `MODELS_DIR`
+2. Python 3.8+
+3. **OpenAI API key is required only if you use OpenAI embeddings or OpenAI-backed RAG models**
+   - Naive Bayes, Linear SVM, and other non-RAG models don't need it
+   - RAG models using local embeddings (SBERT) don't need it
+   - RAG-LLM with `ollama/...` models don't need it
+   - Only RAG models using OpenAI embeddings require the API key
 
 ## 🔍 Troubleshooting
 

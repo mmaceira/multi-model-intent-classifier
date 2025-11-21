@@ -246,7 +246,7 @@ def class_frequency(
 
         if save_path:
             plt.savefig(save_path)
-            plt.close()
+        plt.close()  # Always close the figure to prevent pop-ups
 
     return {"counts": counts, "proportions": proportions}
 
@@ -311,9 +311,7 @@ def length_distribution(
 
     if save_path:
         plt.savefig(save_path)
-        plt.close()
-    else:
-        plt.show()
+    plt.close()  # Always close the figure to prevent pop-ups
 
     # Save percentile statistics to CSV if output_dir is provided
     if output_dir:
@@ -437,7 +435,7 @@ def vocabulary_analysis(
         plt.xlabel("Count")
         plt.ylabel("Word")
         plt.tight_layout()
-        plt.show()
+        plt.close()  # Close figure instead of showing to prevent pop-ups
 
     return {"vocab_size": len(word_counts), "word_counts": word_counts, "top_words": top_words}
 

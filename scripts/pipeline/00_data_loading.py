@@ -16,6 +16,7 @@ with intent categories. Key features:
 """
 
 import logging
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -65,10 +66,19 @@ def main():
     print("\nExamining the distribution of intents and utterance lengths...")
 
     # Intent distribution plot
-    class_frequency(y_train, top_n=20)
+    class_frequency(
+        y_train,
+        top_n=20,
+        plot=True,
+        save_path=os.path.join(DATA_EXPLORATION_DIR, "class_distribution_validation.png"),
+    )
 
     # Utterance length distribution
-    stats = length_distribution(X_train)
+    stats = length_distribution(
+        X_train,
+        save_path=os.path.join(DATA_EXPLORATION_DIR, "document_length_distribution_validation.png"),
+        output_dir=DATA_EXPLORATION_DIR,
+    )
     print(f"\nMean length: {stats['stats']['mean']:.1f} tokens, median: {stats['stats']['median']}")
 
     print("\n✅ Data loading complete!")

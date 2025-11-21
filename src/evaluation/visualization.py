@@ -23,7 +23,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 
-from .utils import analyse_error_patterns, consistently_misclassified, load_all_prediction_files
+from .utils import load_all_prediction_files
 
 # Configure matplotlib style
 plt.style.use("default")
@@ -454,49 +454,6 @@ def plot_top_misclassifications(
                     )
 
 
-def plot_top_error_types(
-    predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path, n: int = 10
-) -> None:
-    """Plot and save the top n error types (true_label -> pred_label) for both train and test sets.
-
-    Parameters
-    ----------
-    predictions_dict : Dict[str, Dict[str, pd.DataFrame]]
-        Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames
-    output_dir : Path
-        Directory to save the plots
-    n : int, optional
-        Number of top error types to plot, by default 10
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    for model_name, splits in predictions_dict.items():
-        for split_name in ["train", "test"]:
-            if split_name in splits:
-                df = splits[split_name]
-
-                # Create error type column
-                error_df = df[df["y_true"] != df["y_pred"]].copy()
-                error_df["error_type"] = (
-                    error_df["y_true"].astype(str) + " -> " + error_df["y_pred"].astype(str)
-                )
-
-                # Get top n error types
-                error_counts = error_df["error_type"].value_counts().head(n)
-
-                # Create and save plot
-                plt.figure(figsize=(12, 6))
-                plt.bar(error_counts.index, error_counts.values)
-                plt.title(f"Top {n} Error Types - {model_name} ({split_name.capitalize()} Set)")
-                plt.xlabel("Error Type (True → Predicted)")
-                plt.ylabel("Count")
-                plt.xticks(rotation=45, ha="right")
-                plt.tight_layout()
-                plt.savefig(output_dir / f"{model_name}_{split_name}_top_{n}_error_types.png")
-                plt.close()
-
-
 def visualize_error_distribution(
     predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path
 ) -> None:
@@ -722,7 +679,7 @@ def plot_confusion_matrices(
         fig.delaxes(axes[i])
 
     plt.tight_layout()
-    plt.show()
+    plt.close()  # Close figure instead of showing to prevent pop-ups
 
 
 def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):

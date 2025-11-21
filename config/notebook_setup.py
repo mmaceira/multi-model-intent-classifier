@@ -8,6 +8,10 @@ import re
 import sys
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")  # Use non-interactive backend to prevent pop-ups
+
 import numpy as np
 import yaml
 

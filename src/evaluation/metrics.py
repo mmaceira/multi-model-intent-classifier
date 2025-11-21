@@ -179,7 +179,7 @@ def analyze_text_characteristics(misclassified_df: pd.DataFrame) -> None:
     ax2.set_xlabel("Word Count")
 
     plt.tight_layout()
-    plt.show()
+    plt.close()  # Close figure instead of showing to prevent pop-ups
 
     # Calculate correlation between text length and word count
     corr = misclassified_df[["text_length", "word_count"]].corr()
@@ -188,4 +188,4 @@ def analyze_text_characteristics(misclassified_df: pd.DataFrame) -> None:
     plt.figure(figsize=(8, 6))
     sns.heatmap(corr, annot=True, cmap="Blues", center=0, vmin=-1, vmax=1, square=True)
     plt.title("Correlation between Text Length and Word Count")
-    plt.show()
+    plt.close()  # Close figure instead of showing to prevent pop-ups

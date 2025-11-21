@@ -1,8 +1,8 @@
 """
-Retrieval-Augmented Generation (RAG) LLM News Classifier
-========================================================
+Retrieval-Augmented Generation (RAG) LLM Intent Classifier
+==========================================================
 
-A production-ready news classifier using RAG with LLMs. Combines vector similarity search with LLM reasoning.
+A production-ready intent classifier using RAG with LLMs. Combines vector similarity search with LLM reasoning.
 
 Key Features:
 - Rate limiting and batched processing
@@ -90,8 +90,10 @@ os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")  # Suppress litellm's 
 
 # System prompt for the LLM classification task
 _PROMPT_SYSTEM = """You are an intent classifier for user utterances. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
+CRITICAL: You MUST use EXACT labels from the provided list. Do NOT create new labels, do NOT use synonyms, do NOT modify labels.
+Labels are case-sensitive and must match EXACTLY (including underscores, hyphens, and spelling).
 The 'labels' array MUST contain EXACTLY the same number of labels as there are utterances to classify.
-For example: {"labels": ["transfer", "balance", "translate"]}
+For example: {"labels": ["transfer_money", "check_balance", "translate"]}
 DO NOT use code blocks, markdown, or explanations. Return ONLY valid JSON with EXACTLY the correct number of labels."""
 
 
@@ -114,7 +116,7 @@ def _exponential_backoff(attempt: int) -> float:
 # Main class
 # ---------------------------------------------------------------------------
 class RagLLM(RagClassifierBase):
-    """RAG-style news classifier with production-ready features.
+    """RAG-style intent classifier with production-ready features.
 
     This classifier combines retrieval-augmented generation with LLM-based classification.
     It includes robust error handling, rate limiting, and optimized batch processing
@@ -344,15 +346,24 @@ class RagLLM(RagClassifierBase):
                 # Pass the numpy array directly to the retriever
                 neigh = self.retriever.top_k(vec, self.top_k)
                 neighbors_list.append(neigh)
-                contexts.append("\n\n".join(n["text"] for n in neigh))
+                # Include both text and label in context to show exact label format
+                context_parts = []
+                for n in neigh:
+                    context_parts.append(f"Example: \"{n['text']}\" → Label: \"{n['label']}\"")
+                contexts.append("\n".join(context_parts))
             except Exception as e:
                 logger.error(f"Error retrieving neighbors: {e}")
                 neighbors_list.append([])
                 contexts.append("")  # Use empty context if retrieval fails
 
         # build a single prompt with multiple items
-        # Ensure all labels are strings (handles cases where labels might be integers)
-        allowed = ", ".join(str(label) for label in self.labels)
+        # Format labels as a numbered list for better readability
+        labels_list = "\n".join(
+            f"  - {label}" for label in self.labels[:20]
+        )  # Show first 20 labels
+        if len(self.labels) > 20:
+            labels_list += f"\n  ... and {len(self.labels) - 20} more labels"
+
         lines = []
         for i, (doc, ctx) in enumerate(zip(docs, contexts, strict=False), start=1):
             # Ensure doc is a string and not empty
@@ -360,7 +371,7 @@ class RagLLM(RagClassifierBase):
             ctx_text = str(ctx).strip() if ctx else " "
             lines.append(f"{i}. Utterance: {doc_text}\nContext:\n{ctx_text}")
 
-        # Create the examples part of the JSON structure
+        # Create the examples part of the JSON structure using actual labels from the list
         # Use diverse labels in examples, not just the first one
         num_examples = min(3, len(docs), len(self.labels))
         example_labels = [self.labels[i % len(self.labels)] for i in range(num_examples)]
@@ -369,10 +380,17 @@ class RagLLM(RagClassifierBase):
             examples_json += "..."
 
         user_content = (
-            f"Classify these {len(docs)} user utterances into ONE of these intent categories: {allowed}\n\n"
+            f"Classify these {len(docs)} user utterances into ONE of these EXACT intent categories:\n{labels_list}\n\n"
+            + "CRITICAL RULES:\n"
+            + "1. You MUST use one of the EXACT labels from the list above (case-sensitive, including underscores/hyphens)\n"
+            + "2. Do NOT create new labels, do NOT use synonyms, do NOT modify labels\n"
+            + "3. If an utterance seems similar to a label but doesn't match exactly, choose the CLOSEST matching label from the list\n"
+            + "4. Look at the context examples - they show similar utterances and their correct labels\n\n"
             + "\n\n".join(lines)
             + f"\n\nRespond with a JSON object that has a 'labels' property containing an array with EXACTLY {len(docs)} labels, one for each utterance in order."
-            + f' For example with {len(docs)} utterances: {{"labels": [{examples_json}]}}.'
+            + "\nEach label MUST be one of the EXACT labels from the list above."
+            + f'\nExample format: {{"labels": [{examples_json}]}}'
+            + " (these are actual labels from the list - use the exact same format)."
             + " Each position in the array corresponds to the utterance with the same position number."
             + " No explanation, no markdown formatting, just valid JSON."
         )

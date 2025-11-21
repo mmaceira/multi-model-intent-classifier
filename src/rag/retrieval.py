@@ -43,8 +43,9 @@ Example Usage:
 """
 
 import logging
+import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -112,7 +113,9 @@ class Retriever:
         return results
 
     @classmethod
-    def from_default(cls, use_openai: bool = False) -> "Retriever":
+    def from_default(
+        cls, use_openai: bool = False, embed_model: Optional[str] = None
+    ) -> "Retriever":
         """
         Create a retriever with the default index and meta files.
 
@@ -121,6 +124,9 @@ class Retriever:
 
         Args:
             use_openai (bool): Whether to use OpenAI index files (default: False)
+            embed_model (Optional[str]): SBERT model name to use for embeddings.
+                If None, reads from MODEL_SBERT_MODEL_NAME env var or defaults to
+                "sentence-transformers/all-MiniLM-L6-v2". Only used when use_openai=False.
 
         Returns:
             Retriever: A configured retriever instance
@@ -131,6 +137,12 @@ class Retriever:
             >>>
             >>> # Create a retriever with SentenceTransformer embeddings
             >>> retriever = Retriever.from_default(use_openai=False)
+            >>>
+            >>> # Create with custom embed model
+            >>> retriever = Retriever.from_default(
+            ...     use_openai=False,
+            ...     embed_model="sentence-transformers/all-mpnet-base-v2"
+            ... )
         """
         logger.info(f"Loading {'OpenAI' if use_openai else 'SentenceTransformer'} retriever")
         start_time = time.time()
@@ -139,16 +151,13 @@ class Retriever:
         index_path, meta_path = get_index_paths(use_openai)
         logger.info(f"Using index: {index_path}, meta: {meta_path}")
 
-        # Get SBERT model name from config if not using OpenAI
-        embed_model = None
+        # Get SBERT model name if not using OpenAI
         if not use_openai:
-            try:
-                from config.notebook_setup import MODEL_SBERT_MODEL_NAME
-
-                embed_model = MODEL_SBERT_MODEL_NAME
-            except (ImportError, AttributeError):
-                # Fallback to default if config not available
-                embed_model = "sentence-transformers/all-MiniLM-L6-v2"
+            if embed_model is None:
+                # Try environment variable first, then fallback to default
+                embed_model = os.getenv(
+                    "MODEL_SBERT_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+                )
 
         # Create retriever with appropriate embedder config
         retriever = cls(VectorStore(index_path, meta_path, embed_model=embed_model))

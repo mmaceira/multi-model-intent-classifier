@@ -43,12 +43,13 @@ def get_dataset(
         **kwargs: Additional arguments (ignored for compatibility)
 
     Returns:
-        Tuple containing:
-        - X_train: List of training document texts
-        - y_train: List of training document labels
-        - X_test: List of test document texts
-        - y_test: List of test document labels
-        - classes: List of class labels
+        Tuple[List[str], List[str], List[str], List[str], List[str]]:
+            X_train, y_train, X_test, y_test, classes
+            - X_train: List of training utterance texts
+            - y_train: List of training intent labels
+            - X_test: List of test utterance texts
+            - y_test: List of test intent labels
+            - classes: Sorted list of unique class labels (intent names)
     """
     if dataset_name != "clinc150":
         logger.warning(f"Unknown dataset_name: {dataset_name}. Using 'clinc150' as default.")

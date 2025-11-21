@@ -97,6 +97,8 @@ def get_model(model_identifier: str):
 
     if model_info["type"] == "rag":
         # --- RAG: load index, passages and *optional* classifier ------------- #
+        # Convention: model identifiers containing "openai" use the OpenAI embedding index
+        # Other identifiers (e.g., "rag_llm_local", "rag_centroid") use the SBERT index
         idx_dir = EMBEDDINGS_DIR
         if "openai" in model_identifier:
             index_path = idx_dir / "openai" / "index.faiss"

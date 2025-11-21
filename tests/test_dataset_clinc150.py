@@ -27,3 +27,27 @@ def test_clinc150_loader_basic():
 
     # There should be multiple distinct intents
     assert len(set(y_train)) > 10
+
+
+def test_tiny_training_smoke(tmp_path, monkeypatch):
+    """End-to-end smoke test: train a simple classifier on a small CLINC150 subset."""
+    from src.algorithms.linear_svm import LinearSVMClassifier
+
+    # Use a small subset for quick testing
+    X_train, y_train, X_test, y_test, classes = get_dataset(
+        dataset_name="clinc150",
+        max_train_samples=300,
+        max_test_samples=100,
+        max_classes=10,
+        seed=123,
+    )
+
+    # Train a simple classifier
+    clf = LinearSVMClassifier()
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+
+    # Basic assertions
+    assert len(y_pred) == len(y_test)
+    assert all(isinstance(pred, str) for pred in y_pred)
+    assert all(pred in classes for pred in y_pred)

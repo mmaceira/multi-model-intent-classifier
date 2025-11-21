@@ -21,10 +21,40 @@ A production-ready NLP pipeline for automated intent classification and semantic
 
 ## 🚀 Quick Start
 
+### Running with the Real Dataset (CLINC150)
+
+**The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual setup required! Just run:
+
+```bash
+# 1. Install dependencies
+uv sync  # or: pip install -e .
+
+# 2. (Optional) Set up Ollama for RAG-LLM models
+ollama serve
+ollama pull llama3.1:8b
+
+# 3. Run the pipeline - dataset downloads automatically!
+python scripts/pipeline/run_all.py
+```
+
+That's it! The pipeline will:
+- ✅ Automatically download CLINC150 from HuggingFace (requires internet on first run)
+- ✅ Use the full dataset (~23k training, ~5.7k test samples, 150 classes)
+- ✅ Train all enabled models
+- ✅ Generate predictions and evaluations
+
+**To use a smaller dataset for quick testing:**
+```bash
+CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+```
+
+See [Dataset Configuration](#-dataset-configuration) for details on customizing dataset size.
+
 ### Prerequisites
 - Python 3.12 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended) or pip
 - Virtual environment (recommended)
+- Internet connection (for initial dataset download from HuggingFace)
 
 ### Installation
 
@@ -55,6 +85,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Note: OpenAI models are disabled by default - the pipeline works with Ollama only
 
 # 7. Run the complete training pipeline
+# The CLINC150 dataset will be automatically downloaded from HuggingFace on first run
 python scripts/pipeline/run_all.py
 
 # Or run individual pipeline steps:
@@ -90,9 +121,11 @@ pip install -e .
 # Note: OpenAI models are disabled by default - the pipeline works with Ollama only
 
 # 6. Run the complete training pipeline
+# The CLINC150 dataset will be automatically downloaded from HuggingFace on first run
 python scripts/pipeline/run_all.py
 
 # Or run individual pipeline steps (see above for details)
+# Note: The dataset is automatically downloaded - no manual setup needed!
 ```
 
 ### Basic Usage
@@ -503,6 +536,11 @@ model:
 - `model.llm_model`: Default LLM model for RAG-LLM (supports Ollama, OpenAI, Anthropic, etc.)
 - `model.rag_top_k`: Number of similar examples to retrieve for RAG models
 - `dataset.use_oos`: Whether to include out-of-scope examples as an extra class
+- `dataset.max_classes`: Limit number of classes (None = all 150 classes)
+- `dataset.max_train_samples`: Limit training samples (None = all ~23k samples)
+- `dataset.max_test_samples`: Limit test samples (None = all ~5.7k samples)
+
+See the [Dataset Configuration](#-dataset-configuration) section for detailed information on dataset parameters.
 
 ### Model Selection Configuration (`config/models_config.yaml`)
 
@@ -535,47 +573,149 @@ models:
 ### Multiple Experiment Configurations
 
 The project includes several pre-configured experiment files:
-- `config/config.yaml` - Default experiment (10 classes)
-- `config/config_10_classes.yaml` - 10 classes experiment
-- `config/config_25_classes.yaml` - 25 classes experiment
-- `config/config_tiny_dataset.yaml` - Small dataset for testing
+- `config/config.yaml` - Default experiment (full dataset)
+- `config/config_10_classes.yaml` - 10 classes experiment (full dataset, 10 classes)
+- `config/config_25_classes.yaml` - 25 classes experiment (full dataset)
+- `config/config_tiny_dataset.yaml` - Small dataset for quick testing (10 classes, 100 train samples, 50 test samples)
 
-To use a different configuration, modify the scripts to load a different config file, or copy and modify `config.yaml`.
+**To use a different configuration file:**
+
+```bash
+# Set CONFIG_FILE environment variable
+export CONFIG_FILE=config_tiny_dataset.yaml
+python scripts/pipeline/run_all.py
+
+# Or inline
+CONFIG_FILE=config_25_classes.yaml python scripts/pipeline/run_all.py
+```
+
+See the [Dataset Configuration](#-dataset-configuration) section for details on configuring dataset size parameters.
 
 ## 📊 Dataset Configuration
 
 ### CLINC150 (Intent Classification)
 
-The project uses the CLINC150 dataset for intent classification. CLINC150 is loaded via the HuggingFace `clinc_oos` dataset (config: `plus`). By default we:
-- merge train and validation splits into a single training set
-- drop out-of-scope (OOS) examples, unless `use_oos=True` is passed when calling `get_dataset`.
+**The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual download or setup required! The dataset is a real, production-ready benchmark dataset for intent classification with 150 intents across 10 domains.
 
 #### Dataset Features
-- **Source**: HuggingFace `clinc_oos` dataset (config: `plus`)
-- **Content**: 150 in-scope intents across 10 domains
-- **Labels**: Intent labels as strings (e.g., "transfer_money", "greeting")
+- **Source**: HuggingFace `clinc_oos` dataset (config: `plus`) - automatically downloaded on first use
+- **Content**: 150 in-scope intents across 10 domains (banking, credit cards, etc.)
+- **Size**: ~23,000 training utterances, ~5,700 test utterances
+- **Labels**: Intent labels as strings (e.g., "transfer_money", "greeting", "balance")
 - **Optional**: Out-of-scope (OOS) examples can be included as an extra class
 
-#### Configuration Parameters
+#### Running with the Full Dataset (Default)
+
+By default, the pipeline uses the **full CLINC150 dataset** with all 150 classes. Simply run:
+
+```bash
+# Use default config (full dataset, 10 classes experiment name)
+python scripts/pipeline/run_all.py
+
+# Or use a specific config file
+CONFIG_FILE=config.yaml python scripts/pipeline/run_all.py
+```
+
+The dataset will be automatically downloaded from HuggingFace on first use (requires internet connection).
+
+#### Configuring Dataset Size
+
+You can control the dataset size using configuration parameters in your config file:
+
 ```yaml
+# Dataset configuration
 dataset:
   name: "clinc150"                           # dataset name (CLINC150 intent classification)
   use_oos: false                             # include out-of-scope examples
+  max_classes: 10                            # Limit number of classes (None = all 150 classes)
+  max_train_samples: 1000                    # Limit training samples (None = all ~23k samples)
+  max_test_samples: 500                     # Limit test samples (None = all ~5.7k samples)
 ```
 
-#### Example Usage
+**Configuration Options:**
+- `max_classes`: Randomly select N classes from the full dataset (useful for quick testing)
+- `max_train_samples`: Limit training set size (uses stratified sampling to maintain class balance)
+- `max_test_samples`: Limit test set size (uses stratified sampling)
+- `use_oos`: Include out-of-scope examples as an extra class label
+
+**Example Configurations:**
+
+1. **Full dataset** (default - no limits):
+   ```yaml
+   dataset:
+     name: "clinc150"
+     use_oos: false
+     # No max_* parameters = use full dataset
+   ```
+
+2. **10 classes for quick testing**:
+   ```yaml
+   dataset:
+     name: "clinc150"
+     use_oos: false
+     max_classes: 10
+   ```
+
+3. **Small dataset for development**:
+   ```yaml
+   dataset:
+     name: "clinc150"
+     use_oos: false
+     max_classes: 10
+     max_train_samples: 100
+     max_test_samples: 50
+   ```
+
+#### Using Different Config Files
+
+The project includes several pre-configured experiment files:
+
+- `config/config.yaml` - Default (full dataset, 10 classes experiment name)
+- `config/config_10_classes.yaml` - 10 classes experiment
+- `config/config_25_classes.yaml` - 25 classes experiment
+- `config/config_tiny_dataset.yaml` - Small dataset for quick testing (10 classes, 100 train, 50 test)
+
+**To use a different config file:**
+
+```bash
+# Method 1: Set CONFIG_FILE environment variable
+export CONFIG_FILE=config_tiny_dataset.yaml
+python scripts/pipeline/run_all.py
+
+# Method 2: Set it inline
+CONFIG_FILE=config_25_classes.yaml python scripts/pipeline/run_all.py
+
+# Method 3: Copy and modify config.yaml
+cp config/config.yaml config/my_experiment.yaml
+# Edit my_experiment.yaml, then:
+CONFIG_FILE=my_experiment.yaml python scripts/pipeline/run_all.py
+```
+
+#### Example Usage in Code
+
 ```python
 from src.datasets.dataset import get_dataset
 
-# Load CLINC150 without OOS examples
+# Load full CLINC150 dataset (all 150 classes, all samples)
 X_train, y_train, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
 
-# Load CLINC150 with OOS examples
+# Load with OOS examples included
 X_train, y_train, X_test, y_test, classes = get_dataset(
     dataset_name="clinc150",
     use_oos=True
 )
+
+# Load a subset for quick testing
+X_train, y_train, X_test, y_test, classes = get_dataset(
+    dataset_name="clinc150",
+    max_classes=10,
+    max_train_samples=1000,
+    max_test_samples=500,
+    seed=42
+)
 ```
+
+**Note**: The dataset is automatically downloaded from HuggingFace on first use. Make sure you have an internet connection for the initial download. Subsequent runs will use the cached dataset.
 
 ### Running the Complete Pipeline
 
