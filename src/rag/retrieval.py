@@ -52,10 +52,7 @@ import numpy as np
 from . import get_index_paths
 from .vector_store import VectorStore
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
 

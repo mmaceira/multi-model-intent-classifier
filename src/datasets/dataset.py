@@ -14,10 +14,7 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
 

@@ -17,10 +17,7 @@ from src.algorithms.transformer_logreg import TransformerLogReg
 from src.rag import load_centroid, load_kmajority, load_llm
 from src.rag.adapter_sklearn import RagSklearnAdapter
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
 # Dictionary mapping class names to their actual classes
@@ -313,3 +310,239 @@ def load_models_from_config(
         print(f"  - {model_name}")
 
     return models
+
+
+def load_persisted_model(
+    model_identifier: str,
+    models_dir: Optional[Path] = None,
+    embeddings_dir: Optional[Path] = None,
+) -> Any:
+    """Load a persisted model from disk (for API/inference use).
+
+    This function loads models that were saved during training. It handles:
+    - Regular classifiers (with optional vectorizer wrapping)
+    - RAG models (with index and metadata loading)
+
+    Args:
+        model_identifier: Model identifier (can be model ID, directory name, or file path)
+        models_dir: Directory containing saved models. If None, uses default location.
+        embeddings_dir: Directory containing embeddings. If None, uses default location.
+
+    Returns:
+        Loaded model ready for inference (accepts raw text)
+
+    Raises:
+        FileNotFoundError: If model file cannot be found
+        ValueError: If model type is unknown
+    """
+
+    import joblib
+
+    # Use paths utility for consistent path resolution
+    from src.utils.paths import get_embeddings_dir, get_models_dir
+
+    if models_dir is None:
+        models_dir = get_models_dir()
+    else:
+        models_dir = Path(models_dir).resolve()
+
+    if embeddings_dir is None:
+        embeddings_dir = get_embeddings_dir()
+    else:
+        embeddings_dir = Path(embeddings_dir).resolve()
+
+    # Model info mapping (same as API loader)
+    MODELS_INFO = {
+        "naive_bayes": {"name": "Naive Bayes", "dir": "Naive Bayes", "type": "classifier"},
+        "linear_svm": {"name": "Linear SVM", "dir": "Linear SVM", "type": "classifier"},
+        "tfidf_svm": {"name": "TF-IDF + SVM", "dir": "TF-IDF bigrams + SVM", "type": "classifier"},
+        "minilm_logreg": {
+            "name": "MiniLM + LogReg",
+            "dir": "MiniLM + LogReg",
+            "type": "classifier",
+        },
+        "rag_centroid": {"name": "RAG CentroidNN", "dir": "RAG-CentroidNN", "type": "rag"},
+        "rag_kmajority": {"name": "RAG k-Majority", "dir": "RAG-kMajority", "type": "rag"},
+        "rag_llm_local": {
+            "name": "RAG LLM (Local)",
+            "dir": "RAG-LLM (local-embeddings)",
+            "type": "rag",
+        },
+        "rag_llm_openai": {
+            "name": "RAG LLM (OpenAI)",
+            "dir": "RAG-LLM (OpenAI-embeddings)",
+            "type": "rag",
+        },
+    }
+
+    def _locate(model_id: str) -> Path:
+        """Find model file path."""
+        # Try direct .joblib or .pkl files
+        for ext in [".joblib", ".pkl"]:
+            direct = models_dir / f"{model_id}{ext}"
+            if direct.exists():
+                return direct
+
+        # Try model IDs from MODELS_INFO
+        if model_id in MODELS_INFO:
+            model_dir = models_dir / MODELS_INFO[model_id]["dir"]
+            for filename in ["model.joblib", "model.pkl"]:
+                cand = model_dir / filename
+                if cand.exists():
+                    return cand
+
+        # Try directory names
+        for d in models_dir.iterdir():
+            if d.is_dir() and d.name.lower() == model_id.lower():
+                for filename in ["model.joblib", "model.pkl"]:
+                    cand = d / filename
+                    if cand.exists():
+                        return cand
+
+        raise FileNotFoundError(f"Model {model_id!r} not found in {models_dir}")
+
+    model_path = _locate(model_identifier)
+
+    # Get model info
+    model_info = None
+    for mid, info in MODELS_INFO.items():
+        if mid == model_identifier or info["dir"] == model_path.parent.name:
+            model_info = info
+            break
+
+    if model_info is None:
+        # Try to infer from path
+        model_info = {"type": "classifier"}  # Default assumption
+
+    # Load model based on type
+    if model_info.get("type") == "rag":
+        # RAG models need special handling
+        import json
+
+        try:
+            import faiss
+        except ImportError:
+            faiss = None
+
+        # Determine embedding directory
+        idx_dir = embeddings_dir
+        if "openai" in model_identifier:
+            index_path = idx_dir / "openai" / "index.faiss"
+            meta_path = idx_dir / "openai" / "meta.jsonl"
+        else:
+            index_path = idx_dir / "sbert" / "index.faiss"
+            meta_path = idx_dir / "sbert" / "meta.jsonl"
+
+        index = None
+        if faiss and index_path.exists():
+            index = faiss.read_index(str(index_path))
+
+        # Load passages from meta.jsonl
+        passages = []
+        if meta_path.exists():
+            with open(meta_path, "r") as f:
+                for line in f:
+                    try:
+                        meta = json.loads(line)
+                        if "text" in meta:
+                            passages.append(meta["text"])
+                    except json.JSONDecodeError:
+                        continue
+
+        # Load classifier
+        classifier_obj = None
+        if model_path.exists():
+            try:
+                if model_path.suffix == ".pkl":
+                    import cloudpickle
+
+                    with open(model_path, "rb") as f:
+                        classifier_obj = cloudpickle.load(f)
+                else:
+                    classifier_obj = joblib.load(model_path)
+
+                # Initialize RAG component if needed
+                if hasattr(classifier_obj, "rag") and classifier_obj.rag is None:
+                    from src.rag import load_centroid, load_kmajority, load_llm
+                    from src.rag.vector_store import VectorStore
+
+                    if "kmajority" in model_identifier:
+                        rag_model = load_kmajority(top_k=5, use_openai="openai" in model_identifier)
+                    elif "centroid" in model_identifier:
+                        rag_model = load_centroid(use_openai="openai" in model_identifier)
+                    else:  # LLM-based RAG
+                        if "openai" in model_identifier:
+                            from src.embeddings.openai_embedder import OpenAIEmbedder
+
+                            embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                            rag_model = load_llm(
+                                top_k=5,
+                                model="ollama/llama3.1:8b",
+                                embedder=embedder,
+                                use_openai=True,
+                            )
+                        else:
+
+                            def embedder(texts):
+                                return VectorStore.embed(
+                                    "sentence-transformers/all-MiniLM-L6-v2", texts
+                                )
+
+                            rag_model = load_llm(
+                                top_k=5,
+                                model="ollama/llama3.1:8b",
+                                embedder=embedder,
+                                use_openai=False,
+                            )
+
+                    classifier_obj.rag = rag_model
+                    classifier_obj.rag_clf = rag_model
+            except Exception as e:
+                logger.warning(f"Could not load RAG classifier: {e}")
+
+        return {"index": index, "passages": passages, "model": classifier_obj}
+
+    # Regular classifier
+    # Try to load with joblib first, then cloudpickle
+    try:
+        if model_path.suffix == ".pkl":
+            import cloudpickle
+
+            with open(model_path, "rb") as f:
+                artefact = cloudpickle.load(f)
+        else:
+            artefact = joblib.load(model_path)
+    except Exception:
+        # Fallback to cloudpickle
+        import cloudpickle
+
+        with open(model_path, "rb") as f:
+            artefact = cloudpickle.load(f)
+
+    # Wrap with vectorizer if needed
+    from sklearn.pipeline import make_pipeline
+
+    needs_wrap = not hasattr(artefact, "predict") or getattr(artefact, "_expects_vectors", False)
+    if needs_wrap:
+        # Try to find vectorizer
+        for vec_name in ["vectorizer.joblib", "vectorizer.pkl"]:
+            vec_path = model_path.with_name(vec_name)
+            if vec_path.exists():
+                if vec_path.suffix == ".pkl":
+                    import cloudpickle
+
+                    with open(vec_path, "rb") as f:
+                        vectorizer = cloudpickle.load(f)
+                else:
+                    vectorizer = joblib.load(vec_path)
+                artefact = make_pipeline(vectorizer, artefact)
+                break
+        else:
+            # If no vectorizer found but model needs it, check if it's a Pipeline
+            if not hasattr(artefact, "predict"):
+                raise AttributeError(
+                    f"Loaded object for '{model_identifier}' cannot classify raw text and "
+                    f"no vectorizer found next to it."
+                )
+
+    return artefact

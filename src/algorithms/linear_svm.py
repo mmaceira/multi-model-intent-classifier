@@ -16,6 +16,7 @@ Created: 2025-05-03
 
 import numpy as np
 from scipy.special import softmax
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 
@@ -40,24 +41,45 @@ class LinearSVMClassifier(TextClassifier):
         >>> y_pred = clf.predict(X_test)
     """
 
-    def __init__(self, max_features: int = 10000, C: float = 1.0):
+    def __init__(
+        self,
+        max_features: int = 10000,
+        C: float = 1.0,
+        calibrate: bool = False,
+        calibration_method: str = "sigmoid",
+        class_weight: str | dict | None = None,
+    ):
         """Initialize the classifier.
 
         Args:
             max_features: Maximum vocabulary size (default: 10000)
             C: SVM regularization parameter (default: 1.0)
+            calibrate: If True, use CalibratedClassifierCV for calibrated probabilities.
+                       If False, probabilities are approximated via softmax (not calibrated).
+                       Default: False
+            calibration_method: Calibration method if calibrate=True.
+                                Options: "sigmoid" or "isotonic". Default: "sigmoid"
+            class_weight: Class weights for handling imbalanced data. Can be:
+                         - "balanced": automatically adjust weights inversely proportional
+                           to class frequency
+                         - dict: custom weights per class, e.g., {0: 1.0, 1: 2.0}
+                         - None: uniform weights (default)
         """
         # Store constructor parameters as attributes with the same name for BaseEstimator
         self.max_features = max_features
         self.C = C
+        self.calibrate = calibrate
+        self.calibration_method = calibration_method
+        self.class_weight = class_weight
 
         # Initialize vectorizer and base class
         vectorizer = TfidfVectorizer(max_features=max_features, stop_words="english")
         super().__init__(vectorizer)
 
         # Initialize classifier
-        self.clf = LinearSVC(C=C)
+        self.clf = LinearSVC(C=C, class_weight=class_weight)
         self.classes_ = None
+        self._calibrated_clf = None
 
     def _fit_model(self, X_vec, y):
         """Train the SVM classifier.
@@ -69,6 +91,13 @@ class LinearSVMClassifier(TextClassifier):
         self.clf.fit(X_vec, y)
         # Keep scikit‑learn compatibility
         self.classes_ = getattr(self.clf, "classes_", None)
+
+        # Fit calibrated classifier if calibration is enabled
+        if self.calibrate:
+            self._calibrated_clf = CalibratedClassifierCV(
+                self.clf, method=self.calibration_method, cv=3
+            )
+            self._calibrated_clf.fit(X_vec, y)
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.
@@ -84,8 +113,8 @@ class LinearSVMClassifier(TextClassifier):
     def predict_proba(self, X_raw):
         """Generate probability estimates for each class.
 
-        This method approximates probability estimates by applying
-        softmax to the decision function scores from LinearSVC.
+        If calibration is enabled, returns calibrated probabilities.
+        Otherwise, approximates probabilities by applying softmax to decision scores.
 
         Parameters
         ----------
@@ -102,6 +131,11 @@ class LinearSVMClassifier(TextClassifier):
 
         X_vec = self.vectorize(X_raw)
 
+        # Use calibrated classifier if available
+        if self._calibrated_clf is not None:
+            return self._calibrated_clf.predict_proba(X_vec)
+
+        # Fallback to softmax approximation (not calibrated)
         # Get decision scores
         decision_scores = self.clf.decision_function(X_vec)
 
@@ -122,7 +156,8 @@ class LinearSVMClassifier(TextClassifier):
             decision_scores = np.column_stack([-decision_scores, decision_scores])
 
         # Convert to probabilities using softmax with temperature scaling
-        temperature = 1.0  # Adjust this for calibration if needed
+        # Note: These are NOT calibrated probabilities - they're just normalized decision scores
+        temperature = 1.0
         probabilities = softmax(decision_scores / temperature, axis=1)
 
         return probabilities
@@ -146,16 +181,36 @@ class LinearSVMBigrams(TextClassifier):
         >>> y_pred = clf.predict(X_test)
     """
 
-    def __init__(self, max_features: int = 40000, C: float = 5.0):
+    def __init__(
+        self,
+        max_features: int = 40000,
+        C: float = 5.0,
+        calibrate: bool = False,
+        calibration_method: str = "sigmoid",
+        class_weight: str | dict | None = None,
+    ):
         """Initialize the classifier.
 
         Args:
             max_features: Maximum vocabulary size (default: 40000)
             C: SVM regularization parameter (default: 5.0)
+            calibrate: If True, use CalibratedClassifierCV for calibrated probabilities.
+                       If False, probabilities are approximated via softmax (not calibrated).
+                       Default: False
+            calibration_method: Calibration method if calibrate=True.
+                                Options: "sigmoid" or "isotonic". Default: "sigmoid"
+            class_weight: Class weights for handling imbalanced data. Can be:
+                         - "balanced": automatically adjust weights inversely proportional
+                           to class frequency
+                         - dict: custom weights per class, e.g., {0: 1.0, 1: 2.0}
+                         - None: uniform weights (default)
         """
         # Store constructor parameters as attributes with the same name for BaseEstimator
         self.max_features = max_features
         self.C = C
+        self.calibrate = calibrate
+        self.calibration_method = calibration_method
+        self.class_weight = class_weight
 
         # Initialize vectorizer and base class
         vectorizer = TfidfVectorizer(
@@ -164,8 +219,9 @@ class LinearSVMBigrams(TextClassifier):
         super().__init__(vectorizer)
 
         # Initialize classifier
-        self.clf = LinearSVC(C=C)
+        self.clf = LinearSVC(C=C, class_weight=class_weight)
         self.classes_ = None
+        self._calibrated_clf = None
 
     def _fit_model(self, X_vec, y):
         """Train the SVM classifier.
@@ -177,6 +233,13 @@ class LinearSVMBigrams(TextClassifier):
         self.clf.fit(X_vec, y)
         # Keep scikit‑learn compatibility
         self.classes_ = getattr(self.clf, "classes_", None)
+
+        # Fit calibrated classifier if calibration is enabled
+        if self.calibrate:
+            self._calibrated_clf = CalibratedClassifierCV(
+                self.clf, method=self.calibration_method, cv=3
+            )
+            self._calibrated_clf.fit(X_vec, y)
 
     def _predict_model(self, X_vec):
         """Make predictions using the trained classifier.
@@ -192,8 +255,8 @@ class LinearSVMBigrams(TextClassifier):
     def predict_proba(self, X_raw):
         """Generate probability estimates for each class.
 
-        This method approximates probability estimates by applying
-        softmax to the decision function scores from LinearSVC.
+        If calibration is enabled, returns calibrated probabilities.
+        Otherwise, approximates probabilities by applying softmax to decision scores.
 
         Parameters
         ----------
@@ -210,6 +273,11 @@ class LinearSVMBigrams(TextClassifier):
 
         X_vec = self.vectorize(X_raw)
 
+        # Use calibrated classifier if available
+        if self._calibrated_clf is not None:
+            return self._calibrated_clf.predict_proba(X_vec)
+
+        # Fallback to softmax approximation (not calibrated)
         # Get decision scores
         decision_scores = self.clf.decision_function(X_vec)
 
@@ -230,7 +298,8 @@ class LinearSVMBigrams(TextClassifier):
             decision_scores = np.column_stack([-decision_scores, decision_scores])
 
         # Convert to probabilities using softmax with temperature scaling
-        temperature = 1.0  # Adjust this for calibration if needed
+        # Note: These are NOT calibrated probabilities - they're just normalized decision scores
+        temperature = 1.0
         probabilities = softmax(decision_scores / temperature, axis=1)
 
         return probabilities

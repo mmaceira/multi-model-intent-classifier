@@ -29,3 +29,8 @@ repos:
         entry: python scripts/check_commit_message.py
         language: system
         stages: [commit-msg]
+      - id: check-env-file
+        name: "Prevent committing .env files"
+        entry: python scripts/check_env_file.py
+        language: system
+        stages: [pre-commit]

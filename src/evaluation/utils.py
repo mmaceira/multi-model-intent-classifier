@@ -42,12 +42,7 @@ def setup_logging(verbose: bool = True) -> logging.Logger:
     logging.Logger
         Configured logger instance.
     """
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO if verbose else logging.WARNING,
-        format="%(levelname)s | %(message)s",
-        force=True,  # Force reconfiguration of the root logger
-    )
+    # Get logger and set level (don't configure root logger - that's for entry points)
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO if verbose else logging.WARNING)
     return logger

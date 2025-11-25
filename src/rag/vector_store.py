@@ -58,10 +58,7 @@ from sentence_transformers import SentenceTransformer
 
 from src.utils.embeddings import EmbeddingGenerator
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
 # Module-level cache for SentenceTransformer models
@@ -321,29 +318,110 @@ class VectorStore:
         logger.info(f"Index built in {time.time() - start_time:.2f} seconds")
 
     @staticmethod
-    def embed(model_name: str, docs: Sequence[str], embedder: Optional[Any] = None) -> np.ndarray:
+    def embed(
+        model_name: str,
+        docs: Sequence[str],
+        embedder: Optional[Any] = None,
+        device: Optional[str] = None,
+        batch_size: int = 32,
+        show_progress: bool = True,
+    ) -> np.ndarray:
         """
         Generate embeddings for documents using either a provided embedder or SentenceTransformer.
 
         This static method provides a convenient way to generate embeddings for
         documents using either a custom embedder or a SentenceTransformer model.
+        Supports device selection (CPU/GPU) and batch processing for efficient encoding.
 
         Args:
             model_name (str): Name of the SentenceTransformer model (only used if embedder is None)
             docs (Sequence[str]): Documents to embed
             embedder (Optional[Any]): Optional custom embedder with encode() method
+            device (Optional[str]): Device to use for encoding.
+                                   Options: "cpu", "cuda", "cuda:0", etc.
+                                   If None, uses default device (auto-detects GPU if available)
+            batch_size (int): Batch size for encoding.
+                             Larger batches improve throughput but use more memory.
+                             Default: 32
+            show_progress (bool): Whether to log encoding progress and throughput. Default: True
 
         Returns:
-            np.ndarray: Generated embeddings
+            np.ndarray: Generated embeddings with shape (n_docs, embedding_dim)
 
         Example:
             >>> docs = ["Document 1", "Document 2"]
             >>> embeddings = VectorStore.embed("sentence-transformers/all-MiniLM-L6-v2", docs)
+            >>> # With device and batch size
+            >>> embeddings = VectorStore.embed("sentence-transformers/all-MiniLM-L6-v2", docs,
+            ...                                device="cuda:0", batch_size=64)
         """
+        import time
+
         if embedder is not None:
-            return embedder.encode(docs)
+            # Use provided embedder
+            if hasattr(embedder, "encode"):
+                if show_progress:
+                    logger.info(
+                        f"Encoding {len(docs)} documents with custom embedder "
+                        f"(batch_size={batch_size})"
+                    )
+                start_time = time.time()
+                result = embedder.encode(
+                    docs, batch_size=batch_size, show_progress_bar=show_progress
+                )
+                elapsed = time.time() - start_time
+                if show_progress:
+                    throughput = len(docs) / elapsed if elapsed > 0 else 0
+                    logger.info(
+                        f"Encoded {len(docs)} documents in {elapsed:.2f}s ({throughput:.1f} docs/s)"
+                    )
+                return np.array(result, dtype="float32")
+            else:
+                # Fallback: call directly
+                return np.array(embedder(docs), dtype="float32")
 
-        if model_name not in _CACHED_MODELS:
-            _CACHED_MODELS[model_name] = SentenceTransformer(model_name)
+        # Use SentenceTransformer
+        # Determine device
+        if device is None:
+            try:
+                import torch
 
-        return _CACHED_MODELS[model_name].encode(docs)
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+
+        # Create cache key that includes device
+        cache_key = f"{model_name}::{device}"
+
+        if cache_key not in _CACHED_MODELS:
+            logger.info(f"Loading SentenceTransformer model: {model_name} on device: {device}")
+            _CACHED_MODELS[cache_key] = SentenceTransformer(model_name, device=device)
+
+        model = _CACHED_MODELS[cache_key]
+
+        # Encode with batching and progress tracking
+        if show_progress:
+            logger.info(
+                f"Encoding {len(docs)} documents with {model_name} on {device} "
+                f"(batch_size={batch_size})"
+            )
+
+        start_time = time.time()
+        embeddings = model.encode(
+            docs,
+            batch_size=batch_size,
+            show_progress_bar=show_progress,
+            convert_to_numpy=True,
+            normalize_embeddings=False,  # Normalization handled separately if needed
+        )
+        elapsed = time.time() - start_time
+
+        if show_progress:
+            throughput = len(docs) / elapsed if elapsed > 0 else 0
+            dims_per_sec = len(docs) * embeddings.shape[1] / elapsed / 1e6
+            logger.info(
+                f"Encoded {len(docs)} documents in {elapsed:.2f}s "
+                f"({throughput:.1f} docs/s, {dims_per_sec:.2f}M dims/s)"
+            )
+
+        return np.array(embeddings, dtype="float32")
