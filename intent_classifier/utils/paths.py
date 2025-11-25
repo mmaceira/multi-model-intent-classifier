@@ -6,7 +6,7 @@ It discovers the repository root and provides consistent path resolution
 across the codebase.
 
 Example:
-    >>> from src.utils.paths import get_repo_root, get_output_dir
+    >>> from intent_classifier.utils.paths import get_repo_root, get_output_dir
     >>> repo_root = get_repo_root()
     >>> output_dir = get_output_dir("experiment_name")
 """

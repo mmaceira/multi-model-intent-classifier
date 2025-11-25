@@ -4,14 +4,11 @@
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 
 # Add the parent directory to Python path to ensure imports work correctly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from src.embeddings.openai_embedder import OpenAIEmbedder
+    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 except ImportError:
     # Fall back to relative import if absolute import fails
     from ..embeddings.openai_embedder import OpenAIEmbedder
@@ -77,8 +74,6 @@ from .vector_store import VectorStore  # noqa: E402
 
 # ---------- Helper to load precomputed embeddings ----------
 def _load_precomputed_embeddings(meta_path):
-    import numpy as np
-
     if not meta_path.exists():
         raise FileNotFoundError(
             f"Precomputed embeddings not found at {meta_path}. "
@@ -132,7 +127,7 @@ def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
 
 
 def _load_clinc150() -> tuple[list, list, list]:
-    from src.datasets.dataset import get_dataset
+    from intent_classifier.datasets.dataset import get_dataset
 
     X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name="clinc150")
     # Merge validation into training
@@ -225,9 +220,8 @@ def build_openai_index(
     # Initialize OpenAI embedder
     openai_embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
 
-    # Generate embeddings
-    raw_embeddings = openai_embedder.encode(texts)
-    emb = np.array(raw_embeddings, dtype="float32")
+    # Generate embeddings (encode() now returns numpy array directly)
+    emb = openai_embedder.encode(texts).astype("float32")
 
     print(f"Generated {len(emb)} OpenAI embeddings with dimension {emb.shape[1]}")
 

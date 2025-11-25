@@ -67,7 +67,7 @@ from typing import Any, Dict, Optional, Sequence, Union
 import cloudpickle
 from sklearn.base import clone as safe_clone
 
-from src.utils.file_ops import ensure_dir
+from intent_classifier.utils.file_ops import ensure_dir
 
 
 def run_training(

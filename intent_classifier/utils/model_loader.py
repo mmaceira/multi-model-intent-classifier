@@ -10,12 +10,12 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from src.algorithms.embedding_logreg import EmbeddingLogReg
-from src.algorithms.linear_svm import LinearSVMBigrams, LinearSVMClassifier
-from src.algorithms.naive_bayes import NaiveBayesClassifier
-from src.algorithms.transformer_logreg import TransformerLogReg
-from src.rag import load_centroid, load_kmajority, load_llm
-from src.rag.adapter_sklearn import RagSklearnAdapter
+from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg
+from intent_classifier.algorithms.linear_svm import LinearSVMBigrams, LinearSVMClassifier
+from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier
+from intent_classifier.algorithms.transformer_logreg import TransformerLogReg
+from intent_classifier.rag import load_centroid, load_kmajority, load_llm
+from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def process_config_vars(config_value: Any, main_config: Dict[str, Any]) -> Any:
 def load_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
     """Create a RAG model instance based on configuration parameters."""
     # Import here to avoid circular import
-    from src.rag.vector_store import VectorStore
+    from intent_classifier.rag.vector_store import VectorStore
 
     method = params.get("method")
     # Ensure top_k is an integer
@@ -340,7 +340,7 @@ def load_persisted_model(
     import joblib
 
     # Use paths utility for consistent path resolution
-    from src.utils.paths import get_embeddings_dir, get_models_dir
+    from intent_classifier.utils.paths import get_embeddings_dir, get_models_dir
 
     if models_dir is None:
         models_dir = get_models_dir()
@@ -464,8 +464,8 @@ def load_persisted_model(
 
                 # Initialize RAG component if needed
                 if hasattr(classifier_obj, "rag") and classifier_obj.rag is None:
-                    from src.rag import load_centroid, load_kmajority, load_llm
-                    from src.rag.vector_store import VectorStore
+                    from intent_classifier.rag import load_centroid, load_kmajority, load_llm
+                    from intent_classifier.rag.vector_store import VectorStore
 
                     if "kmajority" in model_identifier:
                         rag_model = load_kmajority(top_k=5, use_openai="openai" in model_identifier)
@@ -473,7 +473,7 @@ def load_persisted_model(
                         rag_model = load_centroid(use_openai="openai" in model_identifier)
                     else:  # LLM-based RAG
                         if "openai" in model_identifier:
-                            from src.embeddings.openai_embedder import OpenAIEmbedder
+                            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
                             embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
                             rag_model = load_llm(

@@ -6,19 +6,22 @@ import logging
 import os
 import random
 import re
-import sys
 from pathlib import Path
 
-import matplotlib
+# Optional matplotlib import (only needed for plotting, which is in optional dependencies)
+try:
+    import matplotlib
 
-matplotlib.use("Agg")  # Use non-interactive backend to prevent pop-ups
+    matplotlib.use("Agg")  # Use non-interactive backend to prevent pop-ups
+except ImportError:
+    # matplotlib not installed - that's fine, we only need it for plotting
+    pass
 
 import numpy as np
 import yaml
 
 # infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
 # Allow config file to be overridden via environment variable
 config_file = os.environ.get("CONFIG_FILE", "config.yaml")

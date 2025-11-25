@@ -175,7 +175,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         # Only attempt reinitialization if we have a rag_type
         if "rag_type" in state and state["rag_type"]:
             # Import here to avoid circular imports
-            from src.rag import load_centroid, load_kmajority, load_llm
+            from intent_classifier.rag import load_centroid, load_kmajority, load_llm
 
             # Extract parameters from state
             use_openai = state.get("use_openai", False)
@@ -207,7 +207,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             elif rag_type == "RagLLM":
                 # For LLM-based RAG
                 if use_openai:
-                    from src.embeddings.openai_embedder import OpenAIEmbedder
+                    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
                     embedder = OpenAIEmbedder(model=openai_model, batch_size=50)
                     self.rag = load_llm(
@@ -215,7 +215,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     )
                 else:
                     # For local embeddings
-                    from src.rag.vector_store import VectorStore
+                    from intent_classifier.rag.vector_store import VectorStore
 
                     def embedder(texts):
                         return VectorStore.embed(sbert_model, texts)

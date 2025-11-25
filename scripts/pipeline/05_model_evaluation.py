@@ -11,7 +11,9 @@ from pathlib import Path
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
+# Add repo root to path for config imports (config is not part of the installed package)
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Import config setup
 from config.notebook_setup import (  # noqa: E402
@@ -21,9 +23,9 @@ from config.notebook_setup import (  # noqa: E402
 )
 
 # Import dataset and evaluation modules
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.evaluation import display_detailed_results, run_evaluations  # noqa: E402
-from src.utils.model_loader import load_models_from_config  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.evaluation import display_detailed_results, run_evaluations  # noqa: E402
+from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():
@@ -95,6 +97,8 @@ def main():
     print("=" * 60)
 
     # Define the desired model order
+    # Note: Use actual model names from configuration
+    # (may include suffixes like "(local-embeddings)")
     model_order = [
         "Naive Bayes",
         "Linear SVM",
@@ -103,7 +107,8 @@ def main():
         "Embedding + LogReg",
         "RAG-CentroidNN",
         "RAG-kMajority",
-        "RAG-LLM",  # Uses Ollama LLM by default, can be configured for OpenAI
+        "RAG-LLM (local-embeddings)",  # RAG-LLM with local SBERT embeddings
+        "RAG-LLM (OpenAI-embeddings)",  # RAG-LLM with OpenAI embeddings
     ]
 
     # Display results in the specified order

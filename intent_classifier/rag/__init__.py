@@ -232,7 +232,7 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
             cfg["use_openai"] = use_openai
             if use_openai and "embedder" not in cfg:
                 os.environ["USE_OPENAI_EMBEDDINGS"] = "1"
-                from src.embeddings.openai_embedder import OpenAIEmbedder
+                from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
                 cfg["embedder"] = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
 

@@ -66,9 +66,9 @@ models:
       method: "centroid"
       top_k: "${model.rag_top_k}"
 
-  rag_llm:
-    enabled: false  # Disabled by default for full dataset runs (uses too much RAM/VRAM). Enable for small configs.
-    name: "RAG-LLM"
+  rag_llm_local:
+    enabled: true  # Enable to train RAG-LLM with local SBERT embeddings (no API keys needed)
+    name: "RAG-LLM (local-embeddings)"
     class: "RagSklearnAdapter"
     params:
       method: "llm"
@@ -78,8 +78,22 @@ models:
       # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
       # - To use other providers: See litellm docs for supported models
       model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from config.yaml)
-      # Embedding configuration:
-      # - use_openai: false (default) - Uses local SBERT embeddings (no API key needed)
-      # - use_openai: true - Uses OpenAI embeddings (requires OPENAI_API_KEY)
-      use_openai: false  # Default: false (uses SBERT). Set to true for OpenAI embeddings
-      embedder_model: "${model.sbert_model_name}"  # Used when use_openai: false
+      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
+      use_openai: false  # Always false for local embeddings
+      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
+
+  rag_llm_openai:
+    enabled: true  # Enable to train RAG-LLM with OpenAI embeddings (requires OPENAI_API_KEY and OpenAI embeddings to be built)
+    name: "RAG-LLM (OpenAI-embeddings)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # LLM model configuration:
+      # - Default: Uses Ollama (ollama/llama3.1:8b) from config.yaml - no API keys needed
+      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
+      # - To use other providers: See litellm docs for supported models
+      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from config.yaml)
+      # Embedding configuration: Uses OpenAI embeddings (requires OPENAI_API_KEY)
+      use_openai: true  # Always true for OpenAI embeddings
+      # Note: OpenAI embeddings must be built first (run 02_build_embeddings.py with OPENAI_API_KEY set)

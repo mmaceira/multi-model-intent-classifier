@@ -1,7 +1,8 @@
 """
 Semantic Search Demo Application
 
-This script provides a Gradio-based web interface for semantic search over the CLINC150 intent classification dataset using vector embeddings and FAISS for efficient similarity search.
+This script provides a Gradio-based web interface for semantic search over the CLINC150
+intent classification dataset using vector embeddings and FAISS for efficient similarity search.
 
 Key Features:
 - Search for semantically similar user utterances using configurable embedding models
@@ -13,11 +14,14 @@ Usage:
 - Run the script: `python scripts/demos/semantic_search_demo.py`
 - Access the Gradio web interface to perform semantic searches
 
-This script is suitable for production and demonstration, enabling users to explore semantic search capabilities interactively.
+This script is suitable for production and demonstration, enabling users to explore
+semantic search capabilities interactively.
 """
 
 import json
-import sys
+
+# Package is now properly installed, no path hacks needed
+import os
 from pathlib import Path
 
 import faiss
@@ -25,13 +29,11 @@ import gradio as gr
 import yaml
 from sentence_transformers import SentenceTransformer
 
-# Project root
 project_root = Path(__file__).resolve().parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
-# Load config to get default paths
-config_path = project_root / "config" / "config.yaml"
+# Load config to get default paths (respect CONFIG_FILE environment variable)
+config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_path = project_root / "config" / config_file
 with open(config_path) as f:
     config = yaml.safe_load(f)
 

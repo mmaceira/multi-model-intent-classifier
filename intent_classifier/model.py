@@ -2,8 +2,9 @@
 Text Classification Model Module
 
 This module provides the foundational architecture for text classification models in the project.
-It defines an abstract base class that standardizes the interface and implements common functionality
-for all text classifiers, ensuring consistency and interoperability across different model implementations.
+It defines an abstract base class that standardizes the interface and implements common
+functionality for all text classifiers, ensuring consistency and interoperability across
+different model implementations.
 
 Key Features:
 - Abstract base class for text classifiers
@@ -58,7 +59,8 @@ Example Usage:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from collections.abc import Sequence
+from typing import Any, Dict
 
 import numpy as np
 from sklearn.base import BaseEstimator
@@ -206,7 +208,7 @@ class TextClassifier(ABC, BaseEstimator):
 
         return self
 
-    def fit(self, X_raw: List[str], y: np.ndarray) -> "TextClassifier":
+    def fit(self, X_raw: Sequence[str], y: np.ndarray) -> "TextClassifier":
         """Train the text classifier.
 
         This method trains the classifier on the provided text data. It first vectorizes
@@ -214,7 +216,7 @@ class TextClassifier(ABC, BaseEstimator):
         method to train the model on the vectorized features.
 
         Args:
-            X_raw: List of raw text documents for training.
+            X_raw: Sequence of raw text documents for training.
             y: Array of target labels. Should have the same length as X_raw.
 
         Returns:
@@ -231,9 +233,9 @@ class TextClassifier(ABC, BaseEstimator):
               necessary to learn vocabulary statistics.
             - The _is_fitted flag is set to True after successful training.
         """
-        if not isinstance(X_raw, list):
-            raise TypeError("X_raw must be a list of strings")
-        if not X_raw or not y:
+        if not isinstance(X_raw, Sequence):
+            raise TypeError("X_raw must be a sequence of strings")
+        if len(X_raw) == 0 or len(y) == 0:
             raise ValueError("Input data cannot be empty")
         if len(X_raw) != len(y):
             raise ValueError("X_raw and y must have the same length")
@@ -247,7 +249,7 @@ class TextClassifier(ABC, BaseEstimator):
         self._is_fitted = True
         return self
 
-    def predict(self, X_raw: List[str]) -> np.ndarray:
+    def predict(self, X_raw: Sequence[str]) -> np.ndarray:
         """Make predictions using the trained classifier.
 
         This method makes predictions on the provided text data. It first vectorizes
@@ -255,7 +257,7 @@ class TextClassifier(ABC, BaseEstimator):
         _predict_model method to generate predictions.
 
         Args:
-            X_raw: List of raw text documents to classify.
+            X_raw: Sequence of raw text documents to classify.
 
         Returns:
             Array of predicted labels with the same length as X_raw.
@@ -267,16 +269,16 @@ class TextClassifier(ABC, BaseEstimator):
 
         Notes:
             - The model must be fitted (trained) before calling this method.
-            - Input validation ensures X_raw is a list of strings.
+            - Input validation ensures X_raw is a sequence of strings.
             - Empty input will raise a ValueError.
         """
         if not self._is_fitted:
             raise ValueError("Model has not been fitted. Call fit() before predict().")
 
-        if not isinstance(X_raw, list):
-            raise TypeError("X_raw must be a list of strings")
+        if not isinstance(X_raw, Sequence):
+            raise TypeError("X_raw must be a sequence of strings")
 
-        if not X_raw:
+        if len(X_raw) == 0:
             raise ValueError("Input data cannot be empty")
 
         try:
@@ -285,14 +287,14 @@ class TextClassifier(ABC, BaseEstimator):
         except Exception as e:
             raise RuntimeError(f"Prediction failed: {str(e)}") from e
 
-    def vectorize(self, texts: List[str]) -> np.ndarray:
+    def vectorize(self, texts: Sequence[str]) -> np.ndarray:
         """Convert raw text to feature vectors.
 
         This method transforms a list of text documents into feature vectors
         using the vectorizer provided at initialization.
 
         Args:
-            texts: List of text documents to vectorize.
+            texts: Sequence of text documents to vectorize.
 
         Returns:
             NumPy array of feature vectors with shape (n_samples, n_features).

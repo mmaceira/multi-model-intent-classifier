@@ -6,10 +6,10 @@ embeddings with a tuned Logistic Regression classifier. The implementation addre
 common issues with transformer-based text classification:
 
 1. **Scaling Issue**: Sentence-Transformer vectors are L2-normalized but not centered.
-   Feeding them directly to LogisticRegression without centering severely limits the
+   Feeding them directly to LogisticRegression without proper scaling limits the
    model's ability to use the full dynamic range of each feature. This implementation
-   adds StandardScaler(with_mean=False) to address this, which typically yields
-   +3-8 F1 points in text embedding benchmarks.
+   adds StandardScaler(with_mean=True) to center and scale features, which typically
+   yields +3-8 F1 points in text embedding benchmarks.
 
 2. **Regularization**: The base MiniLM + LogReg combination is under-regularized.
    This implementation uses GridSearchCV to tune the C parameter, providing better
@@ -17,7 +17,7 @@ common issues with transformer-based text classification:
 
 Key Features
 -----------
-✓ StandardScaler(with_mean=False) for proper feature scaling
+✓ StandardScaler(with_mean=True) for proper feature scaling (centering + variance scaling)
 ✓ GridSearchCV over a small C grid for regularization tuning
 ✓ Fully compatible with scikit‑learn's ``clone`` and the ``TextClassifier`` interface
 ✓ Implements required ``_predict_model`` hook
@@ -25,7 +25,7 @@ Key Features
 Implementation Details
 --------------------
 - Uses sentence-transformers for text embedding
-- Applies StandardScaler without mean centering (preserves L2 norm)
+- Applies StandardScaler with mean centering and variance scaling
 - Implements cross-validated C parameter tuning
 - Supports multi-class classification via one-vs-rest
 
@@ -52,7 +52,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from src.model import TextClassifier
+from intent_classifier.model import TextClassifier
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -69,7 +69,7 @@ class TransformerLogReg(TextClassifier):
         Cs: Sequence[float] | None = None,
         max_iter: int = 2000,
         cv: int = 5,
-        n_jobs: int = -1,
+        n_jobs: int = 2,
         scoring: str = "f1_macro",
     ) -> None:
         # ------------------------------------------------------------------
@@ -96,7 +96,7 @@ class TransformerLogReg(TextClassifier):
             solver="lbfgs",
             n_jobs=n_jobs,
         )
-        pipe = make_pipeline(StandardScaler(with_mean=False), base_clf)
+        pipe = make_pipeline(StandardScaler(with_mean=True), base_clf)
 
         self.clf = GridSearchCV(
             estimator=pipe,

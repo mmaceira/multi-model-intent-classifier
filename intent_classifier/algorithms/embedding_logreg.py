@@ -21,8 +21,8 @@ examples.  On the same embeddings this usually buys you +5–15 macro‑F1.
 
 Implementation details
 ---------------------
-* StandardScaler(with_mean=False) → centres *each* feature while preserving the
-  L2 length of the original embedding.
+* StandardScaler(with_mean=True) → centers each feature and scales variance,
+  which is appropriate for dense embedding vectors.
 * GridSearchCV sweeps C across (0.1 … 10) – edit the tuple if you need more.
 * Supports both OpenAI and SBERT embeddings via `use_openai` parameter.
 """
@@ -40,7 +40,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from src.model import TextClassifier
+from intent_classifier.model import TextClassifier
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -71,8 +71,9 @@ class EmbeddingLogReg(TextClassifier):
         Maximum iterations for LogisticRegression.
     cv : int, default=5
         Cross-validation folds for GridSearchCV.
-    n_jobs : int, default=-1
-        Number of parallel jobs for GridSearchCV.
+    n_jobs : int, default=2
+        Number of parallel jobs for GridSearchCV. Default is 2 to avoid memory issues.
+        Use -1 to use all cores, but beware of memory pressure.
     scoring : str, default="f1_macro"
         Scoring metric for GridSearchCV.
     """
@@ -88,7 +89,7 @@ class EmbeddingLogReg(TextClassifier):
         Cs: Sequence[float] | None = None,
         max_iter: int = 2000,
         cv: int = 5,
-        n_jobs: int = -1,
+        n_jobs: int = 2,
         scoring: str = "f1_macro",
     ) -> None:
         # ------------------------------------------------------------------
@@ -114,7 +115,7 @@ class EmbeddingLogReg(TextClassifier):
         # Initialize embedder based on backend
         # ------------------------------------------------------------------
         if use_openai:
-            from src.embeddings.openai_embedder import OpenAIEmbedder
+            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
             # Check for API key
             if api_key is None:
@@ -140,7 +141,7 @@ class EmbeddingLogReg(TextClassifier):
             solver="lbfgs",
             n_jobs=n_jobs,
         )
-        pipe = make_pipeline(StandardScaler(with_mean=False), base_clf)
+        pipe = make_pipeline(StandardScaler(with_mean=True), base_clf)
 
         self.clf = GridSearchCV(
             estimator=pipe,
@@ -309,7 +310,7 @@ class EmbeddingLogReg(TextClassifier):
         # ------------- resurrect the embedder (fresh instance) -------
         self.api_key = None  # supply at runtime if needed
         if state["use_openai"]:
-            from src.embeddings.openai_embedder import OpenAIEmbedder
+            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
             self.embedder = OpenAIEmbedder(
                 model=self.model,
@@ -322,7 +323,7 @@ class EmbeddingLogReg(TextClassifier):
             self.embedder = SentenceTransformer(self.model)
 
         # ------------- rebuild the scaler + classifier ------------------
-        scaler = StandardScaler(with_mean=False)
+        scaler = StandardScaler(with_mean=True)
         scaler.mean_ = state["scaler_params"]["mean_"]
         scaler.scale_ = state["scaler_params"]["scale_"]
         scaler.n_features_in_ = state["scaler_params"]["n_features_in_"]

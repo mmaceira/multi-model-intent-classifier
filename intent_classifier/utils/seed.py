@@ -12,7 +12,7 @@ This should be called at the start of all entry points (CLI scripts, API, traini
 to ensure reproducibility.
 
 Example:
-    >>> from src.utils.seed import set_global_seed
+    >>> from intent_classifier.utils.seed import set_global_seed
     >>> set_global_seed(42)
 """
 

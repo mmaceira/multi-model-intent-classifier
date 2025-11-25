@@ -14,7 +14,7 @@ from typing import List
 import numpy as np
 from openai import OpenAI
 
-from src.utils.retry import with_retry
+from intent_classifier.utils.retry import with_retry
 
 logger = logging.getLogger(__name__)
 

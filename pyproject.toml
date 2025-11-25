@@ -32,6 +32,12 @@ multi-model-api = "scripts.api.main_api:main"
 multi-model-pipeline = "scripts.pipeline.run_all:main"
 
 [project.optional-dependencies]
+# Core pipeline dependencies (needed for running the full pipeline)
+pipeline = [
+    "matplotlib~=3.10.1",
+    "seaborn~=0.13.2",
+    "dataframe_image~=0.2.7",
+]
 api = [
     "aiofiles~=24.1.0",
     "fastapi~=0.115.12",
@@ -66,6 +72,27 @@ viz = [
     "umap-learn~=0.5.5",
     "kaleido~=0.2.1",
 ]
+# Install all optional dependencies (combines all extras)
+all = [
+    "aiofiles~=24.1.0",
+    "fastapi~=0.115.12",
+    "fastapi-sso>=0.3.0",
+    "python-multipart~=0.0.20",
+    "prometheus-fastapi-instrumentator",
+    "uvicorn[standard]~=0.34.2",
+    "gradio~=5.29.0",
+    "kaleido~=0.2.1",
+    "matplotlib~=3.10.1",
+    "seaborn~=0.13.2",
+    "umap-learn~=0.5.5",
+    "dataframe_image~=0.2.7",
+    "pre-commit",
+    "ruff",
+    "black",
+    "pytest",
+    "ray[tune]~=2.45.0",
+    "mlflow>=2.0.0",
+]
 
 [build-system]
 requires = ["setuptools>=64", "wheel"]
@@ -74,7 +101,7 @@ build-backend = "setuptools.build_meta"
 # 👇 NEW: tell setuptools which packages to include/exclude
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["intent_classifier*"]
 exclude = ["setup*", "tests*"]
 
 [tool.black]
@@ -89,7 +116,7 @@ target-version = "py312"
 extend-select = ["E", "F", "I", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["intent_classifier"]
 combine-as-imports = true
 
 [tool.pytest.ini_options]

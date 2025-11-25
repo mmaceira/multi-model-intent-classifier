@@ -17,7 +17,7 @@ Created: 2025-05-03
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 
-from src.model import TextClassifier
+from intent_classifier.model import TextClassifier
 
 
 class NaiveBayesClassifier(TextClassifier):

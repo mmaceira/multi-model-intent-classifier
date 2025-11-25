@@ -1,20 +1,24 @@
 """
 CLINC150 Intent Classifier & Semantic Search Demo
 
-This script launches a Gradio-based web application for interactive intent classification and semantic search using pre-trained models from the CLINC150 Intent Classifier project.
+This script launches a Gradio-based web application for interactive intent classification
+and semantic search using pre-trained models from the CLINC150 Intent Classifier project.
 
 Key Features:
 - Select from multiple classification and RAG (Retrieval-Augmented Generation) models
 - Paste or enter user utterances for instant intent classification or semantic search
-- Robust model loading supporting various serialization formats (joblib, pickle, scikit-learn pipelines, or dicts)
-- Automatic handling of both traditional ML and RAG-based models, including FAISS index and passage retrieval
+- Robust model loading supporting various serialization formats
+  (joblib, pickle, scikit-learn pipelines, or dicts)
+- Automatic handling of both traditional ML and RAG-based models,
+  including FAISS index and passage retrieval
 - Clear error handling and informative feedback for missing or incompatible models
 
 Usage:
 - Run the script: `python scripts/demos/intent_classifier_demo.py`
 - Access the Gradio web interface to interact with the models
 
-This script is designed for production and demonstration purposes, providing a user-friendly interface for exploring intent classification and semantic search capabilities.
+This script is designed for production and demonstration purposes, providing a
+user-friendly interface for exploring intent classification and semantic search capabilities.
 """
 
 from __future__ import annotations
@@ -22,7 +26,6 @@ from __future__ import annotations
 import json
 import os
 import pickle
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -32,17 +35,17 @@ import joblib
 import numpy as np
 import yaml
 
+from intent_classifier.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_model_file
+
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
 # --------------------------------------------------------------------------- #
+# Package is now properly installed, no path hacks needed
 project_root = Path(__file__).resolve().parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
-from src.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_model_file
-
-# Load config to get default paths
-config_path = project_root / "config" / "config.yaml"
+# Load config to get default paths (respect CONFIG_FILE environment variable)
+config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_path = project_root / "config" / config_file
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -76,31 +79,44 @@ DEFAULT_EMBEDDINGS_PATH = str(project_root / embeddings_path)
 MODELS_INFO = {
     "naive_bayes": {
         "name": "Naive Bayes",
-        "description": "Multinomial Naive Bayes classifier using TF-IDF features. Fast and efficient for intent classification.",
+        "description": (
+            "Multinomial Naive Bayes classifier using TF-IDF features. "
+            "Fast and efficient for intent classification."
+        ),
         "dir": "Naive Bayes",
         "type": "classifier",
     },
     "linear_svm": {
         "name": "Linear SVM",
-        "description": "Support Vector Machine with linear kernel. Good balance of accuracy and speed.",
+        "description": (
+            "Support Vector Machine with linear kernel. " "Good balance of accuracy and speed."
+        ),
         "dir": "Linear SVM",
         "type": "classifier",
     },
     "tfidf_svm": {
         "name": "TF-IDF + SVM",
-        "description": "SVM classifier using TF-IDF bigram features. Strong performance on intent classification.",
+        "description": (
+            "SVM classifier using TF-IDF bigram features. "
+            "Strong performance on intent classification."
+        ),
         "dir": "TF-IDF bigrams + SVM",
         "type": "classifier",
     },
     "minilm_logreg": {
         "name": "MiniLM + LogReg",
-        "description": "Transformer embeddings with Logistic Regression. Leverages semantic understanding from MiniLM.",
+        "description": (
+            "Transformer embeddings with Logistic Regression. "
+            "Leverages semantic understanding from MiniLM."
+        ),
         "dir": "MiniLM + LogReg",
         "type": "classifier",
     },
     "rag_centroid": {
         "name": "RAG CentroidNN",
-        "description": "Retrieval Augmented Generation using centroid-based nearest neighbors search.",
+        "description": (
+            "Retrieval Augmented Generation using centroid-based " "nearest neighbors search."
+        ),
         "dir": "RAG-CentroidNN",
         "type": "rag",
     },
@@ -118,7 +134,9 @@ MODELS_INFO = {
     },
     "rag_llm_openai": {
         "name": "RAG LLM (OpenAI)",
-        "description": "RAG model using OpenAI embeddings for improved semantic search capabilities.",
+        "description": (
+            "RAG model using OpenAI embeddings for improved semantic search capabilities."
+        ),
         "dir": "RAG-LLM (OpenAI-embeddings)",
         "type": "rag",
     },
@@ -270,28 +288,47 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                 # If this is a RagSklearnAdapter with no rag component, initialize it
                 if hasattr(classifier_obj, "rag") and classifier_obj.rag is None:
                     print(f"[load_model] Initializing RAG component for {model_id}")
-                    from src.embeddings.openai_embedder import OpenAIEmbedder
-                    from src.rag import load_centroid, load_kmajority, load_llm
-                    from src.rag.vector_store import VectorStore
+                    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+                    from intent_classifier.rag import (
+                        load_centroid,
+                        load_kmajority,
+                        load_llm,
+                        set_artifacts_dir,
+                    )
+                    from intent_classifier.rag.vector_store import VectorStore
+
+                    # Set embeddings directory before loading RAG models
+                    set_artifacts_dir(embeddings_path, embeddings_path)
+
+                    # Get top_k from config or use default
+                    top_k = config.get("model", {}).get("rag_top_k", 25)
 
                     # Initialize appropriate RAG model based on model_id
                     if "kmajority" in model_id:
-                        rag_model = load_kmajority(use_openai="openai" in model_id)
+                        rag_model = load_kmajority(
+                            use_openai="openai" in model_id,
+                            top_k=top_k,
+                            artifacts_dir=embeddings_path,
+                        )
                     elif "centroid" in model_id:
-                        rag_model = load_centroid(use_openai="openai" in model_id)
+                        rag_model = load_centroid(
+                            use_openai="openai" in model_id, artifacts_dir=embeddings_path
+                        )
                     else:  # LLM-based RAG
                         if "openai" in model_id:
                             embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
                             rag_model = load_llm(
-                                top_k=5,
+                                top_k=top_k,
                                 model=config.get("model", {}).get(
                                     "llm_model", "ollama/llama3.1:8b"
                                 ),
                                 embedder=embedder,
                                 use_openai=True,
+                                artifacts_dir=embeddings_path,
                             )
                         else:
-                            # For local embeddings, use the same model that was used to create the index
+                            # For local embeddings, use the same model that was used
+                            # to create the index
                             def embedder(texts):
                                 return VectorStore.embed(
                                     config.get("model", {}).get(
@@ -301,12 +338,13 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                                 )
 
                             rag_model = load_llm(
-                                top_k=5,
+                                top_k=top_k,
                                 model=config.get("model", {}).get(
                                     "llm_model", "ollama/llama3.1:8b"
                                 ),
                                 embedder=embedder,
                                 use_openai=False,
+                                artifacts_dir=embeddings_path,
                             )
 
                     # Set the rag component

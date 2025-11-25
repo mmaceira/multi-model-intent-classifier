@@ -1,7 +1,7 @@
 import logging
 import os
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
@@ -13,9 +13,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 # Import unified model loader
-from src.utils.model_loader import load_persisted_model
-from src.utils.paths import get_embeddings_dir, get_models_dir
-from src.utils.seed import set_global_seed
+from intent_classifier.utils.model_loader import load_persisted_model
+from intent_classifier.utils.paths import get_embeddings_dir, get_models_dir
+from intent_classifier.utils.seed import set_global_seed
 
 # Load environment variables from .env file
 load_dotenv()
@@ -184,8 +184,10 @@ class ReadyResponse(BaseModel):
     models_loaded: int
 
 
-# Model cache (LRU-like, but simple dict for now)
-_model_cache: dict[str, Any] = {}
+# Model cache with LRU eviction
+# Maximum number of models to keep in cache (default: 10)
+MAX_CACHE_SIZE = int(os.getenv("MODEL_CACHE_SIZE", "10"))
+_model_cache: OrderedDict[str, Any] = OrderedDict()
 MODELS_DIR = get_models_dir()
 EMBEDDINGS_DIR = get_embeddings_dir()
 
@@ -211,12 +213,21 @@ MODELS_INFO = {
 
 
 def _get_model(model_identifier: str):
-    """Get model from cache or load it."""
+    """Get model from cache or load it with LRU eviction."""
     if model_identifier not in _model_cache:
         logger.info(f"Loading model: {model_identifier}")
+        # Evict oldest entry if cache is full
+        if len(_model_cache) >= MAX_CACHE_SIZE:
+            oldest_key, _ = _model_cache.popitem(last=False)
+            logger.info(f"Evicting model from cache: {oldest_key}")
+
         _model_cache[model_identifier] = load_persisted_model(
             model_identifier, models_dir=MODELS_DIR, embeddings_dir=EMBEDDINGS_DIR
         )
+    else:
+        # Move to end (most recently used)
+        _model_cache.move_to_end(model_identifier)
+
     return _model_cache[model_identifier]
 
 

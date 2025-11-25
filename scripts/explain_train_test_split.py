@@ -5,12 +5,10 @@ Script to explain how the train/test split works in CLINC150 dataset.
 This shows that the splits come pre-defined from HuggingFace.
 """
 
-import sys
 from pathlib import Path
 
 # Infer repo root
 repo_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(repo_root))
 
 from datasets import load_dataset  # noqa: E402
 

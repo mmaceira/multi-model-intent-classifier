@@ -56,7 +56,7 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from src.utils.embeddings import EmbeddingGenerator
+from intent_classifier.utils.embeddings import EmbeddingGenerator
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)

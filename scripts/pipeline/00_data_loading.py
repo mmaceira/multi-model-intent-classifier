@@ -23,7 +23,9 @@ from pathlib import Path
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
+# Add repo root to path for config imports (config is not part of the installed package)
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Import config setup
 from config.notebook_setup import (  # noqa: E402
@@ -32,8 +34,8 @@ from config.notebook_setup import (  # noqa: E402
 )
 
 # Import dataset and exploration modules
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.exploration import class_frequency, length_distribution  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.exploration import class_frequency, length_distribution  # noqa: E402
 
 # Configure logging and warnings
 warnings.filterwarnings("ignore")

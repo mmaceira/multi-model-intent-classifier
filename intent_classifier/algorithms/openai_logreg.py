@@ -2,7 +2,7 @@
 OpenAI‑Embedding Logistic Regression module for text classification (scaled + C‑tuned).
 
 ⚠️  DEPRECATED: This module is kept for backward compatibility only.
-Please use `EmbeddingLogReg` from `src.algorithms.embedding_logreg` instead.
+Please use `EmbeddingLogReg` from `intent_classifier.algorithms.embedding_logreg` instead.
 
 The new `EmbeddingLogReg` class supports both OpenAI and SBERT embeddings via the
 `use_openai` parameter, making it more flexible and not requiring an API key for
@@ -12,7 +12,7 @@ This file now just imports and re-exports `EmbeddingLogReg` as `OpenAIEmbedLogRe
 for backward compatibility.
 """
 
-from src.algorithms.embedding_logreg import EmbeddingLogReg
+from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg
 
 # Backward compatibility alias
 OpenAIEmbedLogReg = EmbeddingLogReg

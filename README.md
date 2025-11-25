@@ -11,6 +11,10 @@ A production-ready NLP pipeline for automated intent classification and semantic
 
 ```bash
 # 1. Install dependencies
+# For full pipeline (recommended - includes all optional dependencies):
+uv sync --extra all  # or: pip install -e ".[all]"
+
+# For minimal installation (core only):
 uv sync  # or: pip install -e .
 
 # 2. (Optional) Set up Ollama for RAG-LLM models

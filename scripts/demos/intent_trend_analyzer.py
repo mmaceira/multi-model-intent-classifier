@@ -1,7 +1,9 @@
 """
 Intent Trend Analyzer Application
 
-This script provides a Gradio-based web interface for analyzing intent trends and evolution using semantic search and large language models (LLMs) on the CLINC150 intent classification dataset.
+This script provides a Gradio-based web interface for analyzing intent trends and
+evolution using semantic search and large language models (LLMs) on the CLINC150
+intent classification dataset.
 
 Key Features:
 - Time-series and trend analysis of user intents
@@ -14,14 +16,15 @@ Usage:
 - Run the script: `python scripts/demos/intent_trend_analyzer.py`
 - Access the Gradio web interface to analyze intent trends interactively
 
-This script is suitable for production and demonstration, enabling users to explore intent evolution and trend analysis in user utterance data.
+This script is suitable for production and demonstration, enabling users to explore
+intent evolution and trend analysis in user utterance data.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import sys
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -38,13 +41,12 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
-# Project root
+# Project root (package is now properly installed, no path hacks needed)
 project_root = Path(__file__).resolve().parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
-# Load config to get default paths
-config_path = project_root / "config" / "config.yaml"
+# Load config to get default paths (respect CONFIG_FILE environment variable)
+config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_path = project_root / "config" / config_file
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -120,8 +122,10 @@ class IntentTrendAnalyzer:
     def _classify_relevance(self, query: str, doc: str) -> Tuple[str, str]:
         """Classify relevance of a document to the query using LLM."""
         system = (
-            "You are an expert assistant. Label how relevant this previous user utterance is to understanding a new utterance. "
-            f"Use labels {self.config['relevance_labels']}. Respond in JSON: {{ relevance: label, comment: rationale }}."
+            "You are an expert assistant. Label how relevant this previous user "
+            "utterance is to understanding a new utterance. "
+            f"Use labels {self.config['relevance_labels']}. "
+            "Respond in JSON: {{ relevance: label, comment: rationale }}."
         )
         user = f"New Utterance:\n{query}\n\nPrevious Utterance:\n{doc}\n"
         resp = completion(
@@ -169,11 +173,15 @@ class IntentTrendAnalyzer:
 
         # Generate trend analysis
         system = (
-            "You are an intent classification analyst. Given a new user utterance and context of past utterances, "
-            "assess whether the new intent is surprising or in line with previous patterns, "
-            "and what we might expect next."
+            "You are an intent classification analyst. Given a new user utterance "
+            "and context of past utterances, assess whether the new intent is "
+            "surprising or in line with previous patterns, and what we might expect next."
         )
-        prompt = f"New Utterance:\n{utterance}\n\nContext of Past Utterances:\n{context}\n\nQ: Is this new utterance surprising compared to past patterns? What can we expect next?"
+        prompt = (
+            f"New Utterance:\n{utterance}\n\nContext of Past Utterances:\n{context}\n\n"
+            "Q: Is this new utterance surprising compared to past patterns? "
+            "What can we expect next?"
+        )
         analysis = completion(
             model=self.config["analysis_model"],
             messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
@@ -197,6 +205,13 @@ class IntentTrendAnalyzer:
 def create_demo():
     """Create the Gradio demo interface."""
     analyzer = IntentTrendAnalyzer()
+
+    # Re-import gradio to ensure it's available (handles any import issues)
+    if not hasattr(gr, "Blocks"):
+        raise RuntimeError(
+            f"Gradio Blocks not available. Version: {getattr(gr, '__version__', 'unknown')}. "
+            f"This may be a Gradio installation issue."
+        )
 
     with gr.Blocks(title="Intent Trend Analyzer") as demo:
         gr.Markdown("# 🎯 Intent Trend Analyzer")

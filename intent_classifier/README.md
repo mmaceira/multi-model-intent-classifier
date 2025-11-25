@@ -32,8 +32,8 @@ The central model definitions and interfaces:
 
 ```python
 # Example usage
-from src.model import TextClassifier
-from src.algorithms.linear_svm import LinearSVMClassifier
+from intent_classifier.model import TextClassifier
+from intent_classifier.algorithms.linear_svm import LinearSVMClassifier
 
 # Create a classifier instance
 classifier = LinearSVMClassifier()
@@ -56,7 +56,7 @@ Handles all aspects of model inference and prediction:
 
 ```python
 # Example usage
-from src.prediction import classify_text
+from intent_classifier.prediction import classify_text
 
 # Classify a single document
 result = classify_text("What is the weather today?", model_type="bert_lr")
@@ -75,7 +75,7 @@ Manages model training and hyperparameter optimization:
 
 ```python
 # Example usage
-from src.training import train_model
+from intent_classifier.training import train_model
 from sklearn.model_selection import train_test_split
 
 # Split data

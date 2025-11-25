@@ -65,7 +65,7 @@ from dotenv import load_dotenv
 from litellm import acompletion
 from litellm.exceptions import RateLimitError
 
-from src.utils.retry import with_retry
+from intent_classifier.utils.retry import with_retry
 
 from .classifier_base import RagClassifierBase
 from .retrieval import Retriever
@@ -225,7 +225,8 @@ class RagLLM(RagClassifierBase):
         if self.embedder is None:
             return VectorStore.embed("sentence-transformers/all-MiniLM-L6-v2", docs)
         if hasattr(self.embedder, "encode"):
-            return np.array(self.embedder.encode(list(docs)), dtype="float32")
+            # encode() now returns numpy array directly
+            return self.embedder.encode(list(docs)).astype("float32")
         return np.array(self.embedder(list(docs)), dtype="float32")
 
     @with_retry(max_retries=3, initial_delay=1.0, max_delay=10.0, backoff_factor=2.0, logger=logger)
@@ -372,13 +373,6 @@ class RagLLM(RagClassifierBase):
                 contexts.append("")  # Use empty context if retrieval fails
 
         # build a single prompt with multiple items
-        # Format labels as a numbered list for better readability
-        labels_list = "\n".join(
-            f"  - {label}" for label in self.labels[:20]
-        )  # Show first 20 labels
-        if len(self.labels) > 20:
-            labels_list += f"\n  ... and {len(self.labels) - 20} more labels"
-
         lines = []
         for i, (doc, ctx) in enumerate(zip(docs, contexts, strict=False), start=1):
             # Ensure doc is a string and not empty
@@ -394,23 +388,29 @@ class RagLLM(RagClassifierBase):
         if len(docs) > 3:
             examples_json += "..."
 
-        # Show all labels if there are not too many, otherwise show first 30
-        if len(self.labels) <= 30:
+        # Show ALL labels - the LLM needs to see all available options
+        # For large label sets, we'll show them all but format them compactly
+        if len(self.labels) <= 100:
+            # Show all labels in a clear format
             full_labels_list = "\n".join(f"  - {label}" for label in self.labels)
         else:
-            full_labels_list = "\n".join(f"  - {label}" for label in self.labels[:30])
-            full_labels_list += f"\n  ... and {len(self.labels) - 30} more labels"
+            # For very large label sets (>100), show all but in a more compact format
+            # Group labels for better readability
+            full_labels_list = "\n".join(f"  - {label}" for label in self.labels)
+            # Note: We show all labels even if there are many, because the LLM
+            # MUST see all options to make correct predictions
 
         user_content = (
             f"Classify these {len(docs)} user utterances into ONE of these EXACT "
-            f"intent categories:\n{full_labels_list}\n\n"
+            f"intent categories (ALL {len(self.labels)} labels are shown below - "
+            f"you MUST use one of these EXACT labels):\n\n{full_labels_list}\n\n"
             + "CRITICAL RULES - READ CAREFULLY:\n"
-            + "1. You MUST use one of the EXACT labels from the list above - "
+            + f"1. You MUST use one of the EXACT {len(self.labels)} labels from the list above - "
             "copy them EXACTLY (case-sensitive, including underscores/hyphens)\n"
-            + "2. Do NOT create new labels, do NOT use synonyms, do NOT modify "
-            "labels, do NOT paraphrase\n"
+            + "2. ALL available labels are shown above - do NOT create new labels, "
+            "do NOT use synonyms, do NOT modify labels, do NOT paraphrase\n"
             + "3. If an utterance seems similar to a label but doesn't match exactly, "
-            "choose the CLOSEST matching label from the list\n"
+            "choose the CLOSEST matching label from the list above\n"
             + "4. Look at the context examples - they show similar utterances and "
             "their correct EXACT labels\n"
             + "5. Your response MUST be ONLY a valid JSON object with a 'labels' array - "
@@ -418,16 +418,29 @@ class RagLLM(RagClassifierBase):
             + f"6. The 'labels' array MUST contain EXACTLY {len(docs)} labels, "
             "one for each utterance in order\n"
             + "7. Each label MUST be copied EXACTLY from the list above - "
-            "no modifications\n\n" + "\n\n".join(lines) + "\n\nRESPOND WITH ONLY THIS JSON FORMAT "
+            "no modifications, no variations\n\n"
+            + "\n\n".join(lines)
+            + "\n\nRESPOND WITH ONLY THIS JSON FORMAT "
             "(no explanations, no markdown, no code blocks):\n"
             + f'{{"labels": [{examples_json}]}}\n\n'
             + f"Remember: Return ONLY the JSON object. The array must have EXACTLY "
-            f"{len(docs)} labels, each one EXACTLY matching a label from the list above."
+            f"{len(docs)} labels, each one EXACTLY matching one of the "
+            f"{len(self.labels)} labels from the list above."
         )
         messages = [
             {"role": "system", "content": _PROMPT_SYSTEM},
             {"role": "user", "content": user_content},
         ]
+
+        # Debug logging: log the prompt being sent (first time only, to avoid spam)
+        if logger.isEnabledFor(logging.DEBUG) or len(docs) <= 3:
+            first_chars = min(200, len(user_content))
+            logger.debug(
+                f"Prompt being sent to LLM (first {first_chars} chars):\n"
+                f"{user_content[:200]}..."
+            )
+            logger.debug(f"Number of labels in prompt: {len(self.labels)}")
+            logger.debug(f"Labels: {self.labels}")
 
         text = None  # Initialize to avoid UnboundLocalError in exception handlers
         max_retries_for_invalid = 2  # Retry up to 2 times if response is invalid
@@ -435,6 +448,10 @@ class RagLLM(RagClassifierBase):
             try:
                 resp = await self._chat_with_retry(messages)
                 text = resp.choices[0].message.content.strip()
+
+                # Debug logging: log the raw response
+                if logger.isEnabledFor(logging.DEBUG) or len(docs) <= 3:
+                    logger.debug(f"Raw LLM response (first 500 chars):\n{text[:500]}")
 
                 # Strip markdown code blocks if present
                 # (LLM sometimes wraps JSON in ```json ... ```)
@@ -547,14 +564,17 @@ class RagLLM(RagClassifierBase):
                     invalid_count = 0
                     for lab in labels_out:
                         lab_str = str(lab).strip()
-                        # Exact match
+                        # Exact match - if found, use it and skip fuzzy matching
                         if lab_str in self.labels:
                             validated_labels.append(lab_str)
-                        else:
-                            invalid_count += 1
-                        # Try case-insensitive match
+                            continue  # Skip to next label
+
+                        # No exact match - try fuzzy matching
+                        invalid_count += 1
                         lab_lower = lab_str.lower()
                         matched = None
+
+                        # Try case-insensitive match
                         for valid_label in self.labels:
                             if valid_label.lower() == lab_lower:
                                 matched = valid_label
@@ -573,6 +593,7 @@ class RagLLM(RagClassifierBase):
 
                         if matched:
                             validated_labels.append(matched)
+                            invalid_count -= 1  # Adjust count since we found a match
                             logger.debug(f"Normalized label '{lab_str}' to '{matched}'")
                         else:
                             # Fallback: use majority vote from neighbors for this document

@@ -19,7 +19,9 @@ import pandas as pd
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
+# Add repo root to path for config imports (config is not part of the installed package)
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Import config setup
 from config.notebook_setup import (  # noqa: E402
@@ -29,8 +31,8 @@ from config.notebook_setup import (  # noqa: E402
 )
 
 # Import dataset and exploration modules
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.exploration import (  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.exploration import (  # noqa: E402
     class_frequency,
     comprehensive_analysis,
     length_distribution,

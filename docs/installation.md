@@ -21,7 +21,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Or on Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # 3. Install dependencies (uv will automatically create a virtual environment)
+# For full pipeline with all features (recommended):
+uv sync --extra all
+
+# For minimal installation (core only):
 uv sync
+
+# For just the pipeline (includes matplotlib, seaborn, dataframe_image):
+uv sync --extra pipeline
 
 # 4. Activate the virtual environment (if needed)
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -48,7 +55,14 @@ python -m venv venv/multi-model-intent-classifier
 source venv/multi-model-intent-classifier/bin/activate  # On Windows: venv\multi-model-intent-classifier\Scripts\activate
 
 # 3. Install dependencies
+# For full pipeline with all features (recommended):
+pip install -e ".[all]"
+
+# For minimal installation (core only):
 pip install -e .
+
+# For just the pipeline (includes matplotlib, seaborn, dataframe_image):
+pip install -e ".[pipeline]"
 
 # 4. Set up Ollama (required for RAG-LLM models)
 # Make sure Ollama is installed and running:
@@ -60,22 +74,22 @@ pip install -e .
 # Note: OpenAI models are disabled by default - the pipeline works with Ollama only
 ```
 
-## External Dependencies
+## Optional Dependencies
 
-The project has several optional dependencies for different features:
+The project has several optional dependency groups for different features:
 
-| Feature | Required Packages | Notes |
-|---------|------------------|-------|
-| **Base training & evaluation** | `scikit-learn`, `numpy`, `pandas`, `datasets` | Core dependencies for all models |
-| **RAG + FAISS** | `faiss-cpu` | Required for RAG models (CentroidNN, k-Majority, LLM) |
-| **OpenAI / LLM mode** | `litellm`, `openai` | Requires `OPENAI_API_KEY` environment variable |
-| **API server** | `uvicorn`, `fastapi` | For running the REST API (`scripts/api/main_api.py`) |
-| **SBERT embeddings** | `sentence-transformers` | Default embedding backend |
-| **Testing** | `pytest`, `datasets` | Required for running test suite |
-| **MLflow tracking** | `mlflow>=2.0.0` | Optional - install with `pip install -e ".[mlflow]"` or `uv sync --extra mlflow` |
-| **API server** | `fastapi`, `uvicorn` | Install with `pip install -e ".[api]"` or `uv sync --extra api` |
-| **Visualization** | `matplotlib`, `seaborn` | Install with `pip install -e ".[viz]"` or `uv sync --extra viz` |
-| **Hyperparameter tuning** | `ray[tune]` | Install with `pip install -e ".[tune]"` or `uv sync --extra tune` |
+| Extra | Includes | Install Command |
+|-------|----------|----------------|
+| **all** | Everything (recommended for full pipeline) | `uv sync --extra all` or `pip install -e ".[all]"` |
+| **pipeline** | Core pipeline dependencies (matplotlib, seaborn, dataframe_image) | `uv sync --extra pipeline` or `pip install -e ".[pipeline]"` |
+| **api** | FastAPI server dependencies | `uv sync --extra api` or `pip install -e ".[api]"` |
+| **demo** | Gradio demos and visualization tools | `uv sync --extra demo` or `pip install -e ".[demo]"` |
+| **viz** | Visualization tools (matplotlib, seaborn, umap) | `uv sync --extra viz` or `pip install -e ".[viz]"` |
+| **tune** | Ray Tune for hyperparameter optimization | `uv sync --extra tune` or `pip install -e ".[tune]"` |
+| **mlflow** | MLflow tracking | `uv sync --extra mlflow` or `pip install -e ".[mlflow]"` |
+| **dev** | Development tools (pytest, ruff, black, pre-commit) | `uv sync --extra dev` or `pip install -e ".[dev]"` |
+
+**Note**: The `pipeline` extra is required to run the full training pipeline (scripts in `scripts/pipeline/`). The `all` extra includes everything and is recommended for most users.
 
 **Note**: All dependencies are listed in `pyproject.toml`. The base installation includes most dependencies. For OpenAI features, ensure `OPENAI_API_KEY` is set in your environment or `.env` file.
 

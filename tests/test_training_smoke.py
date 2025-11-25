@@ -2,8 +2,8 @@
 Tiny end-to-end smoke test to ensure dataset + classifier wiring stays intact.
 """
 
-from src.algorithms.linear_svm import LinearSVMClassifier
-from src.datasets.dataset import get_dataset
+from intent_classifier.algorithms.linear_svm import LinearSVMClassifier
+from intent_classifier.datasets.dataset import get_dataset
 
 
 def test_tiny_training_smoke():

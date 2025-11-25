@@ -5,7 +5,7 @@ try:
 except ImportError:
     pytest.skip("datasets not installed; skipping CLINC150 tests", allow_module_level=True)
 
-from src.datasets.dataset import get_dataset
+from intent_classifier.datasets.dataset import get_dataset
 
 
 def test_clinc150_loader_basic():
@@ -35,7 +35,7 @@ def test_clinc150_loader_basic():
 
 def test_tiny_training_smoke(tmp_path, monkeypatch):
     """End-to-end smoke test: train a simple classifier on a small CLINC150 subset."""
-    from src.algorithms.linear_svm import LinearSVMClassifier
+    from intent_classifier.algorithms.linear_svm import LinearSVMClassifier
 
     # Use a small subset for quick testing
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(

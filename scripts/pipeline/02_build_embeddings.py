@@ -18,7 +18,9 @@ import numpy as np
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
+# Add repo root to path for config imports (config is not part of the installed package)
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Import config setup
 from sentence_transformers import SentenceTransformer  # noqa: E402
@@ -26,10 +28,10 @@ from sentence_transformers import SentenceTransformer  # noqa: E402
 from config.notebook_setup import config_vars  # noqa: E402
 
 # Import dataset and embedding modules
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.embeddings.openai_embedder import OpenAIEmbedder  # noqa: E402
-from src.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
-from src.rag.vector_store import VectorStore  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder  # noqa: E402
+from intent_classifier.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
+from intent_classifier.rag.vector_store import VectorStore  # noqa: E402
 
 # Parameters
 SBERT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"

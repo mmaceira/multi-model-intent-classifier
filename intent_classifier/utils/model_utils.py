@@ -86,7 +86,7 @@ def load_model_paths(models: Dict[str, Any], model_dir: Union[str, Path]) -> Dic
         Dictionary mapping model names to their file paths
 
     Example:
-        >>> from src.utils.model_loader import load_models_from_config
+        >>> from intent_classifier.utils.model_loader import load_models_from_config
         >>> models = load_models_from_config()
         >>> model_paths = load_model_paths(models, "models")
         >>> # Result can be used with run_prediction

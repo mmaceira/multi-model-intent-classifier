@@ -37,7 +37,6 @@ This script follows ML best practices:
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import ray
@@ -51,18 +50,23 @@ from sklearn.svm import LinearSVC
 
 # Add repo root to path for imports
 repo_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(repo_root))
 
 # Import from project
 import numpy as np  # noqa: E402
 from sentence_transformers import SentenceTransformer  # noqa: E402
 
-from src.algorithms.embedding_logreg import EmbeddingLogReg  # noqa: E402
-from src.algorithms.transformer_logreg import TransformerLogReg  # noqa: E402
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.rag import _OPENAI_DIR, _SBERT_DIR, load_centroid, load_kmajority, load_llm  # noqa: E402
-from src.rag.adapter_sklearn import RagSklearnAdapter  # noqa: E402
-from src.rag.vector_store import VectorStore  # noqa: E402
+from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg  # noqa: E402
+from intent_classifier.algorithms.transformer_logreg import TransformerLogReg  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.rag import (  # noqa: E402
+    _OPENAI_DIR,
+    _SBERT_DIR,
+    load_centroid,
+    load_kmajority,
+    load_llm,
+)
+from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter  # noqa: E402
+from intent_classifier.rag.vector_store import VectorStore  # noqa: E402
 
 
 def train_nb(config, data=None):
@@ -195,7 +199,7 @@ def ensure_embeddings_built(X_train, y_train, use_openai=False, force_rebuild=Fa
 
     try:
         if use_openai:
-            from src.embeddings.openai_embedder import OpenAIEmbedder
+            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
             print("Using OpenAI model: text-embedding-3-small")
             embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
@@ -528,7 +532,7 @@ def main():
         embeddings_dir_path = repo_root / embeddings_dir
         os.environ["EMBEDDINGS_DIR"] = str(embeddings_dir_path)
         # Update RAG module paths
-        from src.rag import set_artifacts_dir
+        from intent_classifier.rag import set_artifacts_dir
 
         set_artifacts_dir(embeddings_dir_path)
 

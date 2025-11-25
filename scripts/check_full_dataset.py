@@ -5,15 +5,13 @@ Script to check the full CLINC150 dataset and verify the full_dataset config.
 This script loads the dataset with no limits to see what the full dataset contains.
 """
 
-import sys
 from collections import Counter
 from pathlib import Path
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(repo_root))
 
-from src.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 
 
 def main():

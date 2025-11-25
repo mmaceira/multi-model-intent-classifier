@@ -4,7 +4,7 @@ This module provides Pydantic models for validating configuration files.
 It ensures type safety and catches configuration errors at startup.
 
 Usage:
-    >>> from src.config_schema import load_and_validate_config
+    >>> from intent_classifier.config_schema import load_and_validate_config
     >>> config = load_and_validate_config("config/config.yaml")
     >>> print(config.general.run_name)
     "experiment_10_classes"

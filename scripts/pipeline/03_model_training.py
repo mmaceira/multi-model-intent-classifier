@@ -3,7 +3,7 @@
 03 – Model Training
 
 This script trains the selected models and persists all artefacts. It delegates
-all heavy-lifting to the unified `src.training.run_training` helper.
+all heavy-lifting to the unified `intent_classifier.training.run_training` helper.
 """
 
 import sys
@@ -11,7 +11,9 @@ from pathlib import Path
 
 # Infer repo root from the location of this file
 repo_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(repo_root))  # allow `import src.*`
+# Add repo root to path for config imports (config is not part of the installed package)
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Import config setup
 from config.notebook_setup import (  # noqa: E402
@@ -20,9 +22,9 @@ from config.notebook_setup import (  # noqa: E402
 )
 
 # Import dataset and training modules
-from src.datasets.dataset import get_dataset  # noqa: E402
-from src.training import run_training  # noqa: E402
-from src.utils.model_loader import load_models_from_config  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.training import run_training  # noqa: E402
+from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():

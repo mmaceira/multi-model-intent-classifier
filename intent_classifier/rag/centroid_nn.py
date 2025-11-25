@@ -78,8 +78,27 @@ class CentroidNN(RagClassifierBase):
     def load_default(cls, use_openai: bool = False, **kwargs):
         retriever = Retriever.from_default(use_openai=use_openai)
         by_lbl: dict[str, list[np.ndarray]] = {}
-        for m in retriever.store.meta:
-            by_lbl.setdefault(m["label"], []).append(np.array(m["vector"]))
+
+        # Vectors are stored in FAISS index, not in metadata
+        # Reconstruct vectors from FAISS index using metadata IDs
+        index = retriever.store.index
+        meta = retriever.store._meta
+
+        for i, m in enumerate(meta):
+            label = m.get("label", "")
+            if not label:
+                continue
+
+            # Reconstruct vector from FAISS index
+            # The index position corresponds to the metadata position
+            try:
+                vector = index.reconstruct(i)
+                by_lbl.setdefault(label, []).append(np.array(vector, dtype=np.float32))
+            except Exception:
+                # Skip if vector reconstruction fails
+                continue
+
+        # Compute centroids for each label
         cents = {k: np.mean(v, axis=0) for k, v in by_lbl.items()}
         return cls(cents)
 

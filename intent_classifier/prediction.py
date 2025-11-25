@@ -70,7 +70,7 @@ import cloudpickle
 import numpy as np
 import pandas as pd
 
-from src.utils.file_ops import ensure_dir
+from intent_classifier.utils.file_ops import ensure_dir
 
 
 def _persist_predictions(
