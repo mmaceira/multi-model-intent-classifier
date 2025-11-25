@@ -28,9 +28,10 @@ def load_clinc150(
     use_oos: bool = False,
     max_train_samples: int = None,
     max_test_samples: int = None,
+    max_val_samples: int = None,
     max_classes: int = None,
     seed: int = 42,
-) -> Tuple[List[str], List[str], List[str], List[str], List[str]]:
+) -> Tuple[List[str], List[str], List[str], List[str], List[str], List[str], List[str]]:
     """
     Load the CLINC150 dataset (clinc_oos, config 'plus').
 
@@ -45,16 +46,20 @@ def load_clinc150(
     max_test_samples:
         Maximum number of test samples to load. If None, loads all samples.
         Useful for quick testing with smaller datasets.
+    max_val_samples:
+        Maximum number of validation samples to load. If None, loads all samples.
     max_classes:
         Maximum number of classes to include. If None, includes all classes.
-        If specified, randomly selects max_classes classes and filters samples to only those classes.
-        Useful for quick testing with fewer classes (e.g., 10 classes instead of 151).
+        If specified, randomly selects max_classes classes and filters samples
+        to only those classes. Useful for quick testing with fewer classes
+        (e.g., 10 classes instead of 151).
     seed:
         Random seed for reproducibility when selecting classes and sampling.
 
     Returns
     -------
-    X_train, y_train, X_test, y_test, classes
+    X_train, y_train, X_val, y_val, X_test, y_test, classes
+    (train, validation, and test are kept separate)
     """
     # 'plus' configuration has train/validation/test splits and oos examples
     ds = load_dataset("clinc_oos", "plus")
@@ -93,12 +98,8 @@ def load_clinc150(
     X_valid, y_valid = _extract("validation")
     X_test, y_test = _extract("test")
 
-    # Optionally, merge validation into train for simplicity
-    X_train_extended = X_train + X_valid
-    y_train_extended = y_train + y_valid
-
     # Get all unique classes from the full dataset
-    all_classes = sorted(set(y_train_extended + y_test))
+    all_classes = sorted(set(y_train + y_valid + y_test))
 
     # Limit number of classes if specified
     if max_classes is not None and len(all_classes) > max_classes:
@@ -107,12 +108,14 @@ def load_clinc150(
         selected_classes = sorted(random.sample(all_classes, max_classes))
 
         # Filter samples to only include selected classes
-        X_train_extended = [
-            text
-            for text, label in zip(X_train_extended, y_train_extended, strict=False)
-            if label in selected_classes
+        X_train = [
+            text for text, label in zip(X_train, y_train, strict=False) if label in selected_classes
         ]
-        y_train_extended = [label for label in y_train_extended if label in selected_classes]
+        y_train = [label for label in y_train if label in selected_classes]
+        X_valid = [
+            text for text, label in zip(X_valid, y_valid, strict=False) if label in selected_classes
+        ]
+        y_valid = [label for label in y_valid if label in selected_classes]
         X_test = [
             text for text, label in zip(X_test, y_test, strict=False) if label in selected_classes
         ]
@@ -124,27 +127,30 @@ def load_clinc150(
 
     # Limit samples if specified (useful for quick testing)
     # Use stratified sampling to ensure all classes are represented
-    if max_train_samples is not None and len(X_train_extended) > max_train_samples:
-        X_train_extended, y_train_extended = _stratified_sample(
-            X_train_extended, y_train_extended, max_train_samples, seed=seed
-        )
+    if max_train_samples is not None and len(X_train) > max_train_samples:
+        X_train, y_train = _stratified_sample(X_train, y_train, max_train_samples, seed=seed)
+
+    if max_val_samples is not None and len(X_valid) > max_val_samples:
+        X_valid, y_valid = _stratified_sample(X_valid, y_valid, max_val_samples, seed=seed)
 
     if max_test_samples is not None and len(X_test) > max_test_samples:
         X_test, y_test = _stratified_sample(X_test, y_test, max_test_samples, seed=seed)
 
     # Recompute classes from final filtered data to ensure consistency
-    classes = sorted(set(y_train_extended) | set(y_test))
+    classes = sorted(set(y_train) | set(y_valid) | set(y_test))
 
-    # Assert that all labels in train and test are in the classes list
-    assert all(label in classes for label in y_train_extended), (
-        f"Found label in y_train_extended not in classes: "
-        f"{set(y_train_extended) - set(classes)}"
-    )
+    # Assert that all labels are in the classes list
+    assert all(
+        label in classes for label in y_train
+    ), f"Found label in y_train not in classes: {set(y_train) - set(classes)}"
+    assert all(
+        label in classes for label in y_valid
+    ), f"Found label in y_valid not in classes: {set(y_valid) - set(classes)}"
     assert all(
         label in classes for label in y_test
     ), f"Found label in y_test not in classes: {set(y_test) - set(classes)}"
 
-    return X_train_extended, y_train_extended, X_test, y_test, classes
+    return X_train, y_train, X_valid, y_valid, X_test, y_test, classes
 
 
 def _stratified_sample(

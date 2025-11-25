@@ -1,6 +1,7 @@
 # config/notebook_setup.py
 # Configuration setup module for pipeline scripts
-# This module loads and processes config.yaml, creating convenient variables for use in pipeline scripts
+# This module loads and processes config.yaml, creating convenient variables
+# for use in pipeline scripts
 import logging
 import os
 import random
@@ -87,6 +88,12 @@ RESULTS_DIR = config_vars.get("PATHS_RESULTS_DIR")
 # Set environment variables
 if N_CLASSES is not None:
     os.environ["N_CLASSES"] = str(N_CLASSES)
+
+# Surface key paths for downstream modules without forcing them to import this module.
+if EMB_DIR is not None:
+    os.environ["EMBEDDINGS_DIR"] = str(EMB_DIR)
+if MODELS_DIR is not None:
+    os.environ.setdefault("MODELS_DIR", str(MODELS_DIR))
 
 # Disable HuggingFace tokenizers parallelism
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

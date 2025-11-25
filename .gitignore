@@ -100,6 +100,10 @@ data/interim/
 data/processed/
 outputs/
 output/
+# Allow committing hyperparameter tuning results (small, reproducible, useful for others)
+!output/hyperparams_tune/
+!output/hyperparams_tune/*.yaml
+# Hyperparameters are stored in config/hyperparameters/ and should be committed
 *.csv
 !tests/**/*.csv
 *.png

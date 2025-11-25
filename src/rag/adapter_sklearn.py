@@ -138,15 +138,6 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     with open(config_path, "r") as f:
                         return yaml.safe_load(f)
 
-            # If we get here, try with notebook_setup
-            try:
-                # Try to import from config
-                from config.notebook_setup import cfg
-
-                return cfg
-            except ImportError:
-                pass
-
             return {}
         except Exception:
             # In case of any errors, return empty dict

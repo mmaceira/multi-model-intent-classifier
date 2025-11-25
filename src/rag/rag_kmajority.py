@@ -1,8 +1,9 @@
 """
 RAG K-Majority Classifier Module
 
-This module implements a K-Majority classifier for RAG (Retrieval-Augmented Generation)
-systems. It uses a similarity-weighted majority voting scheme on the k-nearest neighbors to make predictions.
+This module implements a K-Majority classifier for RAG
+(Retrieval-Augmented Generation) systems. It uses a similarity-weighted majority
+voting scheme on the k-nearest neighbors to make predictions.
 
 Key Features:
 - K-nearest neighbors retrieval

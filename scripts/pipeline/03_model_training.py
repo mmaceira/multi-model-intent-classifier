@@ -14,12 +14,15 @@ repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
 # Import config setup
-from config.notebook_setup import *
+from config.notebook_setup import (  # noqa: E402
+    MODELS_DIR,
+    config_vars,
+)
 
 # Import dataset and training modules
-from src.datasets.dataset import get_dataset
-from src.training import run_training
-from src.utils.model_loader import load_models_from_config
+from src.datasets.dataset import get_dataset  # noqa: E402
+from src.training import run_training  # noqa: E402
+from src.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():
@@ -31,7 +34,7 @@ def main():
 
     # Load dataset
     print("\nLoading dataset...")
-    X_train, y_train, X_test, y_test, classes = get_dataset(
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
         use_oos=config_vars.get("DATASET_USE_OOS", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
@@ -40,14 +43,38 @@ def main():
         seed=config_vars.get("GENERAL_SEED", 42),
     )
 
-    print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
-    print(f"Test set contains {len(X_test)} utterances")
+    print(f"Loaded {len(X_train)} training, {len(X_val)} validation, {len(X_test)} test utterances")
+    print(f"Total: {len(classes)} intent classes")
+    print("\nNote: Validation set is kept separate for hyperparameter tuning and model selection.")
+    print("      Models using cross-validation internally will use the training set for CV.")
 
     # Load models
     print("\n" + "=" * 60)
     print("Loading Models from Configuration")
     print("=" * 60)
     try:
+        # Check if hyperparameters exist (will be checked by model loader based on config name)
+        import os
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[2]
+        config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+        config_name = Path(config_file).stem
+        hyperparams_dir = repo_root / "config" / "hyperparameters" / config_name
+        # Check if any hyperparameter files exist
+        if hyperparams_dir.exists() and any(hyperparams_dir.glob("best_*.yaml")):
+            num_files = len(list(hyperparams_dir.glob("best_*.yaml")))
+            print(
+                f"✅ Found {num_files} tuned hyperparameter file(s) for config "
+                f"'{config_name}' - will use them for model initialization"
+            )
+        else:
+            print(
+                f"ℹ️  No tuned hyperparameters found for config '{config_name}' - "
+                f"using defaults from config"
+            )
+            print("   (Run scripts/tune_hyperparams.py first to optimize hyperparameters)")
+
         models = load_models_from_config()
         if not models:
             print("⚠️  Warning: No models were loaded. Check your config/models_config.yaml file.")
@@ -91,11 +118,12 @@ def main():
             models_to_train,
             X_train=X_train,
             y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
             output_dir=MODELS_DIR,
         )
-        print(
-            f"\n✅ Successfully trained {len(trained) if trained else len(models_to_train)} model(s)"
-        )
+        num_trained = len(trained) if trained else len(models_to_train)
+        print(f"\n✅ Successfully trained {num_trained} model(s)")
     except Exception as e:
         print(f"❌ Error during training: {e}")
         raise

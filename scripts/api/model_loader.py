@@ -97,8 +97,8 @@ def get_model(model_identifier: str):
 
     if model_info["type"] == "rag":
         # --- RAG: load index, passages and *optional* classifier ------------- #
-        # Convention: model identifiers containing "openai" use the OpenAI embedding index
-        # Other identifiers (e.g., "rag_llm_local", "rag_centroid") use the SBERT index
+        # Convention: model identifiers containing "openai" use the OpenAI embedding index.
+        # Everything else (rag_llm_local, rag_centroid, etc.) defaults to SBERT indices.
         idx_dir = EMBEDDINGS_DIR
         if "openai" in model_identifier:
             index_path = idx_dir / "openai" / "index.faiss"
@@ -150,7 +150,8 @@ def get_model(model_identifier: str):
                                 use_openai=True,
                             )
                         else:
-                            # For local embeddings, use the same model that was used to create the index
+                            # For local embeddings, use the same model that was used
+                            # to create the index
                             def embedder(texts):
                                 return VectorStore.embed(
                                     "sentence-transformers/all-MiniLM-L6-v2", texts

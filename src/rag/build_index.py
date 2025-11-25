@@ -64,15 +64,15 @@ Example Usage:
     >>> python build_index.py --use_openai --build_both --legacy_compat
 """
 
-import argparse
-import csv
-import json
-from typing import List
+import argparse  # noqa: E402
+import csv  # noqa: E402
+import json  # noqa: E402
+from typing import List  # noqa: E402
 
-import numpy as np
+import numpy as np  # noqa: E402
 
-from . import _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR
-from .vector_store import VectorStore
+from . import _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
+from .vector_store import VectorStore  # noqa: E402
 
 
 # ---------- Helper to load precomputed embeddings ----------
@@ -134,7 +134,10 @@ def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
 def _load_clinc150() -> tuple[list, list, list]:
     from src.datasets.dataset import get_dataset
 
-    X_train, y_train, _, _, _ = get_dataset(dataset_name="clinc150")
+    X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name="clinc150")
+    # Merge validation into training
+    X_train = X_train + X_val
+    y_train = y_train + y_val
     # CLINC150 doesn't have years, use placeholder
     return X_train, y_train, [0] * len(X_train)
 
@@ -197,7 +200,8 @@ def main():
                 emb, meta, emb.shape[1], DEFAULT_LEGACY_FAISS_PATH, DEFAULT_LEGACY_META_PATH
             )
             print(
-                f"✅ Legacy index saved → {DEFAULT_LEGACY_FAISS_PATH}\n✅ Legacy meta saved  → {DEFAULT_LEGACY_META_PATH}"
+                f"✅ Legacy index saved → {DEFAULT_LEGACY_FAISS_PATH}\n"
+                f"✅ Legacy meta saved  → {DEFAULT_LEGACY_META_PATH}"
             )
 
 

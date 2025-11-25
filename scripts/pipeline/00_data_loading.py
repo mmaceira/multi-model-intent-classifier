@@ -26,12 +26,14 @@ repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
 # Import config setup
-
-from config.notebook_setup import *
+from config.notebook_setup import (  # noqa: E402
+    DATA_EXPLORATION_DIR,
+    config_vars,
+)
 
 # Import dataset and exploration modules
-from src.datasets.dataset import get_dataset
-from src.exploration import class_frequency, length_distribution
+from src.datasets.dataset import get_dataset  # noqa: E402
+from src.exploration import class_frequency, length_distribution  # noqa: E402
 
 # Configure logging and warnings
 warnings.filterwarnings("ignore")
@@ -47,7 +49,7 @@ def main():
 
     # Load dataset
     print("\nLoading dataset...")
-    X_train, y_train, X_test, y_test, classes = get_dataset(
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
         use_oos=config_vars.get("DATASET_USE_OOS", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
@@ -56,8 +58,20 @@ def main():
         seed=config_vars.get("GENERAL_SEED", 42),
     )
 
-    print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
-    print(f"Test set contains {len(X_test)} utterances")
+    # Merge validation into training for exploratory analysis
+    # Note: This is for analysis only. The training pipeline (03_model_training.py)
+    # keeps validation separate for proper ML practices (hyperparameter tuning, early stopping).
+    X_train_merged = X_train + X_val
+    y_train_merged = y_train + y_val
+
+    print(
+        f"Loaded {len(X_train)} training, {len(X_val)} validation, "
+        f"{len(X_test)} test utterances"
+    )
+    print(
+        f"Total training (train+val merged for analysis): "
+        f"{len(X_train_merged)} utterances with {len(classes)} intent classes"
+    )
 
     # Minimal check on the data
     print("\n" + "=" * 60)
@@ -67,7 +81,7 @@ def main():
 
     # Intent distribution plot
     class_frequency(
-        y_train,
+        y_train_merged,
         top_n=20,
         plot=True,
         save_path=os.path.join(DATA_EXPLORATION_DIR, "class_distribution_validation.png"),
@@ -75,7 +89,7 @@ def main():
 
     # Utterance length distribution
     stats = length_distribution(
-        X_train,
+        X_train_merged,
         save_path=os.path.join(DATA_EXPLORATION_DIR, "document_length_distribution_validation.png"),
         output_dir=DATA_EXPLORATION_DIR,
     )

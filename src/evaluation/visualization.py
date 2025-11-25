@@ -457,7 +457,8 @@ def plot_top_misclassifications(
 def visualize_error_distribution(
     predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path
 ) -> None:
-    """Create visualizations of error distributions across models and classes for both train and test sets.
+    """Create visualizations of error distributions across models and classes
+    for both train and test sets.
 
     Parameters
     ----------
@@ -511,7 +512,8 @@ def visualize_error_distribution(
 def generate_detailed_error_report(
     predictions_dict: Dict[str, Dict[str, pd.DataFrame]], output_dir: Path, only_split: str = None
 ) -> None:
-    """Generate an HTML report with detailed analysis of classification errors for both train and test sets.
+    """Generate an HTML report with detailed analysis of classification errors
+    for both train and test sets.
 
     Parameters
     ----------
@@ -561,7 +563,8 @@ def generate_detailed_error_report(
         html.append("<h2>Consistently Misclassified Examples</h2>")
         if not misclass_df.empty:
             html.append(
-                "<table><tr><th>Text</th><th>True Label</th><th>Predicted Label</th><th>Models</th></tr>"
+                "<table><tr><th>Text</th><th>True Label</th>"
+                "<th>Predicted Label</th><th>Models</th></tr>"
             )
             for _, row in misclass_df.head(20).iterrows():
                 models = [name for name in predictions_dict.keys() if row.get(name, False)]
@@ -686,7 +689,8 @@ def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):
     """
     Plot and save the top n error types (true_label -> pred_label) as a bar chart.
     Args:
-        df (pd.DataFrame): DataFrame with columns 'true_label' and 'pred_label' (or 'y_true'/'y_pred').
+        df (pd.DataFrame): DataFrame with columns 'true_label' and 'pred_label'
+            (or 'y_true'/'y_pred').
         output_path (str or Path): Path to save the PNG plot.
         n (int): Number of top error types to plot (default 10).
     """
@@ -699,7 +703,8 @@ def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):
         y_pred = df["y_pred"]
     else:
         raise ValueError(
-            "DataFrame must contain either ('y_true', 'y_pred') or ('true_label', 'pred_label') columns."
+            "DataFrame must contain either ('y_true', 'y_pred') or "
+            "('true_label', 'pred_label') columns."
         )
 
     # Create error type column

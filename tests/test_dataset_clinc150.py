@@ -9,7 +9,11 @@ from src.datasets.dataset import get_dataset
 
 
 def test_clinc150_loader_basic():
-    X_train, y_train, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
+
+    # Merge validation into training for compatibility with existing tests
+    X_train = X_train + X_val
+    y_train = y_train + y_val
 
     # Basic sanity checks
     assert len(X_train) > 0
@@ -34,13 +38,17 @@ def test_tiny_training_smoke(tmp_path, monkeypatch):
     from src.algorithms.linear_svm import LinearSVMClassifier
 
     # Use a small subset for quick testing
-    X_train, y_train, X_test, y_test, classes = get_dataset(
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
         max_train_samples=300,
         max_test_samples=100,
         max_classes=10,
         seed=123,
     )
+
+    # Merge validation into training for compatibility with existing tests
+    X_train = X_train + X_val
+    y_train = y_train + y_val
 
     # Train a simple classifier
     clf = LinearSVMClassifier()

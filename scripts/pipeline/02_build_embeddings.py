@@ -21,15 +21,15 @@ repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
 # Import config setup
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer  # noqa: E402
 
-from config.notebook_setup import *
+from config.notebook_setup import config_vars  # noqa: E402
 
 # Import dataset and embedding modules
-from src.datasets.dataset import get_dataset
-from src.embeddings.openai_embedder import OpenAIEmbedder
-from src.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR
-from src.rag.vector_store import VectorStore
+from src.datasets.dataset import get_dataset  # noqa: E402
+from src.embeddings.openai_embedder import OpenAIEmbedder  # noqa: E402
+from src.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
+from src.rag.vector_store import VectorStore  # noqa: E402
 
 # Parameters
 SBERT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -52,7 +52,7 @@ def main():
 
     # Load dataset
     print("\nLoading dataset...")
-    X_train, y_train, X_test, y_test, classes = get_dataset(
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
         use_oos=config_vars.get("DATASET_USE_OOS", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
@@ -61,7 +61,17 @@ def main():
         seed=config_vars.get("GENERAL_SEED", 42),
     )
 
-    print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
+    # Merge validation into training for embedding building
+    # Note: For RAG-based models, we index all available training data (train+val)
+    # to maximize the retrieval corpus. The training pipeline (03_model_training.py)
+    # keeps validation separate for model training.
+    X_train = X_train + X_val
+    y_train = y_train + y_val
+
+    print(
+        f"Loaded {len(X_train)} training utterances "
+        f"(train+val merged for indexing) with {len(classes)} intent classes"
+    )
     print(f"Test set contains {len(X_test)} utterances")
 
     # Build SBERT embeddings

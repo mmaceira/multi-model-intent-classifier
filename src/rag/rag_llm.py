@@ -2,7 +2,8 @@
 Retrieval-Augmented Generation (RAG) LLM Intent Classifier
 ==========================================================
 
-A production-ready intent classifier using RAG with LLMs. Combines vector similarity search with LLM reasoning.
+A production-ready intent classifier using RAG with LLMs. Combines vector similarity
+search with LLM reasoning.
 
 Key Features:
 - Rate limiting and batched processing
@@ -89,12 +90,20 @@ os.environ.setdefault(
 os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")  # Suppress litellm's verbose logging
 
 # System prompt for the LLM classification task
-_PROMPT_SYSTEM = """You are an intent classifier for user utterances. You MUST respond with ONLY a valid JSON object containing a 'labels' array.
-CRITICAL: You MUST use EXACT labels from the provided list. Do NOT create new labels, do NOT use synonyms, do NOT modify labels.
-Labels are case-sensitive and must match EXACTLY (including underscores, hyphens, and spelling).
-The 'labels' array MUST contain EXACTLY the same number of labels as there are utterances to classify.
-For example: {"labels": ["transfer_money", "check_balance", "translate"]}
-DO NOT use code blocks, markdown, or explanations. Return ONLY valid JSON with EXACTLY the correct number of labels."""
+_PROMPT_SYSTEM = """You are an intent classifier for user utterances.
+
+CRITICAL RULES:
+1. You MUST respond with ONLY a valid JSON object containing a 'labels' array
+2. You MUST use EXACT labels from the provided list - NO exceptions
+3. Do NOT create new labels, do NOT use synonyms, do NOT modify labels, do NOT paraphrase
+4. Labels are case-sensitive and must match EXACTLY (including underscores, hyphens, and spelling)
+5. The 'labels' array MUST contain EXACTLY the same number of labels as there are utterances
+6. DO NOT use code blocks, markdown formatting, or explanations
+7. Return ONLY the JSON object - nothing before or after it
+8. If an utterance doesn't match any label exactly, choose the CLOSEST matching label from the list
+
+Example format: {"labels": ["transfer_money", "check_balance", "translate"]}
+Remember: Return ONLY the JSON, no explanations, no markdown, no extra text."""
 
 
 def _exponential_backoff(attempt: int) -> float:
@@ -176,7 +185,8 @@ class RagLLM(RagClassifierBase):
         automatically loading the retriever and extracting labels.
 
         Args:
-            use_openai: Whether to use OpenAI's embedding API instead of local models (default: False)
+            use_openai: Whether to use OpenAI's embedding API instead of local models
+                (default: False)
             **kwargs: Additional parameters to override default RagLLM initialization
 
         Returns:
@@ -299,7 +309,8 @@ class RagLLM(RagClassifierBase):
                     raise
                 delay = _exponential_backoff(attempt)
                 logger.warning(
-                    f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt}/{self.max_retries})"
+                    f"Rate limit hit, retrying in {delay:.1f}s "
+                    f"(attempt {attempt}/{self.max_retries})"
                 )
                 await asyncio.sleep(delay)
 
@@ -315,7 +326,11 @@ class RagLLM(RagClassifierBase):
                 await asyncio.sleep(delay)
 
     async def _classify_batch(
-        self, docs: List[str], vectors: List[np.ndarray], return_probas: bool = False
+        self,
+        docs: List[str],
+        vectors: List[np.ndarray],
+        return_probas: bool = False,
+        retry_count: int = 0,
     ) -> List[str]:
         """Classify a batch of documents using the LLM with retrieved context.
 
@@ -379,20 +394,35 @@ class RagLLM(RagClassifierBase):
         if len(docs) > 3:
             examples_json += "..."
 
+        # Show all labels if there are not too many, otherwise show first 30
+        if len(self.labels) <= 30:
+            full_labels_list = "\n".join(f"  - {label}" for label in self.labels)
+        else:
+            full_labels_list = "\n".join(f"  - {label}" for label in self.labels[:30])
+            full_labels_list += f"\n  ... and {len(self.labels) - 30} more labels"
+
         user_content = (
-            f"Classify these {len(docs)} user utterances into ONE of these EXACT intent categories:\n{labels_list}\n\n"
-            + "CRITICAL RULES:\n"
-            + "1. You MUST use one of the EXACT labels from the list above (case-sensitive, including underscores/hyphens)\n"
-            + "2. Do NOT create new labels, do NOT use synonyms, do NOT modify labels\n"
-            + "3. If an utterance seems similar to a label but doesn't match exactly, choose the CLOSEST matching label from the list\n"
-            + "4. Look at the context examples - they show similar utterances and their correct labels\n\n"
-            + "\n\n".join(lines)
-            + f"\n\nRespond with a JSON object that has a 'labels' property containing an array with EXACTLY {len(docs)} labels, one for each utterance in order."
-            + "\nEach label MUST be one of the EXACT labels from the list above."
-            + f'\nExample format: {{"labels": [{examples_json}]}}'
-            + " (these are actual labels from the list - use the exact same format)."
-            + " Each position in the array corresponds to the utterance with the same position number."
-            + " No explanation, no markdown formatting, just valid JSON."
+            f"Classify these {len(docs)} user utterances into ONE of these EXACT "
+            f"intent categories:\n{full_labels_list}\n\n"
+            + "CRITICAL RULES - READ CAREFULLY:\n"
+            + "1. You MUST use one of the EXACT labels from the list above - "
+            "copy them EXACTLY (case-sensitive, including underscores/hyphens)\n"
+            + "2. Do NOT create new labels, do NOT use synonyms, do NOT modify "
+            "labels, do NOT paraphrase\n"
+            + "3. If an utterance seems similar to a label but doesn't match exactly, "
+            "choose the CLOSEST matching label from the list\n"
+            + "4. Look at the context examples - they show similar utterances and "
+            "their correct EXACT labels\n"
+            + "5. Your response MUST be ONLY a valid JSON object with a 'labels' array - "
+            "NO other text before or after\n"
+            + f"6. The 'labels' array MUST contain EXACTLY {len(docs)} labels, "
+            "one for each utterance in order\n"
+            + "7. Each label MUST be copied EXACTLY from the list above - "
+            "no modifications\n\n" + "\n\n".join(lines) + "\n\nRESPOND WITH ONLY THIS JSON FORMAT "
+            "(no explanations, no markdown, no code blocks):\n"
+            + f'{{"labels": [{examples_json}]}}\n\n'
+            + f"Remember: Return ONLY the JSON object. The array must have EXACTLY "
+            f"{len(docs)} labels, each one EXACTLY matching a label from the list above."
         )
         messages = [
             {"role": "system", "content": _PROMPT_SYSTEM},
@@ -400,73 +430,128 @@ class RagLLM(RagClassifierBase):
         ]
 
         text = None  # Initialize to avoid UnboundLocalError in exception handlers
-        try:
-            resp = await self._chat_with_retry(messages)
-            text = resp.choices[0].message.content.strip()
+        max_retries_for_invalid = 2  # Retry up to 2 times if response is invalid
+        for retry_attempt in range(max_retries_for_invalid + 1):
+            try:
+                resp = await self._chat_with_retry(messages)
+                text = resp.choices[0].message.content.strip()
 
-            # Improved JSON parsing with better error handling
-            response_data = json.loads(text)
-
-            # Check if the response has a 'labels' property
-            if isinstance(response_data, dict) and "labels" in response_data:
-                labels_out = response_data["labels"]
-                # Ensure labels_out is a list
-                if not isinstance(labels_out, list):
-                    logger.error(
-                        f"Expected 'labels' to be a list but got {type(labels_out)}: {labels_out}"
-                    )
-                    # Convert single string to list if that's what we got
-                    if isinstance(labels_out, str):
-                        labels_out = [labels_out]
+                # Strip markdown code blocks if present
+                # (LLM sometimes wraps JSON in ```json ... ```)
+                # Handle cases like: ```json\n{...}\n``` or ```\n{...}\n```
+                if text.startswith("```"):
+                    # Find the first newline after the opening backticks
+                    first_newline = text.find("\n")
+                    if first_newline != -1:
+                        # Extract everything after the first newline
+                        text = text[first_newline + 1 :]
                     else:
-                        return [self.labels[0]] * len(docs)
-            # Fallback to assuming the entire object is the array
-            elif isinstance(response_data, list):
-                labels_out = response_data
-            # Handle case when response doesn't match expected format
-            else:
-                # Try to find any array in the response
-                for key, value in response_data.items():
-                    if isinstance(value, list) and len(value) > 0:
-                        labels_out = value
-                        logger.warning(f"Using array found at key '{key}' instead of 'labels'")
-                        break
+                        # No newline, just strip backticks
+                        text = text.lstrip("`")
+                    # Remove closing backticks (handle multiple backticks)
+                    text = text.rstrip("`").strip()
+
+                # Extract JSON from text - handle cases where LLM adds explanations after JSON
+                # Find the first { and last } to extract just the JSON object
+                first_brace = text.find("{")
+                last_brace = text.rfind("}")
+
+                if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                    # Extract just the JSON portion
+                    json_text = text[first_brace : last_brace + 1]
                 else:
-                    # Look for any string that might be a valid label
-                    for key, value in response_data.items():
-                        if isinstance(value, str) and value in self.labels:
-                            logger.warning(
-                                f"Found single label '{value}' at key '{key}', using for all documents"
-                            )
-                            return [value] * len(docs)
+                    # Fallback: try to parse the whole text
+                    json_text = text
 
-                    logger.error(f"No valid labels found in response: {response_data}")
-                    return [self.labels[0]] * len(docs)
+                # Improved JSON parsing with better error handling
+                try:
+                    response_data = json.loads(json_text)
+                except json.JSONDecodeError as e:
+                    # Try to find JSON object in the text more aggressively
+                    # Look for patterns like {"labels": [...]}
+                    import re
 
-            if isinstance(labels_out, list):
-                # Handle case where number of labels doesn't match docs
-                if len(labels_out) != len(docs):
-                    logger.warning(
-                        f"Expected {len(docs)} labels but got {len(labels_out)}. Adjusting..."
+                    json_match = re.search(
+                        r'\{[^{]*"labels"[^{]*\[[^\]]*\][^{]*\}', text, re.DOTALL
                     )
-                    # Extend with first label if too short
-                    if len(labels_out) < len(docs):
-                        # Use the last label for extension if available
-                        extension_label = labels_out[-1] if labels_out else self.labels[0]
-                        labels_out.extend([extension_label] * (len(docs) - len(labels_out)))
-                    # Truncate if too long
+                    if json_match:
+                        json_text = json_match.group(0)
+                        try:
+                            response_data = json.loads(json_text)
+                        except json.JSONDecodeError:
+                            raise e from None
                     else:
-                        labels_out = labels_out[: len(docs)]
+                        raise e from None
 
-                # Validate that all labels are in allowed list
-                # Use fuzzy matching: case-insensitive, handle underscores/spaces
-                validated_labels = []
-                for lab in labels_out:
-                    lab_str = str(lab).strip()
-                    # Exact match
-                    if lab_str in self.labels:
-                        validated_labels.append(lab_str)
-                    else:
+                # Check if the response has a 'labels' property
+                if isinstance(response_data, dict) and "labels" in response_data:
+                    labels_out = response_data["labels"]
+                    # Ensure labels_out is a list
+                    if not isinstance(labels_out, list):
+                        logger.error(
+                            f"Expected 'labels' to be a list but got "
+                            f"{type(labels_out)}: {labels_out}"
+                        )
+                        # Convert single string to list if that's what we got
+                        if isinstance(labels_out, str):
+                            labels_out = [labels_out]
+                        else:
+                            if retry_attempt < max_retries_for_invalid:
+                                continue
+                            return [self.labels[0]] * len(docs)
+                # Fallback to assuming the entire object is the array
+                elif isinstance(response_data, list):
+                    labels_out = response_data
+                # Handle case when response doesn't match expected format
+                else:
+                    # Try to find any array in the response
+                    labels_out = None
+                    for key, value in response_data.items():
+                        if isinstance(value, list) and len(value) > 0:
+                            labels_out = value
+                            logger.warning(f"Using array found at key '{key}' instead of 'labels'")
+                            break
+                    if labels_out is None:
+                        # Look for any string that might be a valid label
+                        for key, value in response_data.items():
+                            if isinstance(value, str) and value in self.labels:
+                                logger.warning(
+                                    f"Found single label '{value}' at key '{key}', "
+                                    f"using for all documents"
+                                )
+                                return [value] * len(docs)
+
+                        logger.error(f"No valid labels found in response: {response_data}")
+                        if retry_attempt < max_retries_for_invalid:
+                            continue
+                        return [self.labels[0]] * len(docs)
+
+                if isinstance(labels_out, list):
+                    # Handle case where number of labels doesn't match docs
+                    if len(labels_out) != len(docs):
+                        logger.warning(
+                            f"Expected {len(docs)} labels but got {len(labels_out)}. Adjusting..."
+                        )
+                        # Extend with first label if too short
+                        if len(labels_out) < len(docs):
+                            # Use the last label for extension if available
+                            extension_label = labels_out[-1] if labels_out else self.labels[0]
+                            labels_out.extend([extension_label] * (len(docs) - len(labels_out)))
+                        # Truncate if too long
+                        else:
+                            labels_out = labels_out[: len(docs)]
+
+                    # Validate that all labels are in allowed list
+                    # Use fuzzy matching: case-insensitive, handle underscores/spaces
+                    validated_labels = []
+                    invalid_count = 0
+                    for lab in labels_out:
+                        lab_str = str(lab).strip()
+                        # Exact match
+                        if lab_str in self.labels:
+                            validated_labels.append(lab_str)
+                        else:
+                            invalid_count += 1
                         # Try case-insensitive match
                         lab_lower = lab_str.lower()
                         matched = None
@@ -501,14 +586,18 @@ class RagLLM(RagClassifierBase):
                                     if majority_label in self.labels:
                                         validated_labels.append(majority_label)
                                         logger.warning(
-                                            f"LLM returned invalid label '{lab_str}' for doc {doc_idx+1}. "
-                                            f"Using majority vote from neighbors: {majority_label}"
+                                            f"LLM returned invalid label '{lab_str}' "
+                                            f"for doc {doc_idx+1}. "
+                                            f"Using majority vote from neighbors: "
+                                            f"{majority_label}"
                                         )
                                     else:
                                         validated_labels.append(self.labels[0])
                                         logger.warning(
-                                            f"LLM returned invalid label '{lab_str}' and neighbor majority "
-                                            f"'{majority_label}' not in valid labels. Using fallback: {self.labels[0]}"
+                                            f"LLM returned invalid label '{lab_str}' "
+                                            f"and neighbor majority '{majority_label}' "
+                                            f"not in valid labels. Using fallback: "
+                                            f"{self.labels[0]}"
                                         )
                                 else:
                                     validated_labels.append(self.labels[0])
@@ -523,18 +612,76 @@ class RagLLM(RagClassifierBase):
                                     f"Valid labels: {self.labels}. Using fallback: {self.labels[0]}"
                                 )
 
-                return validated_labels
-            else:
-                logger.error(f"Expected list but got {type(labels_out)}: {labels_out}")
-                return [self.labels[0]] * len(docs)
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed parsing JSON batch response: {text if text else 'N/A'} | Error: {e}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error handling batch response: {text if text else 'N/A'} | Error: {e}"
-            )
+                    # After processing all labels, check if too many invalid labels,
+                    # retry the request
+                    if invalid_count > len(docs) * 0.3 and retry_attempt < max_retries_for_invalid:
+                        logger.warning(
+                            f"Too many invalid labels ({invalid_count}/{len(docs)}). "
+                            f"Retrying request (attempt {retry_attempt + 1}/"
+                            f"{max_retries_for_invalid + 1})"
+                        )
+                        # Add a more strict instruction to the prompt
+                        messages[-1]["content"] = (
+                            messages[-1]["content"]
+                            + "\n\n⚠️ RETRY: Previous response had invalid labels. "
+                            "You MUST use EXACT labels from the list. "
+                            "Copy them character-by-character."
+                        )
+                        continue  # Retry the request
+
+                    # Ensure we have the correct number of labels
+                    if len(validated_labels) != len(docs):
+                        logger.warning(
+                            f"Validated labels count ({len(validated_labels)}) "
+                            f"doesn't match docs count ({len(docs)}). Adjusting..."
+                        )
+                        if len(validated_labels) < len(docs):
+                            # Extend with last valid label or first label
+                            extension_label = (
+                                validated_labels[-1] if validated_labels else self.labels[0]
+                            )
+                            validated_labels.extend(
+                                [extension_label] * (len(docs) - len(validated_labels))
+                            )
+                        else:
+                            # Truncate if too long
+                            validated_labels = validated_labels[: len(docs)]
+
+                    return validated_labels
+            except json.JSONDecodeError as e:
+                if retry_attempt < max_retries_for_invalid:
+                    logger.warning(
+                        f"Failed parsing JSON (attempt {retry_attempt + 1}/"
+                        f"{max_retries_for_invalid + 1}): {e}. Retrying..."
+                    )
+                    # Add stricter instruction
+                    messages[-1]["content"] = (
+                        messages[-1]["content"]
+                        + "\n\n⚠️ RETRY: Previous response was not valid JSON. "
+                        "You MUST return ONLY a valid JSON object, nothing else."
+                    )
+                    continue  # Retry
+                else:
+                    logger.error(
+                        f"Failed parsing JSON batch response after "
+                        f"{max_retries_for_invalid + 1} attempts: "
+                        f"{text if text else 'N/A'} | Error: {e}"
+                    )
+                    break  # Exit retry loop
+            except Exception as e:
+                if retry_attempt < max_retries_for_invalid:
+                    logger.warning(
+                        f"Unexpected error (attempt {retry_attempt + 1}/"
+                        f"{max_retries_for_invalid + 1}): {e}. Retrying..."
+                    )
+                    continue  # Retry
+                else:
+                    logger.error(
+                        f"Unexpected error handling batch response after "
+                        f"{max_retries_for_invalid + 1} attempts: "
+                        f"{text if text else 'N/A'} | Error: {e}"
+                    )
+                    break  # Exit retry loop
 
         # fallback: label all with first
         return [self.labels[0]] * len(docs)
@@ -590,7 +737,8 @@ class RagLLM(RagClassifierBase):
             # Standard approach - works in most cases
             return asyncio.run(_run_all())
         except RuntimeError:  # Handle "event loop is already running" error
-            # Solution for environments like Jupyter notebooks where an event loop is already running
+            # Solution for environments like Jupyter notebooks where an event loop
+            # is already running
             import nest_asyncio
 
             nest_asyncio.apply()  # Patch the running loop
@@ -672,7 +820,8 @@ class RagLLM(RagClassifierBase):
             # Standard approach - works in most cases
             return asyncio.run(_run_all_proba())
         except RuntimeError:  # Handle "event loop is already running" error
-            # Solution for environments like Jupyter notebooks where an event loop is already running
+            # Solution for environments like Jupyter notebooks where an event loop
+            # is already running
             import nest_asyncio
 
             nest_asyncio.apply()  # Patch the running loop

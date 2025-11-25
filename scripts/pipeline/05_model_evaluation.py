@@ -14,12 +14,16 @@ repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))  # allow `import src.*`
 
 # Import config setup
-from config.notebook_setup import *
+from config.notebook_setup import (  # noqa: E402
+    PREDICTIONS_DIR,
+    RESULTS_DIR,
+    config_vars,
+)
 
 # Import dataset and evaluation modules
-from src.datasets.dataset import get_dataset
-from src.evaluation import display_detailed_results, run_evaluations
-from src.utils.model_loader import load_models_from_config
+from src.datasets.dataset import get_dataset  # noqa: E402
+from src.evaluation import display_detailed_results, run_evaluations  # noqa: E402
+from src.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():
@@ -31,7 +35,7 @@ def main():
 
     # Load dataset
     print("\nLoading dataset...")
-    X_train, y_train, X_test, y_test, classes = get_dataset(
+    X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
         dataset_name="clinc150",
         use_oos=config_vars.get("DATASET_USE_OOS", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
@@ -40,8 +44,11 @@ def main():
         seed=config_vars.get("GENERAL_SEED", 42),
     )
 
-    print(f"Loaded {len(X_train)} training utterances with {len(classes)} intent classes")
-    print(f"Test set contains {len(X_test)} utterances")
+    print(f"Loaded {len(X_train)} training, {len(X_val)} validation, {len(X_test)} test utterances")
+    print(f"Total: {len(classes)} intent classes")
+    print(
+        "\nNote: Evaluation uses test set only. Train/val splits are kept separate for reference."
+    )
 
     # Load models (for metadata)
     print("\n" + "=" * 60)
@@ -93,7 +100,7 @@ def main():
         "Linear SVM",
         "TF-IDF bigrams + SVM",
         "MiniLM + LogReg",
-        "OpenAI + LogReg",
+        "Embedding + LogReg",
         "RAG-CentroidNN",
         "RAG-kMajority",
         "RAG-LLM",  # Uses Ollama LLM by default, can be configured for OpenAI

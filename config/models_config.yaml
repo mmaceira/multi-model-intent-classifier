@@ -23,10 +23,17 @@ models:
     name: "MiniLM + LogReg"
     class: "TransformerLogReg"
 
-  openai_logreg:
-    enabled: false  # Disabled by default - requires OPENAI_API_KEY. Set to true and provide API key to enable.
-    name: "OpenAI + LogReg"
-    class: "OpenAIEmbedLogReg"
+  embedding_logreg:
+    enabled: false  # Disabled by default. Can use SBERT (local, no API key) or OpenAI (requires OPENAI_API_KEY)
+    name: "Embedding + LogReg"
+    class: "EmbeddingLogReg"
+    params:
+      # Embedding backend configuration:
+      # - use_openai: false (default) - Uses local SBERT embeddings (no API key needed)
+      # - use_openai: true - Uses OpenAI embeddings (requires OPENAI_API_KEY)
+      use_openai: false  # Default: false (uses SBERT). Set to true for OpenAI embeddings
+      model: "${model.sbert_model_name}"  # SBERT model when use_openai: false
+      # model: "${model.openai_model_name}"  # OpenAI model when use_openai: true (uncomment if needed)
 
   # RAG-based models
   rag_kmajority:

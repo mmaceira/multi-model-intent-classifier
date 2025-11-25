@@ -1,0 +1,34 @@
+# General Configuration
+general:
+  run_name: "experiment_full_dataset"     # used as experiment id
+  seed: 42
+
+# Dataset configuration
+dataset:
+  name: "clinc150"                           # dataset name (CLINC150 intent classification)
+  use_oos: false                             # include out-of-scope examples
+  # No max_classes, max_train_samples, or max_test_samples - using full dataset
+
+# Paths (all are resolved relative to repo root)
+paths:
+  data_exploration_dir: "output/${general.run_name}/data_exploration"  # raw + processed sub-dirs live here
+  embeddings_dir: "output/${general.run_name}/embeddings"
+  models_dir: "output/${general.run_name}/models"
+  predictions_dir: "output/${general.run_name}/predictions"
+  results_dir: "output/${general.run_name}/results"
+
+# Model configuration
+model:
+  # Embedding options
+  embedding_backend: "sbert"                  # [sbert | openai]
+  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  openai_model_name: "text-embedding-3-small"
+
+  # Classifier options
+  classifier: "linear_svm"                    # [linear_svm | naive_bayes | transformer_logreg]
+  rag_top_k: 25                               # for RAG voting / centroids
+
+  # LLM options (for RAG-LLM models)
+  # Supported: Ollama (e.g., "ollama/llama3.1:8b"), OpenAI (e.g., "gpt-4o-mini", "gpt-4o"), Anthropic, etc.
+  # See litellm documentation for full list: https://docs.litellm.ai/
+  llm_model: "ollama/llama3.1:8b"             # Default LLM model for RAG-LLM classification

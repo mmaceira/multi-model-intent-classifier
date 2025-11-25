@@ -218,8 +218,10 @@ OpenAI models are **disabled by default** and completely optional. If you want t
 2. **Enable OpenAI models** in `config/models_config.yaml`:
    ```yaml
    models:
-     openai_logreg:
-       enabled: true  # Enable OpenAI model
+     embedding_logreg:
+       enabled: true
+       params:
+         use_openai: true  # Use OpenAI embeddings (requires OPENAI_API_KEY)
      rag_llm:
        enabled: true
        params:
@@ -229,7 +231,9 @@ OpenAI models are **disabled by default** and completely optional. If you want t
 3. **OpenAI embeddings** in `02_build_embeddings.py` will be built automatically if `OPENAI_API_KEY` is set.
 
 **Models that can use OpenAI** (all disabled/optional by default):
-- `OpenAI + LogReg` - Uses OpenAI embeddings (disabled by default)
+- `Embedding + LogReg` - Flexible model that works with:
+  - **Default**: SBERT embeddings (local, no API key needed) - set `use_openai: false`
+  - **Option**: OpenAI embeddings (requires OPENAI_API_KEY) - set `use_openai: true`
 - `RAG-LLM` - Flexible model that works with:
   - **Default**: Ollama LLM + SBERT embeddings (no API keys needed)
   - **Option 1**: Ollama LLM + OpenAI embeddings (set `use_openai: true`, requires OPENAI_API_KEY)
