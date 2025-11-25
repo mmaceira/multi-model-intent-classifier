@@ -182,7 +182,7 @@ CONFIG_FILE=my_experiment.yaml python scripts/pipeline/run_all.py
 ### Example Usage in Code
 
 ```python
-from src.datasets.dataset import get_dataset
+from intent_classifier.datasets.dataset import get_dataset
 
 # Load full CLINC150 dataset (all 150 classes, all samples)
 # Returns: X_train, y_train, X_val, y_val, X_test, y_test, classes

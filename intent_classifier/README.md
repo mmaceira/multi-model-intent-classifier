@@ -5,7 +5,7 @@ This directory contains the core source code for the CLINC150 RAG Classifier pro
 ## Directory Structure
 
 ```
-src/
+intent_classifier/
 ├── algorithms/     # Machine learning algorithms implementation
 ├── datasets/       # Dataset handling and preprocessing
 ├── embeddings/     # Embedding generation and management
@@ -25,10 +25,10 @@ src/
 The central model definitions and interfaces:
 
 - `TextClassifier` (abstract base class): Core interface for all text classifiers
-- `TextClassifier`: Main classifier implementation with model factory functionality
-- `NBClassifier`: Naive Bayes classifier implementation
-- `SVMClassifier`: Support Vector Machine classifier implementation
-- `BERTClassifier`: Transformer-based classifier implementation
+- `NaiveBayesClassifier`: Naive Bayes classifier implementation (from `algorithms.naive_bayes`)
+- `LinearSVMClassifier`: Support Vector Machine classifier implementation (from `algorithms.linear_svm`)
+- `TransformerLogReg`: Transformer-based classifier implementation (from `algorithms.transformer_logreg`)
+- `EmbeddingLogReg`: Embedding-based classifier implementation (from `algorithms.embedding_logreg`)
 
 ```python
 # Example usage

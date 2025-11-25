@@ -28,9 +28,9 @@ curl -X GET http://127.0.0.1:8000/models
 
 ### Make a Prediction
 ```bash
-curl -X POST http://127.0.0.1:8000/predict \
+curl -X POST http://127.0.0.1:8000/v1/predict \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "linear_svm", "text": "A barrel of crude futures climbed to $75 following OPEC meeting."}'
+  -d '{"model_id": "linear_svm", "text": "A barrel of crude futures climbed to $75 following OPEC meeting."}'
 ```
 
 **Response format:**
@@ -61,9 +61,9 @@ This is useful for production systems where you want to reject low-confidence pr
 python scripts/api/manual_test_api.py
 
 # Or test manually
-curl -X POST http://127.0.0.1:8000/predict \
+curl -X POST http://127.0.0.1:8000/v1/predict \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "rag_knn", "text": "The Federal Reserve announced interest rates will remain unchanged this quarter."}'
+  -d '{"model_id": "rag_kmajority", "text": "The Federal Reserve announced interest rates will remain unchanged this quarter."}'
 ```
 
 ## 📝 Model Organization

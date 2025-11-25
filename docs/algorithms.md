@@ -186,8 +186,7 @@ All algorithms are implemented in the `src/algorithms/` directory:
 - `naive_bayes.py`: Multinomial Naive Bayes implementation
 - `linear_svm.py`: Linear SVM implementation
 - `transformer_logreg.py`: MiniLM + Logistic Regression
-- `embedding_logreg.py`: Flexible embedding + Logistic Regression
-- `openai_logreg.py`: OpenAI-specific embedding + Logistic Regression
+- `embedding_logreg.py`: Flexible embedding + Logistic Regression (supports both OpenAI and SBERT embeddings)
 
 RAG implementations are in `src/rag/`:
 - `rag_kmajority.py`: k-Majority voting

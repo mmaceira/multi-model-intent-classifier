@@ -24,7 +24,7 @@ Dependencies:
 
 Example Usage:
     >>> # Create a RAG classifier
-    >>> from rag.rag_llm import RagLLM
+    >>> from intent_classifier.rag.rag_llm import RagLLM
     >>> rag_clf = RagLLM.load_default()
 
     >>> # Wrap it in the adapter
@@ -39,8 +39,12 @@ Example Usage:
     ... ])
 """
 
+import logging
+
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
+
+logger = logging.getLogger(__name__)
 
 
 class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
@@ -161,6 +165,22 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             if hasattr(self.rag, "top_k"):
                 state["top_k"] = self.rag.top_k
 
+            # Store LLM model name if it's a RagLLM
+            if state["rag_type"] == "RagLLM" and hasattr(self.rag, "model"):
+                state["llm_model"] = self.rag.model
+
+            # Store embedder model if available
+            if hasattr(self.rag, "embedder") and self.rag.embedder is not None:
+                if hasattr(self.rag.embedder, "model"):
+                    state["embedder_model"] = self.rag.embedder.model
+                elif hasattr(self.rag.embedder, "__class__"):
+                    # Try to infer from class name
+                    embedder_class = self.rag.embedder.__class__.__name__
+                    if embedder_class == "OpenAIEmbedder":
+                        state["embedder_type"] = "openai"
+                    else:
+                        state["embedder_type"] = "sbert"
+
         return state
 
     def __setstate__(self, state):
@@ -205,23 +225,48 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             elif rag_type == "CentroidNN":
                 self.rag = load_centroid(use_openai=use_openai)
             elif rag_type == "RagLLM":
+                # Get LLM model from state or config, with fallback
+                llm_model = state.get("llm_model")
+                if not llm_model:
+                    # Try to get from config
+                    llm_model = config.get("model", {}).get("llm_model", "ollama/llama3.1:8b")
+                    logger.warning(
+                        f"LLM model not found in saved state, using from config: {llm_model}"
+                    )
+                else:
+                    logger.info(f"Restoring LLM model from saved state: {llm_model}")
+
+                # Get embedder model from state or config
+                embedder_model = state.get("embedder_model")
+
                 # For LLM-based RAG
                 if use_openai:
                     from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
 
-                    embedder = OpenAIEmbedder(model=openai_model, batch_size=50)
+                    # Use saved embedder model if available, otherwise from config
+                    embedder_model_name = embedder_model or openai_model
+                    embedder = OpenAIEmbedder(model=embedder_model_name, batch_size=50)
                     self.rag = load_llm(
-                        top_k=top_k, model="ollama/llama3.1:8b", embedder=embedder, use_openai=True
+                        top_k=top_k,
+                        model=llm_model,
+                        embedder=embedder,
+                        use_openai=True,
                     )
                 else:
                     # For local embeddings
                     from intent_classifier.rag.vector_store import VectorStore
 
+                    # Use saved embedder model if available, otherwise from config
+                    embedder_model_name = embedder_model or sbert_model
+
                     def embedder(texts):
-                        return VectorStore.embed(sbert_model, texts)
+                        return VectorStore.embed(embedder_model_name, texts)
 
                     self.rag = load_llm(
-                        top_k=top_k, model="ollama/llama3.1:8b", embedder=embedder, use_openai=False
+                        top_k=top_k,
+                        model=llm_model,
+                        embedder=embedder,
+                        use_openai=False,
                     )
 
             # Update rag_clf for consistency

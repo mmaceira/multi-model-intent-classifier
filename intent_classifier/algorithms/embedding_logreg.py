@@ -352,7 +352,3 @@ class EmbeddingLogReg(TextClassifier):
         self._is_fitted = True
         self.best_score_ = state["best_score"]
         self.best_C_ = state["best_C"]
-
-
-# Backward compatibility alias
-OpenAIEmbedLogReg = EmbeddingLogReg

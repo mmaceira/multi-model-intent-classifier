@@ -421,10 +421,6 @@ def train_embedding_logreg(config, data=None):
     tune.report({"f1": f1})
 
 
-# Backward compatibility alias
-train_openai_logreg = train_embedding_logreg
-
-
 def train_rag_llm(config, data=None):
     """Train RAG LLM with hyperparameter tuning (top_k).
 
@@ -486,7 +482,6 @@ def main():
             "svm_bigrams",
             "transformer_logreg",
             "embedding_logreg",
-            "openai_logreg",
             "rag_kmajority",
             "rag_centroid",
             "rag_llm",
@@ -663,23 +658,9 @@ def main():
                 best = analysis.get_best_config("f1", "max")
                 results["transformer_logreg"] = {"C": best["C"], "f1": analysis.best_result["f1"]}
 
-            elif algo in ("embedding_logreg", "openai_logreg"):
-                # Support both new name (embedding_logreg) and old name (openai_logreg)
-                # for backward compatibility. Default to SBERT embeddings
-                # (use_openai=False) unless explicitly set
-                use_openai = (
-                    algo == "openai_logreg"
-                )  # Old name defaults to OpenAI, new name defaults to SBERT
-
-                # For embedding_logreg, default to SBERT (no API key needed)
-                # For openai_logreg (backward compat), check API key
-                if use_openai and not os.getenv("OPENAI_API_KEY"):
-                    print("⚠️  Skipping Embedding LogReg (OpenAI): OPENAI_API_KEY not set")
-                    print(
-                        "   💡 Tip: Use 'embedding_logreg' with use_openai=False "
-                        "for SBERT embeddings (no API key needed)"
-                    )
-                    continue
+            elif algo == "embedding_logreg":
+                # Default to SBERT embeddings (use_openai=False) unless explicitly set
+                use_openai = False
 
                 # Memory-intensive model: run sequentially (max_concurrent_trials=1)
                 # to prevent OOM

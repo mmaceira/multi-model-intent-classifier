@@ -78,13 +78,13 @@ python scripts/pipeline/05_model_evaluation.py
 ## Basic Usage in Code
 
 ```python
-from src.datasets.dataset import get_dataset
+from intent_classifier.datasets.dataset import get_dataset
 
 # Load CLINC150 dataset
 X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
 
 # Use with any classifier
-from src.algorithms.linear_svm import LinearSVMClassifier
+from intent_classifier.algorithms.linear_svm import LinearSVMClassifier
 classifier = LinearSVMClassifier()
 classifier.fit(X_train, y_train)
 predictions = classifier.predict(X_test)

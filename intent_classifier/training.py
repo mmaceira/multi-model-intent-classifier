@@ -53,8 +53,6 @@ Notes:
     - Directory structure is automatically created if not exists
 
 Version: 1.0.0
-Author: CLINC150 RAG Classifier Team
-License: MIT
 """
 
 from __future__ import annotations

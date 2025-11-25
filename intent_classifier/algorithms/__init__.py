@@ -7,7 +7,7 @@ This module provides various text classification algorithms including:
 - Transformer-based Logistic Regression
 """
 
-from .embedding_logreg import EmbeddingLogReg, OpenAIEmbedLogReg  # noqa: F401
+from .embedding_logreg import EmbeddingLogReg  # noqa: F401
 from .linear_svm import LinearSVMBigrams, LinearSVMClassifier  # noqa: F401
 from .naive_bayes import NaiveBayesClassifier  # noqa: F401
 from .transformer_logreg import TransformerLogReg  # noqa: F401
@@ -17,6 +17,5 @@ __all__ = [
     "LinearSVMBigrams",
     "LinearSVMClassifier",
     "NaiveBayesClassifier",
-    "OpenAIEmbedLogReg",
     "TransformerLogReg",
 ]

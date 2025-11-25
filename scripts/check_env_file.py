@@ -14,18 +14,29 @@ def main():
     """Check if .env files are staged for commit."""
     repo_root = Path(__file__).resolve().parents[1]
 
-    # Check if .env is staged
+    # Check if .env is staged (but allow deletions)
     try:
         result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
+            ["git", "diff", "--cached", "--name-status"],
             capture_output=True,
             text=True,
             check=True,
             cwd=repo_root,
         )
-        staged_files = result.stdout.strip().split("\n") if result.stdout.strip() else []
+        staged_changes = result.stdout.strip().split("\n") if result.stdout.strip() else []
 
-        env_files = [f for f in staged_files if ".env" in f and not f.endswith(".template")]
+        # Filter out .env files that are being added or modified (but allow deletions)
+        env_files = []
+        for change in staged_changes:
+            if not change.strip():
+                continue
+            # Format: STATUS\tFILENAME
+            parts = change.split("\t", 1)
+            if len(parts) == 2:
+                status, filename = parts
+                # Allow deletions (status 'D'), block additions ('A') and modifications ('M')
+                if status != "D" and ".env" in filename and not filename.endswith(".template"):
+                    env_files.append(filename)
 
         if env_files:
             print("❌ ERROR: Attempting to commit .env files!")

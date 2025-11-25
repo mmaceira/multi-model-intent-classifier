@@ -2,8 +2,6 @@
 Text Dataset Exploration Module
 
 Version: 1.0.0
-Author: CLINC150 RAG Classifier Team
-License: MIT
 
 Provides tools for analyzing and visualizing text classification datasets:
 - Class distribution analysis

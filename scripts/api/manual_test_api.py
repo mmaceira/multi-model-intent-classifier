@@ -43,7 +43,7 @@ def get_available_models():
 
 def run_model_test(model_id, text):
     """Send a test request to a specific model."""
-    url = "http://127.0.0.1:8000/predict"
+    url = "http://127.0.0.1:8000/v1/predict"
     headers = {"Content-Type": "application/json"}
     data = {
         "model_id": model_id,  # Changed from model_name to model_id

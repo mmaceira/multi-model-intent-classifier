@@ -10,8 +10,6 @@ Classes:
 
 Functions:
 - None
-
-Created: 2025-05-03
 """
 
 import numpy as np

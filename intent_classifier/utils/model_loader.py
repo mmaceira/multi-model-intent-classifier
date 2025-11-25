@@ -27,7 +27,6 @@ MODEL_CLASSES = {
     "LinearSVMBigrams": LinearSVMBigrams,
     "TransformerLogReg": TransformerLogReg,
     "EmbeddingLogReg": EmbeddingLogReg,
-    "OpenAIEmbedLogReg": EmbeddingLogReg,  # Backward compatibility alias
     "RagSklearnAdapter": RagSklearnAdapter,
 }
 
@@ -248,9 +247,8 @@ def load_models_from_config(
             hyperparam_key = "linear_svm_bigrams"
         elif model_id == "transformer_logreg":
             hyperparam_key = "transformer_logreg"
-        elif model_id in ("embedding_logreg", "openai_logreg"):
-            # Support both new name (embedding_logreg) and old name (openai_logreg)
-            hyperparam_key = "embedding_logreg"  # Use consistent key name
+        elif model_id == "embedding_logreg":
+            hyperparam_key = "embedding_logreg"
         elif model_id == "rag_kmajority":
             hyperparam_key = "rag_kmajority"
         elif model_id == "rag_centroid":
@@ -265,10 +263,7 @@ def load_models_from_config(
             tuned_params = {k: v for k, v in tuned_params.items() if k != "f1"}
 
             # Convert C to Cs for LogReg models (they expect Cs as a sequence)
-            if (
-                class_name in ("TransformerLogReg", "EmbeddingLogReg", "OpenAIEmbedLogReg")
-                and "C" in tuned_params
-            ):
+            if class_name in ("TransformerLogReg", "EmbeddingLogReg") and "C" in tuned_params:
                 tuned_params["Cs"] = [tuned_params.pop("C")]
 
             logger.info(f"Using tuned hyperparameters for {display_name}: {tuned_params}")

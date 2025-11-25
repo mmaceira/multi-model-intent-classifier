@@ -24,7 +24,6 @@ index building.
 Key Features:
 - FAISS index building
 - Support for multiple embedding types
-- Backward compatibility options
 - Parallel index building
 - Embedding generation
 - Metadata management
@@ -58,7 +57,7 @@ Example Usage:
     >>> python build_index.py
 
     >>> # Build indices with custom settings
-    >>> python build_index.py --use_openai --build_both --legacy_compat
+    >>> python build_index.py --use_openai --build_both
 """
 
 import argparse  # noqa: E402
@@ -96,10 +95,6 @@ DEFAULT_SOURCE = "clinc150"
 # Create the base artifacts and embeddings directories
 _ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 _EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Legacy path - for backward compatibility
-DEFAULT_LEGACY_FAISS_PATH = _ARTIFACTS_DIR / "index.faiss"
-DEFAULT_LEGACY_META_PATH = _ARTIFACTS_DIR / "meta.jsonl"
 
 # Create embedder-specific directories
 _SBERT_DIR.mkdir(parents=True, exist_ok=True)
@@ -147,9 +142,6 @@ def main():
     p.add_argument("--meta_path", default=str(DEFAULT_META_PATH))
     p.add_argument("--use_openai", action="store_true", help="Use OpenAI embeddings")
     p.add_argument("--build_both", action="store_true", help="Build both SBERT and OpenAI indices")
-    p.add_argument(
-        "--legacy_compat", action="store_true", help="Also save to legacy paths for compatibility"
-    )
     args = p.parse_args()
 
     if args.train_csv:
@@ -187,17 +179,6 @@ def main():
         print(
             f"✅ SBERT index saved → {sbert_faiss_path}\n✅ SBERT meta saved  → {sbert_meta_path}"
         )
-
-        # Also save to legacy paths if requested (for backward compatibility)
-        if args.legacy_compat:
-            DEFAULT_LEGACY_FAISS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            VectorStore.build(
-                emb, meta, emb.shape[1], DEFAULT_LEGACY_FAISS_PATH, DEFAULT_LEGACY_META_PATH
-            )
-            print(
-                f"✅ Legacy index saved → {DEFAULT_LEGACY_FAISS_PATH}\n"
-                f"✅ Legacy meta saved  → {DEFAULT_LEGACY_META_PATH}"
-            )
 
 
 def build_openai_index(

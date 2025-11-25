@@ -44,7 +44,7 @@ python scripts/tune_hyperparams.py --config config/config.yaml --algo embedding_
 
 # Tune Embedding LogReg with OpenAI (requires OPENAI_API_KEY)
 export OPENAI_API_KEY="your-key"
-python scripts/tune_hyperparams.py --config config/config.yaml --algo openai_logreg --num-samples 30
+python scripts/tune_hyperparams.py --config config/config.yaml --algo embedding_logreg --num-samples 30
 ```
 
 ## Integration with Training Pipeline

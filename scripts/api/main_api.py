@@ -130,8 +130,7 @@ except ImportError:
 
 # Request/Response models
 class PredictRequest(BaseModel):
-    model_name: Optional[str] = Field(None, description="Model name (deprecated, use model_id)")
-    model_id: Optional[str] = Field(None, description="Model identifier")
+    model_id: str = Field(..., description="Model identifier")
     text: str = Field(..., min_length=1, max_length=10000, description="Text to classify")
 
     @field_validator("text")
@@ -324,13 +323,12 @@ def get_model_info(model_id: str):
 @app.post("/v1/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest, request: Request):
     """Classify text using a specified model."""
-    # Use model_id if provided, otherwise fall back to model_name
-    model_identifier = req.model_id or req.model_name
-    if not model_identifier:
+    if not req.model_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Either model_id or model_name must be provided",
+            detail="model_id must be provided",
         )
+    model_identifier = req.model_id
 
     request_id = getattr(request.state, "request_id", None)
 
@@ -432,19 +430,6 @@ async def predict(req: PredictRequest, request: Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Prediction failed: {str(e)}",
         ) from e
-
-
-# Backward compatibility endpoints
-@app.get("/models", response_model=List[ModelInfo])
-def list_models_legacy():
-    """Legacy endpoint for listing models."""
-    return list_models()
-
-
-@app.post("/predict", response_model=PredictResponse)
-async def predict_legacy(req: PredictRequest, request: Request):
-    """Legacy endpoint for predictions."""
-    return await predict(req, request)
 
 
 def main():

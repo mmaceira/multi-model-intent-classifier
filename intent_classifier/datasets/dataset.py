@@ -5,8 +5,6 @@ This module provides functions for loading the CLINC150 intent classification da
 
 Functions:
     get_dataset: Common entry point for dataset loading
-
-Created: 2025-05-03
 """
 
 from __future__ import annotations
