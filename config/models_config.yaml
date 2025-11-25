@@ -12,11 +12,21 @@ models:
     enabled: true
     name: "Linear SVM"
     class: "LinearSVMClassifier"
+    params:
+      # Calibration: enabled by default for reliable probability estimates
+      # Uncalibrated SVM scores are NOT true probabilities - use calibration for production
+      calibrate: true  # Default: true - enables CalibratedClassifierCV
+      calibration_method: "sigmoid"  # Options: "sigmoid" (default) or "isotonic"
 
   linear_svm_bigrams:
     enabled: true
     name: "TF-IDF bigrams + SVM"
     class: "LinearSVMBigrams"
+    params:
+      # Calibration: enabled by default for reliable probability estimates
+      # Uncalibrated SVM scores are NOT true probabilities - use calibration for production
+      calibrate: true  # Default: true - enables CalibratedClassifierCV
+      calibration_method: "sigmoid"  # Options: "sigmoid" (default) or "isotonic"
 
   transformer_logreg:
     enabled: true

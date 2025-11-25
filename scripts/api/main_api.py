@@ -144,10 +144,15 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    label: str = Field(..., description="Predicted class label")
+    label: str = Field(
+        ..., description="Predicted class label (or '__ABSTAIN__' if confidence too low)"
+    )
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Prediction confidence")
     probabilities: Optional[dict[str, float]] = Field(
         None, description="All class probabilities (if available)"
+    )
+    abstained: bool = Field(
+        default=False, description="Whether the model abstained from prediction"
     )
     request_id: Optional[str] = Field(None, description="Request ID for tracing")
 
@@ -318,6 +323,9 @@ async def predict(req: PredictRequest, request: Request):
 
     request_id = getattr(request.state, "request_id", None)
 
+    # Get minimum confidence threshold for abstention
+    min_conf = float(os.getenv("MIN_CONFIDENCE", "0.6"))
+
     try:
         model = _get_model(model_identifier)
 
@@ -333,17 +341,31 @@ async def predict(req: PredictRequest, request: Request):
             label = clf.predict([req.text])[0]
             conf = None
             probabilities = None
+            abstained = False
 
             if hasattr(clf, "predict_proba"):
                 try:
                     probas = clf.predict_proba([req.text])[0]
-                    conf = float(max(probas))
+                    pred_idx = int(probas.argmax())
+                    conf = float(probas[pred_idx])
                     # Get class names if available
                     if hasattr(clf, "classes_"):
+                        label_map = {i: str(cls) for i, cls in enumerate(clf.classes_)}
                         probabilities = {
                             str(cls): float(prob)
                             for cls, prob in zip(clf.classes_, probas, strict=False)
                         }
+                        # Check abstention threshold
+                        if conf < min_conf:
+                            label = "__ABSTAIN__"
+                            abstained = True
+                        else:
+                            label = label_map[pred_idx]
+                    else:
+                        # Fallback if no classes_ attribute
+                        if conf < min_conf:
+                            label = "__ABSTAIN__"
+                            abstained = True
                 except Exception as e:
                     logger.warning(f"Could not get probabilities: {e}")
 
@@ -352,17 +374,31 @@ async def predict(req: PredictRequest, request: Request):
             label = model.predict([req.text])[0]
             conf = None
             probabilities = None
+            abstained = False
 
             if hasattr(model, "predict_proba"):
                 try:
                     probas = model.predict_proba([req.text])[0]
-                    conf = float(max(probas))
+                    pred_idx = int(probas.argmax())
+                    conf = float(probas[pred_idx])
                     # Get class names if available
                     if hasattr(model, "classes_"):
+                        label_map = {i: str(cls) for i, cls in enumerate(model.classes_)}
                         probabilities = {
                             str(cls): float(prob)
                             for cls, prob in zip(model.classes_, probas, strict=False)
                         }
+                        # Check abstention threshold
+                        if conf < min_conf:
+                            label = "__ABSTAIN__"
+                            abstained = True
+                        else:
+                            label = label_map[pred_idx]
+                    else:
+                        # Fallback if no classes_ attribute
+                        if conf < min_conf:
+                            label = "__ABSTAIN__"
+                            abstained = True
                 except Exception as e:
                     logger.warning(f"Could not get probabilities: {e}")
 
@@ -370,6 +406,7 @@ async def predict(req: PredictRequest, request: Request):
             label=str(label),
             confidence=conf,
             probabilities=probabilities,
+            abstained=abstained,
             request_id=request_id,
         )
 

@@ -4,7 +4,6 @@ A production-ready NLP pipeline for automated intent classification and semantic
 
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-available-blue)](docs/)
 
 ## Table of Contents
 - [Quick Start](#-quick-start)
@@ -487,6 +486,14 @@ git commit -m "Add tuned hyperparameters for all models"
 - Resource utilization optimization
 - Cost-effective scaling options
 
+### 5. Production-Ready Features
+- **Type-safe configuration validation** using Pydantic schemas
+- **Calibrated probability estimates** (enabled by default for SVM models)
+- **Abstention threshold** in API for low-confidence predictions
+- **Optional MLflow integration** for experiment tracking
+- **API rate limiting** and authentication
+- **Comprehensive logging** with proper configuration
+
 ## 📊 Performance Metrics
 
 ### Model Performance on CLINC150
@@ -560,6 +567,13 @@ The project has several optional dependencies for different features:
 
 **Note**: All dependencies are listed in `pyproject.toml`. The base installation includes most dependencies. For OpenAI features, ensure `OPENAI_API_KEY` is set in your environment or `.env` file.
 
+| Feature | Required Packages | Notes |
+|---------|------------------|-------|
+| **MLflow tracking** | `mlflow>=2.0.0` | Optional - install with `pip install -e ".[mlflow]"` or `uv sync --extra mlflow` |
+| **API server** | `fastapi`, `uvicorn` | Install with `pip install -e ".[api]"` or `uv sync --extra api` |
+| **Visualization** | `matplotlib`, `seaborn` | Install with `pip install -e ".[viz]"` or `uv sync --extra viz` |
+| **Hyperparameter tuning** | `ray[tune]` | Install with `pip install -e ".[tune]"` or `uv sync --extra tune` |
+
 ### Code Style
 - Follow PEP 8 guidelines
 - Use type hints
@@ -582,9 +596,8 @@ pytest --cov=src
 ```
 
 ### Documentation
-- API documentation is generated using Sphinx
-- Run `make docs` to build documentation
-- View documentation at `docs/_build/html/index.html`
+- API documentation is available via FastAPI's automatic docs at `/docs` when running the API server
+- See `README.md` and `scripts/api/README_API.md` for detailed usage instructions
 
 ## 🙏 Acknowledgments
 

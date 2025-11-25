@@ -45,7 +45,7 @@ class LinearSVMClassifier(TextClassifier):
         self,
         max_features: int = 10000,
         C: float = 1.0,
-        calibrate: bool = False,
+        calibrate: bool = True,
         calibration_method: str = "sigmoid",
         class_weight: str | dict | None = None,
     ):
@@ -56,9 +56,10 @@ class LinearSVMClassifier(TextClassifier):
             C: SVM regularization parameter (default: 1.0)
             calibrate: If True, use CalibratedClassifierCV for calibrated probabilities.
                        If False, probabilities are approximated via softmax (not calibrated).
-                       Default: False
+                       **Default: True** - Calibration is recommended for production use as
+                       uncalibrated SVM scores are NOT true probabilities.
             calibration_method: Calibration method if calibrate=True.
-                                Options: "sigmoid" or "isotonic". Default: "sigmoid"
+                                Options: "sigmoid" (default, faster) or "isotonic" (more flexible).
             class_weight: Class weights for handling imbalanced data. Can be:
                          - "balanced": automatically adjust weights inversely proportional
                            to class frequency
@@ -185,7 +186,7 @@ class LinearSVMBigrams(TextClassifier):
         self,
         max_features: int = 40000,
         C: float = 5.0,
-        calibrate: bool = False,
+        calibrate: bool = True,
         calibration_method: str = "sigmoid",
         class_weight: str | dict | None = None,
     ):
@@ -196,9 +197,10 @@ class LinearSVMBigrams(TextClassifier):
             C: SVM regularization parameter (default: 5.0)
             calibrate: If True, use CalibratedClassifierCV for calibrated probabilities.
                        If False, probabilities are approximated via softmax (not calibrated).
-                       Default: False
+                       **Default: True** - Calibration is recommended for production use as
+                       uncalibrated SVM scores are NOT true probabilities.
             calibration_method: Calibration method if calibrate=True.
-                                Options: "sigmoid" or "isotonic". Default: "sigmoid"
+                                Options: "sigmoid" (default, faster) or "isotonic" (more flexible).
             class_weight: Class weights for handling imbalanced data. Can be:
                          - "balanced": automatically adjust weights inversely proportional
                            to class frequency

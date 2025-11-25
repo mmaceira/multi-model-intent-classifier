@@ -33,6 +33,28 @@ curl -X POST http://127.0.0.1:8000/predict \
   -d '{"model_name": "linear_svm", "text": "A barrel of crude futures climbed to $75 following OPEC meeting."}'
 ```
 
+**Response format:**
+```json
+{
+  "label": "transfer_money",
+  "confidence": 0.95,
+  "probabilities": {
+    "transfer_money": 0.95,
+    "check_balance": 0.03,
+    "greeting": 0.02
+  },
+  "abstained": false,
+  "request_id": "uuid-here"
+}
+```
+
+**Abstention:** If the model's confidence is below the threshold (default: 0.6, configurable via `MIN_CONFIDENCE` env var), the response will have:
+- `label: "__ABSTAIN__"`
+- `abstained: true`
+- `confidence: <threshold>`
+
+This is useful for production systems where you want to reject low-confidence predictions.
+
 ### Test the API
 ```bash
 # Run the manual test script
@@ -64,10 +86,29 @@ models/
         model.joblib
 ```
 
+## ⚙️ Configuration
+
+### Environment Variables
+
+- `MIN_CONFIDENCE` (default: 0.6): Minimum confidence threshold for predictions. If a prediction's confidence is below this threshold, the API will return `"__ABSTAIN__"` as the label.
+- `API_KEY`: Optional API key for authentication. If set, all requests must include `X-API-Key` header.
+- `RATE_LIMIT_REQUESTS` (default: 100): Maximum number of requests per window.
+- `RATE_LIMIT_WINDOW` (default: 60): Time window in seconds for rate limiting.
+- `CORS_ORIGINS`: Comma-separated list of allowed CORS origins (default: "*").
+- `MLFLOW_TRACKING_URI`: Optional MLflow tracking URI for experiment logging.
+
+### Example with Abstention Threshold
+
+```bash
+# Set minimum confidence to 0.7 (more conservative)
+export MIN_CONFIDENCE=0.7
+uvicorn scripts.api.main_api:app --reload
+```
+
 ## ⚠️ Requirements
 
 1. Model files in the specified `MODELS_DIR`
-2. Python 3.8+
+2. Python 3.12+
 3. **OpenAI API key is required only if you use OpenAI embeddings or OpenAI-backed RAG models**
    - Naive Bayes, Linear SVM, and other non-RAG models don't need it
    - RAG models using local embeddings (SBERT) don't need it

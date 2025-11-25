@@ -122,10 +122,7 @@ for var_name, value in config_vars.items():
         value.mkdir(parents=True, exist_ok=True)
         print(f"Created directory: {value}")
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s | %(message)s", handlers=[logging.StreamHandler()]
-)
-
 # Create a logger that can be used throughout the project
+# Note: Do not call basicConfig here - this is a module, not an entry point.
+# Entry points (pipeline scripts) should configure logging.
 logger = logging.getLogger(__name__)

@@ -59,6 +59,7 @@ License: MIT
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
@@ -123,6 +124,41 @@ def run_training(
     fitted: Dict[str, Any] = {}
     training_times: Dict[str, float] = {}
 
+    # Optional MLflow integration
+    use_mlflow = bool(os.getenv("MLFLOW_TRACKING_URI"))
+    mlflow_run = None
+    if use_mlflow:
+        try:
+            import mlflow
+
+            mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+            mlflow_experiment = os.getenv("MLFLOW_EXPERIMENT_NAME", "intent-classification")
+            run_name = os.getenv("MLFLOW_RUN_NAME", "training-run")
+
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+            mlflow.set_experiment(mlflow_experiment)
+            mlflow_run = mlflow.start_run(run_name=run_name)
+
+            # Log basic parameters
+            mlflow.log_params(
+                {
+                    "n_train_samples": len(X_train),
+                    "n_val_samples": len(X_val) if X_val is not None else 0,
+                    "n_models": len(models),
+                    "output_dir": str(output_dir),
+                }
+            )
+            if verbose:
+                print(f"[MLflow] Logging to {mlflow_tracking_uri}, experiment: {mlflow_experiment}")
+        except ImportError:
+            if verbose:
+                print("[MLflow] MLflow not installed. Skipping MLflow logging.")
+            use_mlflow = False
+        except Exception as e:
+            if verbose:
+                print(f"[MLflow] Failed to initialize MLflow: {e}. Skipping MLflow logging.")
+            use_mlflow = False
+
     for name, model in models.items():
         if verbose:
             print(f"[run_training] Fitting {name}...", flush=True)
@@ -173,6 +209,27 @@ def run_training(
             with open(model_dir / f"{name}_execution_time.txt", "w") as f:
                 f.write(f"Training time: {execution_time:.2f} seconds")
 
+            # Log to MLflow if enabled
+            if use_mlflow and mlflow_run is not None:
+                try:
+                    import mlflow
+
+                    mlflow.log_metric(f"{name}_training_time", execution_time)
+                    # Log model parameters if available
+                    if hasattr(estimator, "get_params"):
+                        params = estimator.get_params()
+                        # Filter out non-serializable params
+                        serializable_params = {
+                            k: str(v)
+                            for k, v in params.items()
+                            if isinstance(v, (str, int, float, bool))
+                        }
+                        for param_name, param_value in serializable_params.items():
+                            mlflow.log_param(f"{name}_{param_name}", param_value)
+                except Exception as e:
+                    if verbose:
+                        print(f"[MLflow] Failed to log metrics for {name}: {e}")
+
             # --- persist model ---------------------------------------------------
             if save_models:
                 with open(model_dir / "model.pkl", "wb") as f:
@@ -187,5 +244,17 @@ def run_training(
     with open(output_dir / "training_times.txt", "w") as f:
         for name, time_taken in training_times.items():
             f.write(f"{name}: {time_taken:.2f} seconds\n")
+
+    # End MLflow run if active
+    if use_mlflow and mlflow_run is not None:
+        try:
+            import mlflow
+
+            mlflow.end_run()
+            if verbose:
+                print("[MLflow] Training run completed and logged to MLflow")
+        except Exception as e:
+            if verbose:
+                print(f"[MLflow] Failed to end MLflow run: {e}")
 
     return fitted

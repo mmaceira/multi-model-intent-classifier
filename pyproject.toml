@@ -57,6 +57,9 @@ dev = [
 tune = [
     "ray[tune]~=2.45.0",
 ]
+mlflow = [
+    "mlflow>=2.0.0",
+]
 viz = [
     "matplotlib~=3.10.1",
     "seaborn~=0.13.2",
