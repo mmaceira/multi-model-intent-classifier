@@ -235,6 +235,66 @@ If you run out of memory:
 - Use CPU-only models (Naive Bayes, Linear SVM) for faster iteration
 - Consider using OpenAI embeddings if local GPU is slow
 
+## Resource & Stability
+
+For full dataset runs, the following mitigations are in place to prevent crashes and memory issues:
+
+### Memory Optimizations
+
+1. **Vectors Not Stored in Metadata**: Embeddings are stored only in FAISS indices, not in metadata JSONL files. This prevents several GB of RAM/disk usage.
+
+2. **Streaming Metadata Writing**: Metadata is written to disk in a streaming fashion to reduce peak RAM usage.
+
+3. **Configurable Batch Sizes**: Control embedding batch sizes via environment variables:
+   ```bash
+   export SBERT_BATCH=32      # Default: 32 (was 64)
+   export OPENAI_BATCH=32     # Default: 32 (was 50)
+   ```
+
+4. **Capped Parallelism**: TransformerLogReg uses `n_jobs=2` and `cv=3` by default (instead of `-1` and `5`) to prevent oversubscription of CPU cores and RAM.
+
+5. **BLAS Thread Limits**: For full dataset runs, set these environment variables to prevent thread oversubscription:
+   ```bash
+   export OMP_NUM_THREADS=1
+   export MKL_NUM_THREADS=1
+   export OPENBLAS_NUM_THREADS=1
+   export NUMEXPR_NUM_THREADS=1
+   ```
+
+### RAG-LLM Configuration
+
+- **RAG-LLM is disabled by default** in `config/models_config.yaml` for full dataset runs (uses too much RAM/VRAM with 8B models).
+- To enable for small configs (tiny/10/25-class), set `rag_llm.enabled: true` in `config/models_config.yaml`.
+- For full runs with RAG-LLM, consider using a smaller model:
+  ```yaml
+  model:
+    llm_model: "ollama/qwen2.5:0.5b"  # or "ollama/phi3:mini"
+  ```
+
+### Resuming Interrupted Runs
+
+If a run is interrupted:
+- **Embeddings**: Check if `output/{run_name}/embeddings/` exists. If present, embeddings step will be skipped.
+- **Models**: Check `output/{run_name}/models/` - existing models are automatically skipped during training.
+- **Force Rebuild**: To rebuild embeddings, set `FORCE_REBUILD=1`:
+  ```bash
+  FORCE_REBUILD=1 python scripts/pipeline/02_build_embeddings.py
+  ```
+
+### Resource Requirements for Full Dataset
+
+- **RAM**: 16GB+ recommended (8GB minimum with optimizations)
+- **Disk**: ~5GB for embeddings and models
+- **CPU**: Multi-core recommended for parallel training
+- **GPU**: Optional (only for TransformerLogReg if using GPU)
+
+### Sanity Checks
+
+After building embeddings, verify:
+- FAISS index size matches metadata line count
+- Metadata JSONL files do NOT contain `"vector"` keys (vectors are only in FAISS)
+- Check `output/{run_name}/embeddings/*/meta.jsonl` - should only have `id`, `label`, `text` fields
+
 ## Best Practices
 
 1. **Start Small**: Use `config_tiny_dataset.yaml` for initial testing
@@ -243,3 +303,4 @@ If you run out of memory:
 4. **Version Control**: Commit your config files and hyperparameters
 5. **Monitor Resources**: Watch memory and disk usage during training
 6. **Use Validation Set**: Never use test set for model selection
+7. **Set Environment Variables**: For full runs, set BLAS thread limits and batch sizes as shown above

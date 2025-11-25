@@ -94,14 +94,17 @@ def main():
             sbert = SentenceTransformer(SBERT_MODEL)
             print("Encoding utterances...")
             vectors = sbert.encode(
-                X_train, batch_size=64, show_progress_bar=True, convert_to_numpy=True
+                X_train,
+                batch_size=int(os.getenv("SBERT_BATCH", "32")),
+                show_progress_bar=True,
+                convert_to_numpy=True,
             ).astype("float32")
 
             print(f"Generated embeddings with shape: {vectors.shape}")
             print("Building metadata...")
             meta = []
-            for i, (txt, label, vec) in enumerate(zip(X_train, y_train, vectors, strict=False)):
-                meta.append({"id": i, "label": label, "text": txt, "vector": vec.tolist()})
+            for i, (txt, label) in enumerate(zip(X_train, y_train, strict=False)):
+                meta.append({"id": i, "label": label, "text": txt})
 
             print("Building FAISS index...")
             faiss_path = _SBERT_DIR / "index.faiss"
@@ -128,17 +131,15 @@ def main():
             print(f"Using model: {OPENAI_MODEL}")
             print("OPENAI_API_KEY found - building OpenAI embeddings...")
             try:
-                openai_embedder = OpenAIEmbedder(model=OPENAI_MODEL, batch_size=50)
+                openai_embedder = OpenAIEmbedder(
+                    model=OPENAI_MODEL, batch_size=int(os.getenv("OPENAI_BATCH", "32"))
+                )
                 openai_vecs = openai_embedder.encode(X_train)
                 openai_vecs = np.array(openai_vecs, dtype="float32")
 
                 meta_openai = []
-                for i, (txt, label, vec) in enumerate(
-                    zip(X_train, y_train, openai_vecs, strict=False)
-                ):
-                    meta_openai.append(
-                        {"id": i, "label": label, "text": txt, "vector": vec.tolist()}
-                    )
+                for i, (txt, label) in enumerate(zip(X_train, y_train, strict=False)):
+                    meta_openai.append({"id": i, "label": label, "text": txt})
 
                 openai_faiss = _OPENAI_DIR / "index.faiss"
                 openai_meta = _OPENAI_DIR / "meta.jsonl"

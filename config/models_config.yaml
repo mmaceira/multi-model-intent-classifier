@@ -32,6 +32,9 @@ models:
     enabled: true
     name: "MiniLM + LogReg"
     class: "TransformerLogReg"
+    params:
+      n_jobs: 2  # Capped for full dataset stability (default was -1, which oversubscribes RAM/cores)
+      cv: 3  # Reduced from 5 for full dataset stability
 
   embedding_logreg:
     enabled: false  # Disabled by default. Can use SBERT (local, no API key) or OpenAI (requires OPENAI_API_KEY)
@@ -64,7 +67,7 @@ models:
       top_k: "${model.rag_top_k}"
 
   rag_llm:
-    enabled: true  # Enabled by default - uses Ollama LLM with local SBERT embeddings (no API keys needed)
+    enabled: false  # Disabled by default for full dataset runs (uses too much RAM/VRAM). Enable for small configs.
     name: "RAG-LLM"
     class: "RagSklearnAdapter"
     params:

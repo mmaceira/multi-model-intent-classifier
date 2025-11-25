@@ -25,15 +25,12 @@ import numpy as np
 from src.utils.embeddings import EmbeddingGenerator
 
 try:
-    import openai
-    from openai import RateLimitError
+    import openai  # noqa: F401
+    from openai import RateLimitError  # noqa: F401
 except ImportError as e:
     raise ImportError("openai package required. Install with `pip install openai`.") from e
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +52,8 @@ class OpenAIEmbedder:
     model:
         Embedding model name. Default: ``text-embedding-3-small`` (currently the lowest‑cost).
     batch_size:
-        How many texts to send per request (max 2048 tokens total → stay conservative at 100 examples).
+        How many texts to send per request (max 2048 tokens total →
+        stay conservative at 100 examples).
     api_key:
         If ``None``, the class falls back to the ``OPENAI_API_KEY`` environment variable.
     organization:
@@ -123,7 +121,6 @@ class OpenAIEmbedder:
         for batch in chunk_iterable(texts, self.embedder.batch_size):
             batch_count += 1
             batch_size = len(batch)
-            batch_start_time = time.time()
 
             logger.info(f"Processing batch {batch_count}/{total_batches} ({batch_size} texts)")
 
@@ -135,15 +132,8 @@ class OpenAIEmbedder:
                 # Use the retry-enabled method instead of direct API call
                 response = self.get_embeddings(batch)
 
-                # Get actual token usage if available in the response
-                if hasattr(response, "usage") and hasattr(response.usage, "total_tokens"):
-                    actual_tokens = response.usage.total_tokens
-
                 # Using .data list ensures order preserved
                 embeddings.extend([list(embedding) for embedding in response])
-
-                batch_end_time = time.time()
-                batch_duration = batch_end_time - batch_start_time
 
                 # Add a small delay between batches to avoid rate limits
                 if batch_count < total_batches:
@@ -158,8 +148,10 @@ class OpenAIEmbedder:
         # Calculate and log total embedding time
         end_time = time.time()
         total_duration = end_time - start_time
+        avg_time_per_text = total_duration / len(texts)
         logger.info(
-            f"Completed {total_batches} batches in {total_duration:.2f}s (avg {total_duration/len(texts):.4f}s per text)"
+            f"Completed {total_batches} batches in {total_duration:.2f}s "
+            f"(avg {avg_time_per_text:.4f}s per text)"
         )
 
         return embeddings

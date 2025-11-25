@@ -312,7 +312,10 @@ class VectorStore:
 
         logger.info(f"Writing metadata to {meta_path}...")
         meta_start = time.time()
-        meta_path.write_text("\n".join(json.dumps(m) for m in meta))
+        # Stream metadata to disk to reduce peak RAM (instead of joining all strings)
+        with open(meta_path, "w") as f:
+            for m in meta:
+                f.write(json.dumps(m) + "\n")
         logger.info(f"Wrote metadata in {time.time() - meta_start:.2f} seconds")
 
         logger.info(f"Index built in {time.time() - start_time:.2f} seconds")

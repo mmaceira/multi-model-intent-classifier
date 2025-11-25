@@ -32,6 +32,12 @@ This document covers performance metrics, resource requirements, and scaling gui
 | MiniLM + LogReg | - | 8GB | 12GB | 2GB |
 | RAG Models | ✓ | 16GB | - | 5GB |
 
+**Note for Full Dataset Runs:**
+- **RAM Peak**: ~16GB without RAG-LLM, ~24GB+ with RAG-LLM (8B model)
+- **Disk**: ~5GB for embeddings and models (vectors are NOT stored in metadata JSONL)
+- **CPU**: Multi-core recommended; BLAS threads should be limited to prevent oversubscription
+- **RAG-LLM**: Disabled by default for full runs; enable only for small configs or use smaller models (0.5B-1B)
+
 ## Scaling Guidance
 
 | Method | Data Scaling | Guidance |
