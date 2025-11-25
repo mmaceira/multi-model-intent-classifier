@@ -216,7 +216,7 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
     Args:
         use_openai: Whether to use OpenAI embeddings
         artifacts_dir: Optional alternative artifacts directory
-        **cfg: Additional config parameters
+        **cfg: Additional config parameters (can include log_dir for saving prompts/responses)
 
     Returns:
         A RagLLM instance

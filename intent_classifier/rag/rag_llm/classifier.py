@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import Counter
-from typing import Callable, Iterable, List, Sequence
+from pathlib import Path
+from typing import Callable, Iterable, List, Optional, Sequence
 
 import numpy as np
 
@@ -16,9 +18,7 @@ from .client import LLMClient
 from .prompt_builder import build_classification_prompt
 from .response_parser import (
     extract_labels_from_response,
-    normalize_label_count,
     parse_json_response,
-    validate_and_normalize_labels,
 )
 
 # Configure module logger
@@ -43,6 +43,7 @@ class RagLLM(RagClassifierBase):
         batch_size: Number of documents to classify in a single LLM call
         max_retries: Maximum number of retry attempts for failed API calls
         embedder: Optional custom embedding function for document vectorization
+        log_dir: Optional directory to save prompts and responses for debugging
     """
 
     def __init__(
@@ -57,6 +58,7 @@ class RagLLM(RagClassifierBase):
         rate_limit_per_minute: int = 120,
         embedder: Callable[[Sequence[str]], Iterable[Sequence[float]]] | None = None,
         max_retries: int = 5,
+        log_dir: Optional[Path] = None,
     ):
         """Initialize the RAG LLM classifier.
 
@@ -79,6 +81,8 @@ class RagLLM(RagClassifierBase):
         self._sem = asyncio.Semaphore(max_concurrency)
         self.embedder = embedder
         self.max_retries = max_retries
+        self.log_dir = log_dir
+        self._batch_counter = 0
         self._llm_client = LLMClient(
             model=model,
             max_retries=max_retries,
@@ -242,6 +246,24 @@ class RagLLM(RagClassifierBase):
         # Build prompt
         messages = build_classification_prompt(docs, contexts, list(self.labels))
 
+        # Save prompt to file if log_dir is set
+        self._batch_counter += 1
+        if self.log_dir:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            prompt_file = self.log_dir / f"batch_{self._batch_counter:04d}_prompt.json"
+            prompt_data = {
+                "batch_number": self._batch_counter,
+                "num_documents": len(docs),
+                "documents": docs,
+                "contexts": contexts,
+                "labels": list(self.labels),
+                "system_message": messages[0]["content"] if messages else "",
+                "user_message": messages[1]["content"] if len(messages) > 1 else "",
+            }
+            with open(prompt_file, "w", encoding="utf-8") as f:
+                json.dump(prompt_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"💾 Saved prompt to {prompt_file}")
+
         # Retry loop for invalid responses
         text = None  # Initialize to avoid UnboundLocalError in exception handlers
         for retry_attempt in range(MAX_RETRIES_FOR_INVALID + 1):
@@ -249,9 +271,25 @@ class RagLLM(RagClassifierBase):
                 resp = await self._llm_client.chat_with_retry(messages)
                 text = resp.choices[0].message.content.strip()
 
-                # Debug logging: log the raw response
-                if logger.isEnabledFor(logging.DEBUG) or len(docs) <= 3:
-                    logger.debug(f"Raw LLM response (first 500 chars):\n{text[:500]}")
+                # Save response to file if log_dir is set
+                if self.log_dir:
+                    filename = (
+                        f"batch_{self._batch_counter:04d}_"
+                        f"response_attempt_{retry_attempt + 1}.txt"
+                    )
+                    response_file = self.log_dir / filename
+                    with open(response_file, "w", encoding="utf-8") as f:
+                        f.write(f"Batch: {self._batch_counter}\n")
+                        f.write(f"Attempt: {retry_attempt + 1}/{MAX_RETRIES_FOR_INVALID + 1}\n")
+                        f.write(f"Expected labels: {len(docs)}\n")
+                        f.write(f"Response:\n{text}\n")
+                    logger.info(f"💾 Saved response to {response_file}")
+
+                # Always log full response
+                logger.info(
+                    f"📥 LLM response (batch {self._batch_counter}, "
+                    f"attempt {retry_attempt + 1}):\n{text}"
+                )
 
                 # Parse JSON response
                 try:
@@ -281,69 +319,77 @@ class RagLLM(RagClassifierBase):
                 # Extract labels from response
                 labels_out = extract_labels_from_response(response_data, len(docs))
 
-                # Handle extraction failures
+                # Handle extraction failures - SIMPLIFIED: just retry or fail
                 if labels_out is None:
-                    # Check if we got a single label that we can use for all docs
-                    if isinstance(response_data, dict):
-                        for key, value in response_data.items():
-                            if isinstance(value, str) and value in self.labels:
-                                logger.warning(
-                                    f"Found single label '{value}' at key '{key}', "
-                                    f"using for all documents"
-                                )
-                                return [value] * len(docs)
+                    logger.error(f"❌ No valid labels array found in response: {response_data}")
+                    if retry_attempt < MAX_RETRIES_FOR_INVALID:
+                        messages[-1]["content"] = (
+                            messages[-1]["content"]
+                            + "\n\n⚠️ RETRY: Your response must contain a 'labels' array "
+                            "with the predictions."
+                        )
+                        continue
+                    else:
+                        raise ValueError(
+                            f"Failed to extract labels after "
+                            f"{MAX_RETRIES_FOR_INVALID + 1} attempts. "
+                            f"Response: {response_data}"
+                        )
 
+                # Check label count - SIMPLIFIED: retry or fail, no normalization
+                if len(labels_out) != len(docs):
                     logger.error(
-                        f"No valid labels found in response: {response_data}. "
-                        f"Falling back to per-document kMajority from neighbors."
+                        f"❌ Label Count Mismatch: Expected {len(docs)} labels "
+                        f"but got {len(labels_out)}. Labels: {labels_out}"
                     )
                     if retry_attempt < MAX_RETRIES_FOR_INVALID:
+                        messages[-1]["content"] = (
+                            messages[-1]["content"]
+                            + f"\n\n⚠️ RETRY: You returned {len(labels_out)} labels "
+                            f"but need EXACTLY {len(docs)}. "
+                            f"Count the utterances above and return EXACTLY {len(docs)} "
+                            f"labels in the array."
+                        )
                         continue
-                    # Fallback to per-document kMajority using neighbors_list
-                    return self._fallback_to_kmajority(docs, neighbors_list)
-
-                # Normalize label count
-                labels_out = normalize_label_count(labels_out, len(docs))
-
-                # Validate and normalize labels
-                validated_labels, invalid_count = validate_and_normalize_labels(
-                    labels_out, list(self.labels), neighbors_list
-                )
-
-                # Check if too many invalid labels, retry the request
-                if invalid_count > len(docs) * 0.3 and retry_attempt < MAX_RETRIES_FOR_INVALID:
-                    logger.warning(
-                        f"Too many invalid labels ({invalid_count}/{len(docs)}). "
-                        f"Retrying request (attempt {retry_attempt + 1}/"
-                        f"{MAX_RETRIES_FOR_INVALID + 1})"
-                    )
-                    # Add a more strict instruction to the prompt
-                    messages[-1]["content"] = (
-                        messages[-1]["content"]
-                        + "\n\n⚠️ RETRY: Previous response had invalid labels. "
-                        "You MUST use EXACT labels from the list. "
-                        "Copy them character-by-character."
-                    )
-                    continue  # Retry the request
-
-                # Ensure we have the correct number of labels
-                if len(validated_labels) != len(docs):
-                    logger.warning(
-                        f"Validated labels count ({len(validated_labels)}) "
-                        f"doesn't match docs count ({len(docs)}). Adjusting..."
-                    )
-                    if len(validated_labels) < len(docs):
-                        # Extend with last valid label or first label
-                        extension_label = (
-                            validated_labels[-1] if validated_labels else self.labels[0]
-                        )
-                        validated_labels.extend(
-                            [extension_label] * (len(docs) - len(validated_labels))
-                        )
                     else:
-                        # Truncate if too long
-                        validated_labels = validated_labels[: len(docs)]
+                        raise ValueError(
+                            f"Label count mismatch after {MAX_RETRIES_FOR_INVALID + 1} attempts: "
+                            f"Expected {len(docs)} but got {len(labels_out)}. Labels: {labels_out}"
+                        )
 
+                # Validate labels - SIMPLIFIED: only exact matches, no fuzzy matching
+                validated_labels = []
+                invalid_labels = []
+                for i, label in enumerate(labels_out):
+                    label_str = str(label).strip()
+                    if label_str in self.labels:
+                        validated_labels.append(label_str)
+                    else:
+                        invalid_labels.append((i, label_str))
+                        logger.error(
+                            f"❌ Invalid label at position {i}: '{label_str}'. "
+                            f"Valid labels: {self.labels}"
+                        )
+
+                # If any invalid labels, retry or fail
+                if invalid_labels:
+                    if retry_attempt < MAX_RETRIES_FOR_INVALID:
+                        invalid_examples = ", ".join([f"'{lbl}'" for _, lbl in invalid_labels[:3]])
+                        messages[-1]["content"] = (
+                            messages[-1]["content"]
+                            + f"\n\n⚠️ RETRY: Invalid labels found: {invalid_examples}. "
+                            f"You MUST use EXACT labels from this list: {list(self.labels)}. "
+                            f"Copy them character-by-character."
+                        )
+                        continue
+                    else:
+                        raise ValueError(
+                            f"Invalid labels after {MAX_RETRIES_FOR_INVALID + 1} attempts: "
+                            f"{invalid_labels}. Valid labels: {list(self.labels)}"
+                        )
+
+                # Success - log and return
+                logger.info(f"✅ Successfully classified {len(docs)} documents: {validated_labels}")
                 return validated_labels
 
             except Exception as e:
@@ -361,12 +407,13 @@ class RagLLM(RagClassifierBase):
                     )
                     break  # Exit retry loop
 
-        # Final fallback: use per-document kMajority from neighbors
-        logger.error(
-            "All retry attempts exhausted for batch classification. "
-            "Falling back to per-document kMajority from neighbors."
+        # All retries exhausted - raise error instead of silent fallback
+        error_msg = (
+            f"Failed to classify batch after {MAX_RETRIES_FOR_INVALID + 1} attempts. "
+            f"Last response: {text[:500] if text else 'N/A'}"
         )
-        return self._fallback_to_kmajority(docs, neighbors_list)
+        logger.error(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)
 
     def predict(self, docs: Sequence[str]) -> List[str]:
         """Classify multiple documents with batched processing.

@@ -120,6 +120,35 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         return self.__class__(self.rag_clf)
 
     @staticmethod
+    def _get_log_dir_from_config(config: dict):
+        """Get log directory from config for saving prompts and responses."""
+        try:
+            from pathlib import Path
+
+            # Try to get predictions_dir from config
+            predictions_dir = config.get("paths", {}).get("predictions_dir")
+            if predictions_dir:
+                # Resolve template variables if present
+                if "${" in str(predictions_dir):
+                    # Try to get resolved config_vars
+                    try:
+                        from config.notebook_setup import config_vars
+
+                        predictions_dir = config_vars.get("PATHS_PREDICTIONS_DIR")
+                        if predictions_dir:
+                            log_dir = Path(predictions_dir) / "rag_llm_logs"
+                            return log_dir
+                    except Exception:
+                        pass
+                else:
+                    # Create a subdirectory for LLM logs
+                    log_dir = Path(predictions_dir) / "rag_llm_logs"
+                    return log_dir
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
     def _get_config():
         """Get configuration from standard locations.
 
@@ -246,11 +275,14 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     # Use saved embedder model if available, otherwise from config
                     embedder_model_name = embedder_model or openai_model
                     embedder = OpenAIEmbedder(model=embedder_model_name, batch_size=50)
+                    # Try to get log_dir from config or environment
+                    log_dir = self._get_log_dir_from_config(config)
                     self.rag = load_llm(
                         top_k=top_k,
                         model=llm_model,
                         embedder=embedder,
                         use_openai=True,
+                        log_dir=log_dir,
                     )
                 else:
                     # For local embeddings
@@ -262,11 +294,14 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     def embedder(texts):
                         return VectorStore.embed(embedder_model_name, texts)
 
+                    # Try to get log_dir from config or environment
+                    log_dir = self._get_log_dir_from_config(config)
                     self.rag = load_llm(
                         top_k=top_k,
                         model=llm_model,
                         embedder=embedder,
                         use_openai=False,
+                        log_dir=log_dir,
                     )
 
             # Update rag_clf for consistency

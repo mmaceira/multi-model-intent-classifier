@@ -92,8 +92,23 @@ def load_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
         logger.info(
             f"Loading LLM RAG model with top_k={top_k}, model={model_name}, use_openai={use_openai}"
         )
+        # Try to get log_dir from main_config
+        log_dir = None
+        if "paths" in params.get("main_config", {}):
+            predictions_dir = params["main_config"]["paths"].get("predictions_dir")
+            if predictions_dir:
+                from pathlib import Path
+
+                log_dir = Path(predictions_dir) / "rag_llm_logs"
+
         return RagSklearnAdapter(
-            load_llm(top_k=top_k, model=model_name, use_openai=use_openai, embedder=embedder)
+            load_llm(
+                top_k=top_k,
+                model=model_name,
+                use_openai=use_openai,
+                embedder=embedder,
+                log_dir=log_dir,
+            )
         )
 
     raise ValueError(f"Unknown RAG method: {method}")

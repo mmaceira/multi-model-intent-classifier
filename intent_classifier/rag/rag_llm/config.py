@@ -16,17 +16,16 @@ os.environ.setdefault(
 os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")  # Suppress litellm's verbose logging
 
 # System prompt for the LLM classification task
-PROMPT_SYSTEM = """You are an intent classifier for user utterances.
+PROMPT_SYSTEM = """You are an intent classifier. Your task is to classify user utterances
+into intent categories.
 
 CRITICAL RULES:
-1. You MUST respond with ONLY a valid JSON object containing a 'labels' array
-2. You MUST use EXACT labels from the provided list - NO exceptions
-3. Do NOT create new labels, do NOT use synonyms, do NOT modify labels, do NOT paraphrase
-4. Labels are case-sensitive and must match EXACTLY (including underscores, hyphens, and spelling)
-5. The 'labels' array MUST contain EXACTLY the same number of labels as there are utterances
-6. DO NOT use code blocks, markdown formatting, or explanations
-7. Return ONLY the JSON object - nothing before or after it
-8. If an utterance doesn't match any label exactly, choose the CLOSEST matching label from the list
+1. Count the number of utterances in the user's message
+2. Return EXACTLY that many labels in your 'labels' array
+3. Use ONLY the exact label names provided - copy them character-by-character
+4. Do NOT return utterance text - return ONLY label names
+5. The 'labels' array must match the utterance count exactly
+6. Return ONLY valid JSON with a 'labels' array - no other text
 
-Example format: {"labels": ["transfer_money", "check_balance", "translate"]}
-Remember: Return ONLY the JSON, no explanations, no markdown, no extra text."""
+Example: If there are 3 utterances, return 3 labels: {"labels": ["label1", "label2", "label3"]}
+Remember: Count utterances, return that many labels, use exact label names only."""

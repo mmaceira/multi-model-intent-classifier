@@ -22,53 +22,54 @@ def build_classification_prompt(
     Returns:
         List of message dictionaries ready for LLM API call
     """
-    # Build a single prompt with multiple items
-    lines = []
+    # Show ALL labels - the LLM needs to see all available options
+    full_labels_list = "\n".join(f"  - {label}" for label in labels)
+
+    # Build a numbered list of utterances with limited context (top 2 examples only)
+    utterances_section = []
     for i, (doc, ctx) in enumerate(zip(docs, contexts, strict=False), start=1):
-        # Ensure doc is a string and not empty
         doc_text = str(doc).strip() if doc else " "
         ctx_text = str(ctx).strip() if ctx else " "
-        lines.append(f"{i}. Utterance: {doc_text}\nContext:\n{ctx_text}")
+        # Limit context to top 2 examples to reduce prompt length
+        ctx_lines = ctx_text.split("\n")[:2] if ctx_text else []
+        ctx_short = "\n".join(ctx_lines) if ctx_lines else "No examples"
+        utterances_section.append(f"{i}. {doc_text}\n   Similar: {ctx_short}")
 
-    # Create the examples part of the JSON structure using actual labels from the list
-    # Use diverse labels in examples, not just the first one
-    # Always show valid JSON - never include "..." inside JSON
-    num_examples = min(len(docs), len(labels), 3)
-    example_labels = [labels[i % len(labels)] for i in range(num_examples)]
-    examples_json = ", ".join(f'"{label}"' for label in example_labels)
-
-    # Show ALL labels - the LLM needs to see all available options
-    # For large label sets, we'll show them all but format them compactly
-    full_labels_list = "\n".join(f"  - {label}" for label in labels)
-    # Note: We show all labels even if there are many, because the LLM
-    # MUST see all options to make correct predictions
+    # Build a concrete example using the first utterance's context to show the pattern
+    first_utterance_example = ""
+    if utterances_section:
+        first_ctx = contexts[0] if contexts else ""
+        first_ctx_lines = first_ctx.split("\n")[:1] if first_ctx else []
+        if first_ctx_lines:
+            # Extract label from first context example
+            first_example_line = first_ctx_lines[0]
+            if "→ Label:" in first_example_line:
+                example_label = first_example_line.split("→ Label:")[-1].strip().strip('"')
+                first_utterance_example = (
+                    f"\nEXAMPLE MAPPING:\n"
+                    f'  Utterance 1: "{docs[0][:50]}..."\n'
+                    f"  Similar examples show: {example_label}\n"
+                    f'  → So label[0] should be: "{example_label}"\n'
+                )
 
     user_content = (
-        f"Classify these {len(docs)} user utterances into ONE of these EXACT "
-        f"intent categories (ALL {len(labels)} labels are shown below - "
-        f"you MUST use one of these EXACT labels):\n\n{full_labels_list}\n\n"
-        + "CRITICAL RULES - READ CAREFULLY:\n"
-        + f"1. You MUST use one of the EXACT {len(labels)} labels from the list above - "
-        "copy them EXACTLY (case-sensitive, including underscores/hyphens)\n"
-        + "2. ALL available labels are shown above - do NOT create new labels, "
-        "do NOT use synonyms, do NOT modify labels, do NOT paraphrase\n"
-        + "3. If an utterance seems similar to a label but doesn't match exactly, "
-        "choose the CLOSEST matching label from the list above\n"
-        + "4. Look at the context examples - they show similar utterances and "
-        "their correct EXACT labels\n"
-        + "5. Your response MUST be ONLY a valid JSON object with a 'labels' array - "
-        "NO other text before or after\n"
-        + f"6. The 'labels' array MUST contain EXACTLY {len(docs)} labels, "
-        "one for each utterance in order\n"
-        + "7. Each label MUST be copied EXACTLY from the list above - "
-        "no modifications, no variations\n\n"
-        + "\n\n".join(lines)
-        + "\n\nRESPOND WITH ONLY THIS JSON FORMAT "
-        "(no explanations, no markdown, no code blocks):\n"
-        + f'{{"labels": [{examples_json}]}}\n'
-        + f"\nNote: The 'labels' array must contain EXACTLY {len(docs)} labels "
-        f"(one for each utterance above). "
-        + f"Each label must EXACTLY match one of the {len(labels)} labels from the list above."
+        f"TASK: Classify {len(docs)} utterances. Return EXACTLY {len(docs)} labels.\n\n"
+        + f"VALID LABELS (use ONLY these - copy exactly):\n{full_labels_list}\n\n"
+        + "HOW TO CLASSIFY:\n"
+        + "1. Read utterance 1, look at its 'Similar' examples to see which label to use\n"
+        + "2. Put that label in position 1 of your array\n"
+        + "3. Repeat for utterance 2 (label in position 2), utterance 3 (position 3), etc.\n"
+        + f"4. You must return {len(docs)} labels total, one for each utterance\n"
+        + "5. The order matters: label[0] for utterance 1, label[1] for utterance 2, etc.\n\n"
+        + first_utterance_example
+        + "\nUTTERANCES TO CLASSIFY:\n"
+        + "\n\n".join(utterances_section)
+        + "\n\n"
+        + f"YOUR RESPONSE (JSON format with {len(docs)} labels in order):\n"
+        + '{"labels": ["label_for_utterance_1", "label_for_utterance_2", ...]}\n\n'
+        + f"⚠️ CRITICAL: Return {len(docs)} labels, one for each utterance in order.\n"
+        + f"⚠️ Use labels from: {', '.join(labels)}\n"
+        + "⚠️ Return ONLY the JSON, nothing else."
     )
 
     messages = [
