@@ -37,6 +37,7 @@ CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
 Comprehensive documentation is available in the [`docs/`](docs/) folder:
 
 - **[Installation](docs/installation.md)** - Detailed installation instructions and dependencies
+- **[Pipeline](docs/pipeline.md)** - Complete pipeline documentation: data, algorithms, and decision rationale for each step
 - **[Algorithms](docs/algorithms.md)** - Algorithms used, implementation details, and why they were chosen
 - **[Experiments](docs/experiments.md)** - Data types, splits, and selection strategies
 - **[Running Experiments](docs/running_experiments.md)** - How to run experiments from quick start to advanced usage

@@ -49,6 +49,8 @@ This will execute all pipeline steps in sequence:
 5. **Model Prediction** - Generate predictions for all trained models
 6. **Model Evaluation** - Evaluate models and generate comparison reports
 
+**For detailed documentation explaining the decisions made at each step (which data, which algorithms, and why), see [Pipeline Documentation](pipeline.md).**
+
 ## Running Individual Pipeline Steps
 
 You can also run individual steps if needed:

@@ -2,6 +2,8 @@
 
 This directory contains Python scripts that implement the complete training and evaluation pipeline. These scripts can be run from the command line and are suitable for automation and batch processing.
 
+**For comprehensive documentation explaining the pipeline decisions (which data, which algorithms, and why), see [Pipeline Documentation](../../docs/pipeline.md).**
+
 ## Scripts Overview
 
 The scripts are designed to be run in sequence, as each builds upon the work of the previous ones:
