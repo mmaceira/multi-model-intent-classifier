@@ -204,6 +204,23 @@ Tuned hyperparameters are automatically used during training. See [Hyperparamete
 
 See [Performance](docs/performance.md) for detailed metrics and scaling guidance, including CPU-only runtimes and memory usage. Most of the pipeline runs comfortably on CPU; GPU is only required for the heaviest transformer-based models.
 
+### CLINC150 (100-class subset) benchmark
+
+On a 100-class CLINC150 configuration, the current pipeline achieves the following test metrics:
+
+| Model                         | Accuracy | Macro F1 | Weighted F1 |
+|------------------------------|----------|----------|-------------|
+| Naive Bayes                  | 0.8450   | 0.8431   | 0.8431      |
+| Linear SVM                   | 0.8567   | 0.8552   | 0.8552      |
+| TF-IDF bigrams + SVM         | 0.8540   | 0.8537   | 0.8537      |
+| MiniLM + LogReg              | 0.9660   | 0.9658   | 0.9658      |
+| RAG-CentroidNN               | 0.9330   | 0.9309   | 0.9309      |
+| RAG-kMajority                | 0.9277   | 0.9263   | 0.9263      |
+| RAG-LLM (local embeddings)   | 0.9370   | 0.7330   | 0.9456      |
+| RAG-LLM (OpenAI embeddings)  | 0.9380   | 0.7225   | 0.9465      |
+
+Published CLINC150 baselines on the full 150-intent dataset typically report transformer models in the **94–97% accuracy** range, with simpler TF‑IDF/SVM or CNN models around **90–95%**; your MiniLM + LogReg and RAG variants are therefore competitive with strong literature baselines while also providing richer RAG-style behaviors (e.g., explanations, retrieval) on top of high classification performance.
+
 **Quick reference:**
 - **Naive Bayes**: Fastest inference (60k docs/s), minimal resources
 - **Linear SVM**: Balanced speed and accuracy (12-15k docs/s)
