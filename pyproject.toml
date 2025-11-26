@@ -23,6 +23,9 @@ dependencies = [
     "scikit-learn==1.6.1",               # Pin for compatibility
     "sentence-transformers~=4.1.0",
     "tqdm~=4.67.1",
+    "matplotlib~=3.10.1",
+    "seaborn~=0.13.2",
+    "dataframe_image~=0.2.7",
 ]
 
 [project.scripts]
@@ -32,12 +35,7 @@ rag-cli = "scripts.rag_cli:main"
 api-serve = "scripts.api.main_api:cli"
 
 [project.optional-dependencies]
-# Core pipeline dependencies (needed for running the full pipeline)
-pipeline = [
-    "matplotlib~=3.10.1",
-    "seaborn~=0.13.2",
-    "dataframe_image~=0.2.7",
-]
+
 api = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",

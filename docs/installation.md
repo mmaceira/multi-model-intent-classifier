@@ -33,12 +33,12 @@ The project has several optional dependency groups for different features:
 
 | Extra | Includes | Install Command |
 |-------|----------|----------------|
-| **all** | Everything (recommended for full pipeline) | `uv sync --extra all` |
+| **all** | Everything (recommended) | `uv sync --extra all` |
 | **api** | FastAPI server dependencies | `uv sync --extra api` |
 | **ui** | Gradio UI dependencies | `uv sync --extra ui` |
 | **dev** | Development tools (pytest, ruff, black, pre-commit) | `uv sync --extra dev` |
 
-**Note**: The `pipeline` extra is required to run the full training pipeline (scripts in `scripts/pipeline/`). The `all` extra includes everything and is recommended for most users.
+**Note**: Pipeline requirements (`matplotlib`, `seaborn`, `dataframe_image`) are now part of the **core install**; you do **not** need a separate `pipeline` extra. The `all` extra still includes everything and is recommended for most users.
 
 **Note**: All dependencies are listed in `pyproject.toml`. The base installation includes most dependencies. For OpenAI features, ensure `OPENAI_API_KEY` is set in your environment or `.env` file.
 
