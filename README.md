@@ -10,8 +10,14 @@ A production-ready NLP pipeline for automated intent classification and semantic
 **The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual setup required!
 
 ```bash
-# Install (uses uv to create and manage a virtualenv)
+# Install with uv (recommended)
 uv sync --extra all
+
+# Or install with plain pip
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[all]"
 
 # Run a tiny end-to-end experiment (< 2 minutes)
 CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
@@ -108,12 +114,30 @@ intent-classify --model-path artifacts/model.pkl --text "what's my account balan
 # → {"label": "banking_balance", "confidence": 0.97}
 ```
 
+Or run a tiny end-to-end example using the default config:
+
+```bash
+intent-train --config config/config_tiny_dataset.yaml
+intent-classify --model linear_svm --text "book me a flight to London"
+```
+
 ### Serve API
 
 ```bash
 api-serve --host 0.0.0.0 --port 8000
-# then POST /predict with {"text": "..."}
+# then open /docs and POST /v1/predict with {"model_id": "...", "text": "..."}
 ```
+
+If API key auth is enabled, include the header:
+
+```bash
+curl -X POST "http://localhost:8000/v1/predict" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"model_id": "linear_svm", "text": "what is my account balance?"}'
+```
+
+See `scripts/api/README_API.md` for endpoint details.
 
 ### RAG-LLM (optional)
 
@@ -126,6 +150,8 @@ rag-cli --provider openai --model gpt-4o-mini --labels data/labels.json --k 10 -
 export OLLAMA_HOST=http://localhost:11434
 rag-cli --provider ollama --model llama3.1:8b --labels data/labels.json --k 10 --text "reset my card pin"
 ```
+
+Under the hood, the `rag-cli` entry point uses the shared `rag_llm` module, and the training pipeline integrates RAG-LLM via `intent_classifier.rag.rag_llm.classifier.RagLLM`. This keeps a single, consistent RAG-LLM implementation across CLI, library, and API usages.
 
 ### Complete Pipeline
 
@@ -176,7 +202,7 @@ Tuned hyperparameters are automatically used during training. See [Hyperparamete
 
 ## 📊 Performance
 
-See [Performance](docs/performance.md) for detailed metrics and scaling guidance.
+See [Performance](docs/performance.md) for detailed metrics and scaling guidance, including CPU-only runtimes and memory usage. Most of the pipeline runs comfortably on CPU; GPU is only required for the heaviest transformer-based models.
 
 **Quick reference:**
 - **Naive Bayes**: Fastest inference (60k docs/s), minimal resources
@@ -226,7 +252,7 @@ uv run ruff check intent_classifier/ scripts/
 
 ## 🙏 Acknowledgments
 
-- CLINC150 dataset (HuggingFace)
+- CLINC150 dataset (HuggingFace, see [CLINC150 dataset card](https://huggingface.co/datasets/clinc/oos) for license and usage details)
 - Hugging Face Transformers
 - FAISS for similarity search
 - OpenAI for embedding models

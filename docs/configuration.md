@@ -133,10 +133,21 @@ Tuned hyperparameters are automatically loaded from `config/hyperparameters/{con
 
 ## Environment Variables
 
-The following environment variables can be used:
+The following environment variables can be used. Only `OPENAI_API_KEY` is strictly required (and only when using OpenAI-backed features); the rest are optional:
 
 - `CONFIG_FILE`: Override the default config file (e.g., `CONFIG_FILE=config_tiny_dataset.yaml`)
-- `OPENAI_API_KEY`: Required for OpenAI embeddings and LLM models
+- `OPENAI_API_KEY`: Required for OpenAI embeddings and OpenAI-backed RAG-LLM models
+- `LLM_MODEL`: Default LLM identifier for RAG-LLM components (e.g., `ollama/llama3.1:8b`, `gpt-4o-mini`)
+- `API_KEY`: Optional API key for the FastAPI server (if set, clients must send `X-API-Key`)
+- `CORS_ORIGINS`: Comma-separated list of allowed CORS origins for the API (default: `"*"`)
+- `MODEL_CACHE_SIZE`: Maximum number of models to keep in memory in the API (default: `"10"`)
+- `SEED`: Global seed for reproducibility across API and pipeline entry points (default: `"42"`)
+- `RATE_LIMIT_REQUESTS`: Maximum number of API requests per window (default: `"100"`)
+- `RATE_LIMIT_WINDOW`: Window size in seconds for rate limiting (default: `"60"`)
+- `SBERT_BATCH`: Batch size for SBERT embedding generation (default: `"32"`)
+- `OPENAI_BATCH`: Batch size for OpenAI embedding generation (default: `"32"`)
+- `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`: Optional BLAS thread limits to improve stability on large runs
+- `TEST_REAL_APIS`: When set to `1`/`true`/`yes`, enables integration tests that call real LLM/embedding APIs
 - `MLFLOW_TRACKING_URI`: Optional MLflow tracking server URI
 
 ## Configuration Validation

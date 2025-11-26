@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Python 3.12 or higher
-- [uv](https://github.com/astral-sh/uv) package manager
+- [uv](https://github.com/astral-sh/uv) package manager (recommended, but optional)
 - Internet connection (for initial dataset download from HuggingFace)
 
 ## Installation
@@ -13,12 +13,18 @@
 git clone https://github.com/mmaceira/multi-model-intent-classifier.git
 cd multi-model-intent-classifier
 
-# 2. Install uv if you haven't already
+# 2. Install uv if you haven't already (recommended)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # Or on Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # 3. Install dependencies (uv will automatically create a virtual environment)
 uv sync --extra all
+
+# --- or install with plain pip ---
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[all]"
 ```
 
 ## Optional Dependencies
