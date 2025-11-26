@@ -139,6 +139,28 @@ curl -X POST "http://localhost:8000/v1/predict" \
 
 See `scripts/api/README_API.md` for endpoint details.
 
+### Interactive Demos (Gradio UI)
+
+After you have trained models and built embeddings (for example by running `python scripts/pipeline/run_all.py`),
+you can explore the system with three interactive Gradio apps:
+
+- **Intent Classifier & Search Demo** (`scripts/demos/intent_classifier_demo.py`)
+  Classify a user utterance with any trained model (Naive Bayes, SVM, MiniLM + LogReg, RAG variants) and,
+  for RAG models, retrieve similar training utterances.
+
+  ![Intent classifier demo](docs/pictures/intent_classifier_search.png)
+
+- **Semantic Search Demo** (`scripts/demos/semantic_search_demo.py`)
+  Run pure semantic search over CLINC150 using SBERT embeddings and a FAISS index.
+
+  ![Semantic search demo](docs/pictures/semantic_search_demo.png)
+
+- **Intent Trend Analyzer** (`scripts/demos/intent_trend_analyzer.py`)
+  Retrieve similar past utterances and use an LLM to comment on **how surprising** the new utterance is
+  and what future behavior you might expect.
+
+  ![Intent trend analyzer](docs/pictures/intent_trend_analyzer.png)
+
 ### RAG-LLM (optional)
 
 ```bash

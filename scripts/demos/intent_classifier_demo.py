@@ -483,7 +483,25 @@ def predict(
 def create_demo():
     """Create the Gradio demo interface."""
     with gr.Blocks(title="CLINC150 Intent Classifier & Search") as demo:
-        gr.Markdown("# 🎯 CLINC150 Intent Classifier & Search")
+        gr.Markdown(
+            """
+# 🎯 CLINC150 Intent Classifier & Search
+
+Use this demo to **classify user utterances into intents** and, for RAG models,
+to **retrieve similar training utterances**.
+
+- **Prerequisites**
+  - Run the training pipeline first:
+    `python scripts/pipeline/run_all.py`
+  - This will create models and embeddings used by this demo.
+  - The *Models Directory Path* and *Embeddings Directory Path* below should point to that run.
+- **How to use**
+  1. Pick a model in **Select Model** (classic ML or RAG).
+  2. Optionally adjust the number of similar utterances (RAG only).
+  3. Paste a user utterance and click **Analyze**.
+  4. Read the predicted intent, confidence, and (for RAG) retrieved examples.
+"""
+        )
 
         with gr.Row():
             with gr.Column(scale=3):

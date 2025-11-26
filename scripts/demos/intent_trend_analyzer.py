@@ -123,9 +123,10 @@ class IntentTrendAnalyzer:
         """Classify relevance of a document to the query using LLM."""
         system = (
             "You are an expert assistant. Label how relevant this previous user "
-            "utterance is to understanding a new utterance. "
-            f"Use labels {self.config['relevance_labels']}. "
-            "Respond in JSON: {{ relevance: label, comment: rationale }}."
+            "utterance is to understanding a new utterance.\n"
+            f"- Use one of these labels exactly: {self.config['relevance_labels']}.\n"
+            "- Respond with ONLY a single JSON object, no prose, no markdown, no code fences.\n"
+            '- JSON schema: {"relevance": <label>, "comment": <short rationale>}.'
         )
         user = f"New Utterance:\n{query}\n\nPrevious Utterance:\n{doc}\n"
         resp = completion(
@@ -135,11 +136,41 @@ class IntentTrendAnalyzer:
             temperature=self.config["classification_temp"],
         )
         content = resp.choices[0].message.content.strip()
+
+        # Try to robustly extract JSON even if the model wraps it in prose or code fences
+        cleaned = content
+
+        # Strip common code fence wrappers, e.g. ```json ... ```
+        if "```" in cleaned:
+            parts = cleaned.split("```")
+            if len(parts) >= 3:
+                cleaned = parts[1].strip()
+
+        # Extract the first JSON-like object
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = cleaned[start : end + 1]
+        else:
+            candidate = cleaned
+
         try:
-            parsed = json.loads(content)
-            return parsed.get("relevance", "low"), parsed.get("comment", "")
+            parsed = json.loads(candidate)
+            relevance = str(parsed.get("relevance", "low")).lower()
+            if relevance not in self.config["relevance_labels"]:
+                relevance = "low"
+            comment = str(parsed.get("comment", "")).replace("\n", " ")
+            return relevance, comment
         except json.JSONDecodeError:
-            return "low", content.replace("\n", " ")
+            # Fallback: infer relevance roughly from text; keep raw content as comment
+            text_lower = cleaned.lower()
+            if "high" in text_lower:
+                relevance = "high"
+            elif "medium" in text_lower:
+                relevance = "medium"
+            else:
+                relevance = "low"
+            return relevance, cleaned.replace("\n", " ")
 
     def analyze_intent_trend(self, utterance: str, k: int = None) -> str:
         """Analyze intent trends for a given utterance."""
@@ -214,7 +245,24 @@ def create_demo():
         )
 
     with gr.Blocks(title="Intent Trend Analyzer") as demo:
-        gr.Markdown("# 🎯 Intent Trend Analyzer")
+        gr.Markdown(
+            """
+# 🎯 Intent Trend Analyzer
+
+Use this demo to **analyze how a new user utterance fits into past behavior** by
+retrieving similar utterances and asking an LLM to comment on relevance and trends.
+
+- **Prerequisites**
+  - Run the training pipeline up to embeddings (`python scripts/pipeline/02_build_embeddings.py`).
+  - Ensure the FAISS index and metadata paths below point to that experiment run.
+  - Have an LLM backend configured in `config/config.yaml` (defaults to `ollama/llama3.1:8b`).
+- **How to use**
+  1. Verify or adjust the FAISS index and metadata paths.
+  2. Optionally change how many similar utterances to retrieve.
+  3. Paste a new user utterance and click **Analyze Trends**.
+  4. Read the LLM’s summary plus commentary on previous utterances.
+"""
+        )
 
         with gr.Row():
             with gr.Column(scale=3):

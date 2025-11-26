@@ -120,7 +120,23 @@ def search_similar_documents(
 def create_demo():
     """Create the Gradio demo interface."""
     with gr.Blocks(title="Semantic Search Demo") as demo:
-        gr.Markdown("# 🔍 Semantic Search Demo")
+        gr.Markdown(
+            """
+# 🔍 Semantic Search Demo
+
+Use this demo to **search for semantically similar user utterances** in the CLINC150
+dataset using SBERT embeddings and a FAISS index.
+
+- **Prerequisites**
+  - Run the embeddings step of the pipeline (`python scripts/pipeline/02_build_embeddings.py`).
+  - Make sure the FAISS index and metadata paths below point to that run.
+- **How to use**
+  1. Verify or adjust the FAISS index and metadata paths.
+  2. Choose how many results to return with **Number of Results**.
+  3. Enter a search query and click **Search**.
+  4. Inspect the returned intents, scores, and utterances.
+"""
+        )
 
         with gr.Row():
             with gr.Column(scale=3):
