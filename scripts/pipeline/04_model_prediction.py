@@ -15,6 +15,11 @@ repo_root = Path(__file__).resolve().parents[2]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
+# Suppress verbose warnings before other imports
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings  # noqa: E402
+
+suppress_pydantic_warnings()
+
 # Import config setup
 from config.notebook_setup import (  # noqa: E402
     MODELS_DIR,

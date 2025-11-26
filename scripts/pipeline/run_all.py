@@ -19,6 +19,10 @@ from pathlib import Path
 
 # Set deterministic seed before any imports
 from intent_classifier.utils.seed import set_global_seed
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
+
+# Suppress verbose Pydantic warnings globally
+suppress_pydantic_warnings()
 
 # Get the directory where this script is located
 script_dir = Path(__file__).resolve().parent

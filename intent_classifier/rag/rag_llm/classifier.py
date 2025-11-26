@@ -11,13 +11,14 @@ import json
 import logging
 import os
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 from dotenv import load_dotenv
-from litellm import completion
 from sklearn.feature_extraction.text import TfidfVectorizer
+from tqdm import tqdm
 
 from ...utils.method_logger import get_logger as get_method_logger, log_method
 from ..classifier_base import RagClassifierBase
@@ -28,6 +29,48 @@ load_dotenv()
 # LiteLLM can be quite chatty; keep logs focused on errors unless overridden.
 os.environ.setdefault("LITELLM_LOG", "ERROR")
 os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")
+
+# Suppress Pydantic serialization warnings BEFORE importing litellm
+# These warnings come from litellm/openai when deserializing API responses
+# They're not serious - the code works correctly, just verbose warnings
+
+# Store original warning handler
+_original_showwarning = warnings.showwarning
+
+
+def _filtered_showwarning(message, category, filename, lineno, file=None, line=None):
+    """Custom warning handler that filters out Pydantic serialization warnings."""
+    # Check if this is a Pydantic warning we want to suppress
+    if issubclass(category, UserWarning):
+        msg_str = str(message)
+        filename_str = str(filename) if filename else ""
+
+        # Suppress if it's from pydantic or contains our target messages
+        if (
+            "pydantic" in filename_str.lower()
+            or "PydanticSerializationUnexpectedValue" in msg_str
+            or "Expected `Usage`" in msg_str
+            or "serialized value may not be as expected" in msg_str
+        ):
+            return  # Suppress this warning
+
+    # For all other warnings, use the original handler
+    _original_showwarning(message, category, filename, lineno, file, line)
+
+
+# Install our custom warning handler
+warnings.showwarning = _filtered_showwarning
+
+# Also set up filterwarnings as backup
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic.main")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal")
+warnings.filterwarnings("ignore", message=".*PydanticSerializationUnexpectedValue.*")
+warnings.filterwarnings("ignore", message=".*Expected `Usage`.*")
+warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
+
+# Now import litellm after warnings are configured
+from litellm import completion  # noqa: E402
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -126,6 +169,8 @@ def _call_llm(messages: List[Dict[str, str]], model: str) -> str:
     if supports_json_schema:
         kwargs["response_format"] = {"type": "json_object"}
 
+    # Log model call (only at debug level to reduce verbosity)
+    # The progress bar will show overall progress
     resp = completion(**kwargs)
     return resp["choices"][0]["message"]["content"]
 
@@ -301,7 +346,25 @@ class RagLLM(RagClassifierBase):
         method_logger = get_method_logger()
         results: List[str] = []
 
-        for doc in docs:
+        # Log model call start (only for batches)
+        if len(docs) > 1:
+            logger.info(f"Starting classification with {self.model} for {len(docs)} documents")
+
+        # Use tqdm for progress bar if we have multiple documents
+        use_progress = len(docs) > 1
+        iterator = (
+            tqdm(
+                docs,
+                desc=f"Classifying ({self.model})",
+                unit="doc",
+                disable=not use_progress,
+                ncols=100,  # Limit width to avoid clutter
+            )
+            if use_progress
+            else docs
+        )
+
+        for doc in iterator:
             try:
                 result = classify_single(
                     model=self.model,
@@ -322,6 +385,9 @@ class RagLLM(RagClassifierBase):
                 logger.error(f"Error classifying document '{doc[:50]}...': {e}")
                 results.append(self.labels[0] if self.labels else "unknown")
 
+        if len(docs) > 1:
+            logger.info(f"Completed classification: {len(results)} predictions")
+
         return results
 
     @log_method
@@ -331,7 +397,21 @@ class RagLLM(RagClassifierBase):
         label_to_idx = {label: i for i, label in enumerate(sorted_labels)}
         all_probas = np.zeros((len(docs), len(sorted_labels)))
 
-        for i, doc in enumerate(docs):
+        # Use tqdm for progress bar if we have multiple documents
+        use_progress = len(docs) > 1
+        iterator = (
+            tqdm(
+                enumerate(docs),
+                total=len(docs),
+                desc="Computing probabilities",
+                unit="doc",
+                disable=not use_progress,
+            )
+            if use_progress
+            else enumerate(docs)
+        )
+
+        for i, doc in iterator:
             try:
                 retrieved = self.retriever.select_topk_with_min_labels(
                     doc, k=self.top_k, m=self.min_labels

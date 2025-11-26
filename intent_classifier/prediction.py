@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
@@ -11,6 +12,18 @@ import numpy as np
 import pandas as pd
 
 from intent_classifier.utils.file_ops import ensure_dir
+
+# Suppress Pydantic serialization warnings - these are not serious, just verbose
+warnings.filterwarnings(
+    "ignore",
+    message=".*PydanticSerializationUnexpectedValue.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*Expected `Usage`.*",
+    category=UserWarning,
+)
 
 
 def _persist_predictions(
@@ -118,24 +131,29 @@ def run_prediction(
     output_dir = ensure_dir(output_dir)
     predictions: Dict[str, Dict[str, np.ndarray]] = {}
     prediction_times: Dict[str, float] = {}
+    total_models = len(models_or_paths)
 
-    for name, model_or_path in models_or_paths.items():
+    for idx, (name, model_or_path) in enumerate(models_or_paths.items(), 1):
         if verbose:
-            print(f"[{name}] Starting prediction process...", flush=True)
+            print("\n" + "=" * 60)
+            print(f"[{idx}/{total_models}] Running predictions with algorithm: {name}")
+            print("=" * 60)
 
         try:
             # Determine if the input is a path to a model or an actual model object
             if isinstance(model_or_path, (str, Path)):
                 if verbose:
-                    print(f"[{name}] Loading model from: {model_or_path}", flush=True)
+                    print(f"Loading model from: {model_or_path}", flush=True)
                 with open(model_or_path, "rb") as f:
                     estimator = cloudpickle.load(f)
+                if verbose:
+                    print("Model loaded successfully", flush=True)
 
             else:
                 # Assume it's already a model object
                 estimator = model_or_path
                 if verbose:
-                    print(f"[{name}] Using provided model object", flush=True)
+                    print("Using provided model object", flush=True)
 
             # Generate predictions and time the process
             start = time.perf_counter()
@@ -144,21 +162,37 @@ def run_prediction(
             predictions[name] = {}
             y_pred_train = None
             y_pred_test = None
-            # Generate and store train and test predictions
+
+            # Generate and store train and test predictions with progress bars
             if X_train is not None:
+                if verbose:
+                    print(f"Predicting on {len(X_train)} training samples...", flush=True)
+                # Check if model has a predict method that supports progress tracking
+                # For RAG models, the progress bar is handled internally
                 y_pred_train = estimator.predict(X_train)
                 predictions[name]["train"] = y_pred_train
+                if verbose:
+                    print("✓ Training predictions completed", flush=True)
+
             if X_test is not None:
+                if verbose:
+                    print(f"Predicting on {len(X_test)} test samples...", flush=True)
                 y_pred_test = estimator.predict(X_test)
                 predictions[name]["test"] = y_pred_test
+                if verbose:
+                    print("✓ Test predictions completed", flush=True)
 
             end = time.perf_counter()
             execution_time = end - start
             prediction_times[name] = execution_time
 
             if verbose:
-                print(f"[{name}] Prediction completed successfully")
-                print(f"[{name}] Time taken: {execution_time:.2f} seconds", flush=True)
+                print(f"\n✅ Algorithm '{name}' predictions completed successfully")
+                print(
+                    f"   Time taken: {execution_time:.2f} seconds ({execution_time/60:.2f} minutes)"
+                )
+                if idx < total_models:
+                    print(f"   Progress: {idx}/{total_models} algorithms completed\n")
 
             model_dir = ensure_dir(output_dir / name)
 
@@ -193,7 +227,8 @@ def run_prediction(
 
         except Exception as e:
             if verbose:
-                print(f"[{name}] ERROR: Prediction failed: {e}", flush=True)
+                print(f"\n❌ Error running predictions for algorithm '{name}': {e}", flush=True)
+                print(f"   Progress: {idx-1}/{total_models} algorithms completed before error\n")
             raise
 
     # Save all prediction times to a single file
@@ -202,6 +237,16 @@ def run_prediction(
             f.write(f"{model_name}: {time_taken:.2f} seconds\n")
 
     if verbose:
-        print(f"[Summary] All predictions completed. Results saved to: {output_dir}", flush=True)
+        print("\n" + "=" * 60)
+        print("Prediction Summary")
+        print("=" * 60)
+        print(f"Total algorithms processed: {len(predictions)}/{total_models}")
+        total_time = sum(prediction_times.values())
+        print(f"Total prediction time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+        print("\nPer-algorithm prediction times:")
+        for name, time_taken in sorted(prediction_times.items(), key=lambda x: x[1], reverse=True):
+            print(f"  - {name}: {time_taken:.2f}s ({time_taken/60:.2f}min)")
+        print(f"\nResults saved to: {output_dir}")
+        print("=" * 60)
 
     return predictions

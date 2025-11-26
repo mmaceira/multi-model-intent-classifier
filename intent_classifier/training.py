@@ -102,15 +102,19 @@ def run_training(
                 print(f"[MLflow] Failed to initialize MLflow: {e}. Skipping MLflow logging.")
             use_mlflow = False
 
-    for name, model in models.items():
+    total_models = len(models)
+    for idx, (name, model) in enumerate(models.items(), 1):
         if verbose:
-            print(f"[run_training] Fitting {name}...", flush=True)
+            print("\n" + "=" * 60)
+            print(f"[{idx}/{total_models}] Training algorithm: {name}")
+            print("=" * 60)
+            print(f"Training samples: {len(X_train)}")
             if X_val is not None:
                 print(
-                    f"  Using validation set ({len(X_val)} samples) "
-                    f"for model selection/early stopping",
+                    f"Validation samples: {len(X_val)} (used for model selection/early stopping)",
                     flush=True,
                 )
+            print("Starting training...", flush=True)
 
         try:
             start = time.perf_counter()
@@ -140,11 +144,13 @@ def run_training(
             execution_time = end - start
             training_times[name] = execution_time
 
-            print(f"\nTraining completed for {name}")
-            print(f"Time taken: {execution_time:.2f} seconds\n")
-
             if verbose:
-                print(f"Training time for {name}: {execution_time:.2f} seconds", flush=True)
+                print(f"\n✅ Algorithm '{name}' training completed successfully")
+                print(
+                    f"   Time taken: {execution_time:.2f} seconds ({execution_time/60:.2f} minutes)"
+                )
+                if idx < total_models:
+                    print(f"   Progress: {idx}/{total_models} algorithms completed\n")
 
             model_dir = ensure_dir(output_dir / name)
 
@@ -180,7 +186,8 @@ def run_training(
 
         except Exception as e:
             if verbose:
-                print(f"Error training model {name}: {e}", flush=True)
+                print(f"\n❌ Error training algorithm '{name}': {e}", flush=True)
+                print(f"   Progress: {idx-1}/{total_models} algorithms completed before error\n")
             raise
 
     # Save all training times to a single file
@@ -199,5 +206,17 @@ def run_training(
         except Exception as e:
             if verbose:
                 print(f"[MLflow] Failed to end MLflow run: {e}")
+
+    if verbose:
+        print("\n" + "=" * 60)
+        print("Training Summary")
+        print("=" * 60)
+        print(f"Total algorithms trained: {len(fitted)}/{total_models}")
+        total_time = sum(training_times.values())
+        print(f"Total training time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+        print("\nPer-algorithm training times:")
+        for name, time_taken in sorted(training_times.items(), key=lambda x: x[1], reverse=True):
+            print(f"  - {name}: {time_taken:.2f}s ({time_taken/60:.2f}min)")
+        print("=" * 60)
 
     return fitted

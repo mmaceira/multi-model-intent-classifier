@@ -90,10 +90,9 @@ models:
       method: "llm"
       top_k: "${model.rag_top_k}"
       # LLM model configuration:
-      # - Default: Uses Ollama (ollama/llama3.1:8b) from config.yaml - no API keys needed
-      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
+      # - Uses OpenAI LLM (gpt-4o-mini) - requires OPENAI_API_KEY
       # - To use other providers: See litellm docs for supported models
-      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from config.yaml)
+      model: "gpt-4o-mini"  # Using OpenAI LLM (requires OPENAI_API_KEY)
       # Embedding configuration: Uses OpenAI embeddings (requires OPENAI_API_KEY)
       use_openai: true  # Always true for OpenAI embeddings
       # Note: OpenAI embeddings must be built first (run 02_build_embeddings.py with OPENAI_API_KEY set)
