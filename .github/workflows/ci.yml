@@ -23,7 +23,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies (dev)
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra api
 
       - name: Lint with ruff
         run: uv run ruff check intent_classifier scripts tests
@@ -31,9 +31,9 @@ jobs:
       - name: Check formatting with black
         run: uv run black --check intent_classifier scripts
 
-      - name: Run tests (unit + smoke)
+      - name: Run tests (full suite, excluding real external APIs)
         env:
           # Avoid accidental real API calls in CI
           TEST_REAL_APIS: "0"
         run: |
-          uv run pytest -q -k "not integration"
+          uv run pytest -q

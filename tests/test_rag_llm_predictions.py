@@ -18,7 +18,7 @@ from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.rag.rag_llm import RagLLM  # noqa: E402
 
 
-def test_predictions(model_name: str, use_openai: bool = False, test_docs: list = None):
+def run_predictions(model_name: str, use_openai: bool = False, test_docs: list = None):
     """Test predictions with a specific model configuration.
 
     Args:
@@ -118,7 +118,7 @@ def main():
     print("\n" + "=" * 70)
     print("TEST 1: Ollama (Local Model)")
     print("=" * 70)
-    ollama_success, ollama_preds = test_predictions(
+    ollama_success, ollama_preds = run_predictions(
         model_name="ollama/llama3.1:8b",
         use_openai=False,
         test_docs=test_docs,
@@ -131,7 +131,7 @@ def main():
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if openai_api_key:
         print("✅ OPENAI_API_KEY found")
-        openai_success, openai_preds = test_predictions(
+        openai_success, openai_preds = run_predictions(
             model_name="gpt-4o-mini",
             use_openai=True,
             test_docs=test_docs,

@@ -283,24 +283,25 @@ class TestClassifySingle:
 
 
 class TestCLI:
-    """Test the CLI interface."""
+    """Test the RAG CLI interface (`scripts/rag_cli.py`)."""
 
     def test_cli_help(self):
         """Test that CLI shows help message."""
         result = subprocess.run(
-            [sys.executable, "rag_llm.py", "--help"],
+            [sys.executable, "scripts/rag_cli.py", "--help"],
             capture_output=True,
             text=True,
             cwd=project_root,
         )
         assert result.returncode == 0
-        assert "rag-llm" in result.stdout.lower() or "rag llm" in result.stdout.lower()
+        # Help text should mention RAG-LLM CLI description
+        assert "rag-llm classifier cli" in result.stdout.lower()
 
     @patch("rag_llm._call_llm")
     @patch("rag_llm._load_examples")
-    def test_cli_basic_execution(self, mock_load, mock_llm):
+    def test_cli_basic_execution(self, mock_load, mock_llm, tmp_path):
         """Test basic CLI execution with mocked dependencies."""
-        from rag_llm import build_arg_parser, main
+        from scripts.rag_cli import build_arg_parser, main
 
         # Mock data loading
         examples = [
@@ -313,10 +314,27 @@ class TestCLI:
         # Mock LLM
         mock_llm.return_value = '{"label": "weather", "confidence": 0.9}'
 
+        # Create a temporary labels file
+        labels_path = tmp_path / "labels.json"
+        import json as _json
+
+        labels_path.write_text(_json.dumps(label_defs), encoding="utf-8")
+
         # Create args and call main directly (not via subprocess)
         parser = build_arg_parser()
         args = parser.parse_args(
-            ["--model", "gpt-4o-mini", "--text", "What's the weather?", "--k", "5", "--m", "2"]
+            [
+                "--provider",
+                "openai",
+                "--model",
+                "gpt-4o-mini",
+                "--labels",
+                str(labels_path),
+                "--k",
+                "5",
+                "--text",
+                "What's the weather?",
+            ]
         )
 
         # Capture stdout
@@ -325,7 +343,20 @@ class TestCLI:
 
         f = io.StringIO()
         with redirect_stdout(f):
-            main(args=args)
+            main(
+                [
+                    "--provider",
+                    args.provider,
+                    "--model",
+                    args.model,
+                    "--labels",
+                    args.labels,
+                    "--k",
+                    str(args.k),
+                    "--text",
+                    args.text,
+                ]
+            )
         output_str = f.getvalue()
 
         # Parse output
@@ -337,12 +368,13 @@ class TestCLI:
     def test_cli_missing_required_args(self):
         """Test that missing required arguments cause error."""
         result = subprocess.run(
-            [sys.executable, "rag_llm.py", "--text", "test"],
+            [sys.executable, "scripts/rag_cli.py", "--text", "test"],
             capture_output=True,
             text=True,
             cwd=project_root,
         )
-        assert result.returncode != 0, "Should fail without --model"
+        # argparse should exit with non-zero when required args are missing
+        assert result.returncode != 0, "Should fail without required arguments"
 
 
 class TestEndToEnd:

@@ -11,14 +11,16 @@ import json
 import sys
 from pathlib import Path
 
-# Add project root to path
+# Add project root to path so `rag_llm` can be imported when installed or run from source.
 repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 
 
-def main():
-    """Main CLI entry point."""
-    # Import heavy dependencies inside function for fast --help
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the RAG-LLM CLI.
+
+    Exposed primarily for tests; console scripts should call :func:`main`.
+    """
     parser = argparse.ArgumentParser(
         description="RAG-LLM classifier CLI for intent classification.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -64,7 +66,14 @@ def main():
         help="Text to classify",
     )
 
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None):
+    """Main CLI entry point."""
+    # Import heavy dependencies inside function for fast --help
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
 
     # Import rag_llm module (heavy import, done after --help)
     try:
