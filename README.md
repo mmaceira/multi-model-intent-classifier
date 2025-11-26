@@ -10,27 +10,14 @@ A production-ready NLP pipeline for automated intent classification and semantic
 **The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual setup required!
 
 ```bash
-# 1. Install dependencies
-# For full pipeline (recommended - includes all optional dependencies):
-uv sync --extra all  # or: pip install -e ".[all]"
+# Install (uses uv to create and manage a virtualenv)
+uv sync --extra all
 
-# For minimal installation (core only):
-uv sync  # or: pip install -e .
-
-# 2. (Optional) Set up Ollama for RAG-LLM models
-ollama serve
-ollama pull llama3.1:8b
-
-# 3. Run the pipeline - dataset downloads automatically!
-python scripts/pipeline/run_all.py
+# Run a tiny end-to-end experiment (< 2 minutes)
+CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
 ```
 
-That's it! The pipeline will automatically download CLINC150, train all enabled models, and generate predictions and evaluations.
-
-**For quick testing with a smaller dataset:**
-```bash
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
-```
+That's it! The pipeline will automatically download CLINC150, tune hyperparameters, train models, and generate predictions and evaluations.
 
 ## 📚 Documentation
 
@@ -70,21 +57,22 @@ Built on the CLINC150 dataset, it provides a production-ready solution for inten
 ## 🏗️ Project Structure
 
 ```
-multi-model-intent-classifier/
-├── config/              # Configuration files
-├── docs/                # Documentation
-├── scripts/             # Utility scripts
-│   ├── pipeline/        # Training pipeline scripts
-│   ├── api/            # FastAPI implementation
-│   └── tune_hyperparams.py
-├── output/             # Model outputs and results
-├── src/                # Main source code
-│   ├── algorithms/     # ML algorithms implementation
-│   ├── datasets/       # Dataset handling
-│   ├── embeddings/     # Embedding generation
-│   ├── evaluation/     # Model evaluation tools
-│   └── rag/            # RAG implementation
-└── tests/              # Test files
+.
+├── config/                    # Configuration files
+├── docs/                      # Documentation
+├── intent_classifier/         # Main source code
+│   ├── algorithms/           # ML algorithms implementation
+│   ├── datasets/             # Dataset handling
+│   ├── evaluation/           # Model evaluation tools
+│   ├── hparam/               # Hyperparameter tuning
+│   ├── rag/                  # RAG implementation
+│   └── utils/                # Utility functions
+├── scripts/                   # Utility scripts
+│   ├── api/                  # FastAPI implementation
+│   └── pipeline/             # Training pipeline scripts
+├── tests/                     # Test files
+├── pyproject.toml            # Package configuration
+└── README.md                 # This file
 ```
 
 ## 🧠 Models
@@ -111,19 +99,45 @@ See [Algorithms](docs/algorithms.md) and [Model Architecture](docs/model_archite
 - **Production-Ready**: Type-safe configuration, calibrated probabilities, comprehensive logging
 - **Best Practices**: Proper train/validation/test splits, no data leakage
 
-## 🚀 Running the Pipeline
+## 🚀 Usage
+
+### Classify via CLI
+
+```bash
+intent-classify --model-path artifacts/model.pkl --text "what's my account balance?"
+# → {"label": "banking_balance", "confidence": 0.97}
+```
+
+### Serve API
+
+```bash
+api-serve --host 0.0.0.0 --port 8000
+# then POST /predict with {"text": "..."}
+```
+
+### RAG-LLM (optional)
+
+```bash
+# OpenAI
+export OPENAI_API_KEY=sk-...
+rag-cli --provider openai --model gpt-4o-mini --labels data/labels.json --k 10 --text "reset my card pin"
+
+# Ollama (local)
+export OLLAMA_HOST=http://localhost:11434
+rag-cli --provider ollama --model llama3.1:8b --labels data/labels.json --k 10 --text "reset my card pin"
+```
 
 ### Complete Pipeline
 
 ```bash
-# Using the entry point (after installation)
-multi-model-pipeline
-
-# Or directly with Python
+# Run with default config
 python scripts/pipeline/run_all.py
+
+# Run with custom config and tuning
+CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
 ```
 
-### Individual Steps
+### Individual Steps (Advanced)
 
 ```bash
 python scripts/pipeline/00_data_loading.py          # Load and validate dataset
@@ -143,19 +157,19 @@ The project uses YAML configuration files. See [Configuration](docs/configuratio
 **Quick example:**
 ```bash
 # Use a different config file
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py
 ```
 
 ## 🎯 Hyperparameter Tuning
 
-Tune hyperparameters before training:
+Hyperparameter tuning is integrated into the pipeline:
 
 ```bash
-# Tune all models
-python scripts/tune_hyperparams.py --config config/config.yaml --all
+# Run pipeline with tuning
+python scripts/pipeline/run_all.py --tune
 
-# Tune specific model
-python scripts/tune_hyperparams.py --config config/config.yaml --algo svm --num-samples 30
+# Or tune separately
+python scripts/tune_hyperparams.py --config config/config.yaml --all
 ```
 
 Tuned hyperparameters are automatically used during training. See [Hyperparameter Tuning](docs/hyperparameter_tuning.md) for details.
@@ -172,19 +186,43 @@ See [Performance](docs/performance.md) for detailed metrics and scaling guidance
 
 ## 🛠️ Development
 
-See [Development](docs/development.md) for development setup, code style, and contributing guidelines.
+See [Development](docs/development.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and contributing guidelines.
 
 **Quick setup:**
 ```bash
 # Install dev dependencies
 uv sync --extra dev
+pre-commit install
 
 # Run tests
-pytest
+uv run pytest -q
+
+# Run integration tests
+uv run pytest -m integration -q
 
 # Format code
-black src/ scripts/
+uv run black intent_classifier/ scripts/
+uv run ruff check intent_classifier/ scripts/
 ```
+
+## 🔧 Troubleshooting
+
+### Missing API Key
+- **OpenAI**: Set `OPENAI_API_KEY` environment variable
+- **Ollama**: Ensure `OLLAMA_HOST` is set (default: `http://localhost:11434`)
+
+### FAISS Issues
+- If you see FAISS import errors, ensure `faiss-cpu` is installed in your environment
+- For GPU support, install `faiss-gpu` instead
+
+### Long First Run
+- The first run downloads the CLINC150 dataset (~50MB) from HuggingFace
+- This is a one-time download and is cached for subsequent runs
+- Use `config/config_tiny_dataset.yaml` for faster testing
+
+### Model Not Found
+- Ensure you've run the training pipeline first: `python scripts/pipeline/run_all.py`
+- Check that models are saved in `output/{run_name}/models/`
 
 ## 🙏 Acknowledgments
 

@@ -4,18 +4,18 @@ This guide explains how to run experiments, from quick start to advanced usage.
 
 ## Quick Start
 
-**The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual setup required! Just run:
+**The CLINC150 dataset is automatically downloaded from HuggingFace** - no manual setup required.
 
 ```bash
 # 1. Install dependencies
-uv sync  # or: pip install -e .
+uv sync --extra all
 
 # 2. (Optional) Set up Ollama for RAG-LLM models
 ollama serve
 ollama pull llama3.1:8b
 
-# 3. Run the pipeline - dataset downloads automatically!
-python scripts/pipeline/run_all.py
+# 3. Run a tiny end-to-end experiment
+CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
 ```
 
 That's it! The pipeline will:
@@ -35,7 +35,7 @@ The easiest way to run the complete training and evaluation pipeline:
 
 ```bash
 # Using the entry point (after installation)
-multi-model-pipeline
+intent-train
 
 # Or directly with Python
 python scripts/pipeline/run_all.py

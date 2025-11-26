@@ -75,9 +75,7 @@ python scripts/demos/semantic_search_demo.py
 
 3. **Dependencies**: All required packages are in `pyproject.toml`. Install with:
    ```bash
-   pip install -e .
-   # or
-   uv sync
+   uv sync --extra demo
    ```
 
 4. **LLM Access** (for trend analyzer):

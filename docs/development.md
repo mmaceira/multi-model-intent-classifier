@@ -4,13 +4,9 @@ This guide covers development setup, code style, testing, and contributing to th
 
 ## Environment Setup
 
-1. Install development dependencies (using uv):
+1. Install development dependencies:
    ```bash
    uv sync --extra dev
-   ```
-   Or using pip:
-   ```bash
-   pip install -e ".[dev]"
    ```
 
 2. Set up pre-commit hooks:
@@ -20,24 +16,20 @@ This guide covers development setup, code style, testing, and contributing to th
 
 ## Code Style
 
-- Follow PEP 8 guidelines
-- Use type hints for all function signatures
-- Document all public functions with docstrings
-- Run `black` and `flake8` before committing
-
-### Formatting
+- PEP 8-compliant with type hints on public functions
+- Format and lint with **black** and **ruff**
 
 ```bash
-# Format code with black
-black src/ scripts/
+# Format code
+black intent_classifier/ scripts/
 
-# Check with flake8
-flake8 src/ scripts/
+# Lint code
+ruff check intent_classifier/ scripts/
 ```
 
 ## Testing
 
-**Important**: Tests require the HuggingFace `datasets` library. Install dev dependencies with `pip install -e .[dev]` or `uv sync --extra dev` before running `pytest`.
+**Important**: Tests require the HuggingFace `datasets` library. Install dev dependencies with `uv sync --extra dev` before running `pytest`.
 
 ### Running Tests
 
@@ -65,32 +57,19 @@ pytest -v
 ## Project Structure
 
 ```
-multi-model-intent-classifier/
+.
 ├── config/              # Configuration files
-│   ├── config.yaml     # Main configuration file
-│   ├── models_config.yaml # Model selection and parameters
-│   └── notebook_setup.py # Configuration setup for pipeline scripts
-├── scripts/             # Utility scripts
-│   ├── pipeline/        # Training pipeline scripts
-│   ├── api/            # FastAPI implementation
-│   └── tune_hyperparams.py            # Hyperparameter tuning
-├── output/             # Model outputs and results
-├── src/                # Main source code
-│   ├── algorithms/     # ML algorithms implementation
-│   ├── datasets/       # Dataset handling
-│   ├── embeddings/     # Embedding generation
-│   ├── evaluation/     # Model evaluation tools
-│   ├── rag/            # RAG implementation
-│   └── utils/          # Utility functions
-├── tests/              # Test files
-└── docs/               # Documentation
+├── intent_classifier/   # Library code
+├── scripts/             # CLI and pipeline scripts
+├── tests/               # Test files
+└── docs/                # Documentation
 ```
 
 ## Adding New Algorithms
 
-1. Create a new file in `src/algorithms/`:
+1. Create a new file in `intent_classifier/algorithms/`:
    ```python
-   # src/algorithms/my_algorithm.py
+   # intent_classifier/algorithms/my_algorithm.py
    from sklearn.base import BaseEstimator, ClassifierMixin
 
    class MyAlgorithm(BaseEstimator, ClassifierMixin):
@@ -106,7 +85,7 @@ multi-model-intent-classifier/
            return predictions
    ```
 
-2. Add to `src/algorithms/__init__.py`:
+2. Add to `intent_classifier/algorithms/__init__.py`:
    ```python
    from .my_algorithm import MyAlgorithm
    __all__ = [..., 'MyAlgorithm']
@@ -128,15 +107,15 @@ multi-model-intent-classifier/
 
 ## Adding New Datasets
 
-1. Create a new dataset loader in `src/datasets/`:
+1. Create a new dataset loader in `intent_classifier/datasets/`:
    ```python
-   # src/datasets/my_dataset.py
+   # intent_classifier/datasets/my_dataset.py
    def load_my_dataset(**kwargs):
        # Load dataset logic
        return X_train, y_train, X_val, y_val, X_test, y_test, classes
    ```
 
-2. Add to `src/datasets/dataset.py`:
+2. Add to `intent_classifier/datasets/dataset.py`:
    ```python
    from .my_dataset import load_my_dataset
 
@@ -146,7 +125,7 @@ multi-model-intent-classifier/
        # ...
    ```
 
-3. Update configuration schema in `src/config_schema.py` if needed
+3. Update configuration schema in `intent_classifier/config_schema.py` if needed
 
 4. Write tests
 
@@ -177,9 +156,9 @@ multi-model-intent-classifier/
 
 3. Run tests and formatting:
    ```bash
-   pytest
-   black src/ scripts/
-   flake8 src/ scripts/
+   uv run pytest -q
+   uv run black intent_classifier/ scripts/
+   uv run ruff check intent_classifier/ scripts/
    ```
 
 4. Push and create pull request
@@ -188,8 +167,7 @@ multi-model-intent-classifier/
 
 The project uses pre-commit hooks to ensure code quality:
 - Code formatting (black)
-- Linting (flake8)
-- Type checking (mypy, if configured)
+- Linting (ruff)
 - Commit message validation
 
 Hooks run automatically on `git commit`. To run manually:
@@ -201,7 +179,7 @@ pre-commit run --all-files
 
 ### Common Issues
 
-1. **Import errors**: Make sure you've installed the package (`pip install -e .` or `uv sync`)
+1. **Import errors**: Make sure you've installed dependencies (`uv sync --extra all` or `uv sync --extra dev`)
 2. **Config errors**: Check that config files are valid YAML and match the schema
 3. **Dataset errors**: Verify dataset download and paths
 4. **Memory errors**: Use smaller datasets or reduce batch sizes
@@ -239,11 +217,8 @@ Before submitting a PR:
 
 ## Release Process
 
-1. Update version in `pyproject.toml`
-2. Update CHANGELOG.md (if exists)
-3. Tag release: `git tag v1.0.0`
-4. Push tags: `git push --tags`
-5. Create GitHub release with notes
+1. Update CHANGELOG.md
+2. Tag release and push tags
 
 ## Getting Help
 

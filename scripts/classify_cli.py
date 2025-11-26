@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Unified Intent Classifier CLI
-
-This script provides a command-line interface for all intent classifier methods:
-- Traditional ML: Naive Bayes, Linear SVM, TF-IDF + SVM, MiniLM + LogReg, Embedding + LogReg
-- RAG methods: RAG-kMajority, RAG-CentroidNN, RAG-LLM
-
-It loads models from the configuration and provides a unified interface for predictions.
-"""
+"""CLI for running intent classification with trained models."""
 
 import argparse
 import json
@@ -19,128 +11,49 @@ repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 
 from intent_classifier.utils.model_loader import (  # noqa: E402
-    load_models_from_config,
     load_persisted_model,
 )
-from intent_classifier.utils.paths import get_models_dir  # noqa: E402
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line argument parser."""
     parser = argparse.ArgumentParser(
-        description="Unified intent classifier CLI for all classifier methods.",
+        description="Intent classifier CLI for classifying text with trained models.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Use a specific model by name
-  %(prog)s --model-name "Naive Bayes" --text "What's the weather?"
+  # Classify a single text with a saved model
+  %(prog)s --model-path artifacts/model.pkl --text "what's my account balance?"
 
-  # Use RAG-LLM with specific LLM model
-  %(prog)s --model-name "RAG-LLM (local-embeddings)" --text "What's the weather?" \\
-      --llm-model "gpt-4o-mini"
+  # Classify from a batch file
+  %(prog)s --model-path artifacts/model.pkl --batch-file queries.txt --output text
 
-  # List all available models
-  %(prog)s --list-models
-
-  # Use method-based selection (convenience for RAG methods)
-  %(prog)s --method llm --text "What's the weather?"
+  # Use JSON output (default)
+  %(prog)s --model-path artifacts/model.pkl --text "reset my password" --output json
         """,
     )
     parser.add_argument(
-        "--model-name",
-        default=None,
-        help="Specific model name from config (e.g., 'Naive Bayes', 'RAG-LLM (local-embeddings)'). "
-        "Use --list-models to see all available models.",
-    )
-    parser.add_argument(
-        "--method",
-        default=None,
-        choices=["kmajority", "centroid", "llm"],
-        help="Convenience option for RAG methods: 'kmajority', 'centroid', or 'llm'. "
-        "Only used if --model-name is not specified.",
+        "--model-path",
+        required=True,
+        help="Path to saved model file (e.g., 'artifacts/model.pkl' or model directory)",
     )
     parser.add_argument(
         "--text",
-        required=False,
-        help="Single query to classify. Required unless --list-models is used.",
-    )
-    parser.add_argument(
-        "--use-openai",
-        action="store_true",
-        help="For RAG methods: prefer OpenAI embeddings variant (if available). "
-        "Only used with --method option.",
-    )
-    parser.add_argument(
-        "--llm-model",
         default=None,
-        help="For RAG-LLM: override LLM model to use (e.g., 'gpt-4o-mini', 'ollama/llama3.1:8b'). "
-        "If not provided, uses default from config.",
+        help="Single text to classify (required if --batch-file not provided)",
     )
     parser.add_argument(
-        "--output-format",
+        "--batch-file",
+        default=None,
+        help="Path to file with one text per line to classify (optional)",
+    )
+    parser.add_argument(
+        "--output",
         choices=["json", "text"],
         default="json",
         help="Output format: 'json' (default) or 'text'",
     )
-    parser.add_argument(
-        "--list-models",
-        action="store_true",
-        help="List all available models and exit.",
-    )
     return parser
-
-
-def find_model_by_method(models: dict, method: str, use_openai: bool = False) -> tuple:
-    """Find a model matching the specified RAG method.
-
-    Args:
-        models: Dictionary of model name -> model instance
-        method: Method name ('kmajority', 'centroid', 'llm')
-        use_openai: Whether to prefer OpenAI variant for LLM
-
-    Returns:
-        Tuple of (model_name, model_instance) or (None, None) if not found
-    """
-    method_lower = method.lower()
-
-    # Map method names to config identifiers
-    method_map = {
-        "kmajority": ["rag_kmajority", "rag-kmajority", "rag kmajority", "kmajority"],
-        "centroid": [
-            "rag_centroid",
-            "rag-centroidnn",
-            "rag centroidnn",
-            "rag-centroid",
-            "centroid",
-        ],
-        "llm": ["rag_llm", "rag-llm"],
-    }
-
-    search_terms = method_map.get(method_lower, [method_lower])
-
-    # Find matching models
-    candidates = []
-    for name, model in models.items():
-        name_lower = name.lower()
-        for term in search_terms:
-            if term in name_lower:
-                # For LLM, check if it matches the OpenAI preference
-                if method_lower == "llm":
-                    is_openai_variant = "openai" in name_lower
-                    if use_openai and is_openai_variant:
-                        candidates.insert(0, (name, model))  # Prefer OpenAI variant
-                    elif not use_openai and not is_openai_variant:
-                        candidates.insert(0, (name, model))  # Prefer local variant
-                    else:
-                        candidates.append((name, model))
-                else:
-                    candidates.append((name, model))
-                break
-
-    if candidates:
-        return candidates[0]  # Return first match (prioritized by OpenAI preference)
-
-    return None, None
 
 
 def get_model_labels(model) -> list:
@@ -166,162 +79,130 @@ def get_model_labels(model) -> list:
 
 def main():
     """Main CLI entry point."""
+    # Import heavy dependencies inside function for fast --help
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    # Load models from config
+    # Validate that either --text or --batch-file is provided
+    if not args.text and not args.batch_file:
+        print("❌ Error: Either --text or --batch-file must be provided.", file=sys.stderr)
+        parser.print_help()
+        sys.exit(1)
+
+    if args.text and args.batch_file:
+        print("❌ Error: Cannot use both --text and --batch-file.", file=sys.stderr)
+        parser.print_help()
+        sys.exit(1)
+
+    # Load model from path
+    model_path = Path(args.model_path).resolve()
+    if not model_path.exists():
+        print(f"❌ Error: Model path not found: {model_path}", file=sys.stderr)
+        sys.exit(1)
+
     try:
-        models = load_models_from_config()
-        if not models:
-            print("❌ Error: No models found in configuration.", file=sys.stderr)
-            sys.exit(1)
+        # Try to load as a direct model file first
+        if model_path.is_file():
+            import cloudpickle
+
+            with open(model_path, "rb") as f:
+                model = cloudpickle.load(f)
+            model_name = model_path.stem
+        else:
+            # Try loading as a model directory (e.g., "Linear SVM/model.pkl")
+            model_file = model_path / "model.pkl"
+            if model_file.exists():
+                import cloudpickle
+
+                with open(model_file, "rb") as f:
+                    model = cloudpickle.load(f)
+                model_name = model_path.name
+            else:
+                # Try using load_persisted_model utility
+                model_name = model_path.name
+                model = load_persisted_model(model_name, models_dir=model_path.parent)
     except Exception as e:
-        print(f"❌ Error loading models: {e}", file=sys.stderr)
+        print(f"❌ Error loading model: {e}", file=sys.stderr)
         import traceback
 
         traceback.print_exc()
         sys.exit(1)
 
-    # List models if requested
-    if args.list_models:
-        print("Available models:")
-        for i, name in enumerate(sorted(models.keys()), 1):
-            print(f"  {i}. {name}")
-        sys.exit(0)
-
-    # Validate text is provided
-    if not args.text:
-        print("❌ Error: --text is required (unless --list-models is used).", file=sys.stderr)
-        parser.print_help()
-        sys.exit(1)
-
-    # Find the appropriate model
-    if args.model_name:
-        # Use specific model name
-        if args.model_name not in models:
-            print(
-                f"❌ Error: Model '{args.model_name}' not found in configuration.",
-                file=sys.stderr,
-            )
-            print("\nAvailable models:", file=sys.stderr)
-            for name in sorted(models.keys()):
-                print(f"  - {name}", file=sys.stderr)
+    # Prepare texts to classify
+    if args.batch_file:
+        batch_path = Path(args.batch_file)
+        if not batch_path.exists():
+            print(f"❌ Error: Batch file not found: {batch_path}", file=sys.stderr)
             sys.exit(1)
-        model_name = args.model_name
-        model = models[model_name]
-
-        # Try to load persisted model if available (for trained models)
-        # RAG models work without training, but traditional ML models need to be trained
-        models_dir = get_models_dir()
-        model_path = models_dir / model_name / "model.pkl"
-        if model_path.exists():
-            try:
-                # Try loading persisted model
-                persisted_model = load_persisted_model(model_name, models_dir=models_dir)
-                if persisted_model is not None:
-                    model = persisted_model
-            except Exception:
-                # If loading fails, use the config model (might be RAG which doesn't need training)
-                pass
-        else:
-            # Check if this is a traditional ML model that needs training
-            is_rag_model = any(
-                rag_term in model_name.lower() for rag_term in ["rag", "kmajority", "centroid"]
-            )
-            if not is_rag_model:
-                print(
-                    f"⚠️  Warning: Model '{model_name}' appears to be a traditional ML model "
-                    f"that requires training. No persisted model found at {model_path}.",
-                    file=sys.stderr,
-                )
-                print(
-                    "   Please train the model first using the pipeline scripts.",
-                    file=sys.stderr,
-                )
-                print(
-                    "   RAG models (RAG-kMajority, RAG-CentroidNN, RAG-LLM) work without training.",
-                    file=sys.stderr,
-                )
-    elif args.method:
-        # Find by method (convenience for RAG methods)
-        model_name, model = find_model_by_method(models, args.method, args.use_openai)
-        if model is None:
-            print(
-                f"❌ Error: No {args.method} model found in configuration.",
-                file=sys.stderr,
-            )
-            print("\nAvailable models:", file=sys.stderr)
-            for name in sorted(models.keys()):
-                print(f"  - {name}", file=sys.stderr)
-            sys.exit(1)
+        with open(batch_path) as f:
+            texts = [line.strip() for line in f if line.strip()]
     else:
-        print("❌ Error: Either --model-name or --method must be specified.", file=sys.stderr)
-        parser.print_help()
-        sys.exit(1)
+        texts = [args.text]
 
-    # For RAG-LLM, override LLM model if specified
-    if args.llm_model:
-        # Check if this is a RAG-LLM model
-        if hasattr(model, "rag") and hasattr(model.rag, "model"):
-            from intent_classifier.rag.rag_llm import RagLLM
-
-            # Get current parameters
-            top_k = getattr(model.rag, "top_k", 10)
-            min_labels = getattr(model.rag, "min_labels", 4)
-
-            # Create new model with specified LLM
-            new_rag = RagLLM.load_default(model=args.llm_model, top_k=top_k, min_labels=min_labels)
-            from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
-
-            model = RagSklearnAdapter(new_rag)
-            model_name = f"{model_name} (llm={args.llm_model})"
-
-    # Make prediction
+    # Make predictions
     try:
-        predictions = model.predict([args.text])
-        prediction = predictions[0]
+        predictions = model.predict(texts)
 
         # Get probabilities if available
-        probas = None
+        probas_list = None
         labels = get_model_labels(model)
 
         if hasattr(model, "predict_proba"):
             try:
-                probas_array = model.predict_proba([args.text])
+                probas_array = model.predict_proba(texts)
                 if probas_array is not None and probas_array.shape[0] > 0:
-                    if labels and len(labels) == probas_array.shape[1]:
-                        probas = {
-                            label: float(probas_array[0, i]) for i, label in enumerate(labels)
-                        }
-                    else:
-                        # Fallback: use indices if labels not available
-                        probas = {
-                            f"class_{i}": float(probas_array[0, i])
-                            for i in range(probas_array.shape[1])
-                        }
+                    probas_list = []
+                    for i in range(len(texts)):
+                        if labels and len(labels) == probas_array.shape[1]:
+                            probas = {
+                                label: float(probas_array[i, j]) for j, label in enumerate(labels)
+                            }
+                        else:
+                            probas = {
+                                f"class_{j}": float(probas_array[i, j])
+                                for j in range(probas_array.shape[1])
+                            }
+                        probas_list.append(probas)
             except Exception:
-                # Probabilities not available or error
                 pass
 
         # Format output
-        if args.output_format == "json":
-            output = {
-                "model": model_name,
-                "text": args.text,
-                "prediction": prediction,
-            }
-            if probas:
-                output["probabilities"] = probas
-            print(json.dumps(output, ensure_ascii=False, indent=2))
+        if args.output == "json":
+            if len(texts) == 1:
+                # Single prediction
+                output = {
+                    "label": predictions[0],
+                    "confidence": None,
+                }
+                if probas_list and probas_list[0]:
+                    # Get confidence from top probability
+                    top_prob = max(probas_list[0].values())
+                    output["confidence"] = top_prob
+                    output["probabilities"] = probas_list[0]
+                print(json.dumps(output, ensure_ascii=False, indent=2))
+            else:
+                # Batch predictions
+                results = []
+                for i, (text, pred) in enumerate(zip(texts, predictions, strict=False)):
+                    result = {"text": text, "label": pred, "confidence": None}
+                    if probas_list and probas_list[i]:
+                        top_prob = max(probas_list[i].values())
+                        result["confidence"] = top_prob
+                        result["probabilities"] = probas_list[i]
+                    results.append(result)
+                print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
-            print(f"Model: {model_name}")
-            print(f"Text: {args.text}")
-            print(f"Prediction: {prediction}")
-            if probas:
-                print("\nTop Probabilities:")
-                sorted_probas = sorted(probas.items(), key=lambda x: x[1], reverse=True)
-                for label, prob in sorted_probas[:10]:
-                    print(f"  {label}: {prob:.4f}")
+            # Text output
+            for i, (text, pred) in enumerate(zip(texts, predictions, strict=False)):
+                print(f"Text: {text}")
+                print(f"Label: {pred}")
+                if probas_list and probas_list[i]:
+                    print("Top Probabilities:")
+                    sorted_probas = sorted(probas_list[i].items(), key=lambda x: x[1], reverse=True)
+                    for label, prob in sorted_probas[:5]:
+                        print(f"  {label}: {prob:.4f}")
+                if i < len(texts) - 1:
+                    print()
 
     except Exception as e:
         print(f"❌ Error during prediction: {e}", file=sys.stderr)

@@ -1,45 +1,4 @@
-"""
-Transformer Logistic Regression module for text classification (scaled + C‑tuned).
-
-This module implements a text classification pipeline that combines Sentence-Transformer
-embeddings with a tuned Logistic Regression classifier. The implementation addresses
-common issues with transformer-based text classification:
-
-1. **Scaling Issue**: Sentence-Transformer vectors are L2-normalized but not centered.
-   Feeding them directly to LogisticRegression without proper scaling limits the
-   model's ability to use the full dynamic range of each feature. This implementation
-   adds StandardScaler(with_mean=True) to center and scale features, which typically
-   yields +3-8 F1 points in text embedding benchmarks.
-
-2. **Regularization**: The base MiniLM + LogReg combination is under-regularized.
-   This implementation uses GridSearchCV to tune the C parameter, providing better
-   generalization.
-
-Key Features
------------
-✓ StandardScaler(with_mean=True) for proper feature scaling (centering + variance scaling)
-✓ GridSearchCV over a small C grid for regularization tuning
-✓ Fully compatible with scikit‑learn's ``clone`` and the ``TextClassifier`` interface
-✓ Implements required ``_predict_model`` hook
-
-Implementation Details
---------------------
-- Uses sentence-transformers for text embedding
-- Applies StandardScaler with mean centering and variance scaling
-- Implements cross-validated C parameter tuning
-- Supports multi-class classification via one-vs-rest
-
-Version History
---------------
-* **v1 (05‑06‑2025)** – Initial implementation
-* **v1.1 (05‑06‑2025)** – Constructor no longer mutates ``Cs`` (clone‑safe)
-* **v1.2 (05‑06‑2025)** – Restores missing ``_predict_model`` method
-
-References
-----------
-- Sentence-Transformers: https://www.sbert.net/
-- Scikit-learn: https://scikit-learn.org/
-"""
+"""Sentence-transformer embeddings + tuned logistic regression for text classification."""
 
 from __future__ import annotations
 

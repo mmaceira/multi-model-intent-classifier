@@ -2,6 +2,24 @@
 
 The project uses YAML configuration files to manage experiments and model settings.
 
+## Configuration Reference
+
+| Key | Type | Default | Description | Env Override |
+|-----|------|---------|-------------|--------------|
+| `general.seed` | int | 42 | Global random seed | `SEED` |
+| `general.run_name` | str | "experiment_100_classes" | Experiment identifier | - |
+| `dataset.name` | str | "clinc150" | Dataset loader to use | `DATASET_NAME` |
+| `dataset.use_oos` | bool | false | Include out-of-scope examples | - |
+| `dataset.max_classes` | int \| None | None | Limit number of classes | - |
+| `dataset.max_train_samples` | int \| None | None | Limit training samples | - |
+| `dataset.max_test_samples` | int \| None | None | Limit test samples | - |
+| `model.embedding_backend` | str | "sbert" | Embedding backend: sbert \| openai | - |
+| `model.sbert_model_name` | str | "sentence-transformers/all-MiniLM-L6-v2" | SBERT model name | - |
+| `model.openai_model_name` | str | "text-embedding-3-small" | OpenAI model name | - |
+| `model.classifier` | str | "linear_svm" | Classifier algorithm | `MODEL_TYPE` |
+| `model.rag_top_k` | int | 25 | Neighbors per label for RAG | `RAG_K` |
+| `model.llm_model` | str | "ollama/llama3.1:8b" | LLM model for RAG-LLM | `MODEL_ID` |
+
 ## Main Configuration (`config/config.yaml`)
 
 The main configuration file controls experiment settings, dataset parameters, and model defaults:

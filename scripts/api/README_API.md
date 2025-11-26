@@ -4,13 +4,13 @@
 
 ```bash
 # 1. Install dependencies
-pip install -r requirements.txt
+uv sync --extra api
 
 # 2. Test the API
-python scripts/api/manual_test_api.py
+uv run python scripts/api/manual_test_api.py
 
 # 3. Run the server
-MODELS_DIR=output/experiment_with_03_classes/models uvicorn scripts.api.main_api:app --reload
+uv run uvicorn scripts.api.main_api:app --reload
 ```
 
 ## 📋 API Endpoints

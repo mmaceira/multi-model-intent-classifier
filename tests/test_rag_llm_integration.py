@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 # Add project root to path
-project_root = Path(__file__).parent
+project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
 from rag_llm import Example, Retriever, _load_examples, classify_single  # noqa: E402

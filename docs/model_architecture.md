@@ -180,10 +180,10 @@ This document provides detailed information about the model architectures used i
 
 ## Implementation Details
 
-All models are implemented in the `src/` directory:
-- `src/algorithms/`: Traditional ML algorithms (Naive Bayes, SVM, etc.)
-- `src/rag/`: RAG implementations (k-Majority, Centroid, LLM)
-- `src/embeddings/`: Embedding generation utilities
-- `src/model.py`: Core model interface and utilities
+All models are implemented under `intent_classifier/`:
+- `intent_classifier/algorithms/`: Traditional ML algorithms (Naive Bayes, SVM, etc.)
+- `intent_classifier/rag/`: RAG implementations (k-Majority, Centroid, LLM)
+- `intent_classifier/embeddings/`: Embedding utilities
+- `intent_classifier/model.py`: Core model interface and utilities
 
 Each model implements a consistent interface compatible with scikit-learn's API, making them easy to use and compare.

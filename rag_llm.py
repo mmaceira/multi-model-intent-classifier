@@ -1,13 +1,4 @@
-"""Standalone RAG-LLM intent classifier implementation with retrieval + JSON-LLM guardrails.
-
-This module provides the core implementation for RAG-LLM classification:
-- Example: Data class for training examples
-- Retriever: TF-IDF retriever with K/M constraint algorithm
-- classify_single: Function to classify a single query using LLM
-
-Note: For CLI usage, use scripts/rag_cli.py which provides a unified interface
-for all RAG methods (kmajority, centroid, llm).
-"""
+"""Standalone RAG-LLM classifier with TF-IDF retrieval and JSON-constrained LLM output."""
 
 from __future__ import annotations
 

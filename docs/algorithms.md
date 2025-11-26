@@ -182,14 +182,14 @@ Choose an algorithm based on your requirements:
 
 ## Implementation Details
 
-All algorithms are implemented in the `src/algorithms/` directory:
-- `naive_bayes.py`: Multinomial Naive Bayes implementation
-- `linear_svm.py`: Linear SVM implementation
+All algorithms are implemented in `intent_classifier/algorithms/`:
+- `naive_bayes.py`: Multinomial Naive Bayes
+- `linear_svm.py`: Linear SVM
 - `transformer_logreg.py`: MiniLM + Logistic Regression
-- `embedding_logreg.py`: Flexible embedding + Logistic Regression (supports both OpenAI and SBERT embeddings)
+- `embedding_logreg.py`: Flexible embedding + Logistic Regression (SBERT/OpenAI)
 
-RAG implementations are in `src/rag/`:
+RAG implementations are in `intent_classifier/rag/`:
 - `rag_kmajority.py`: k-Majority voting
 - `centroid_nn.py`: Centroid-based classification
-- `rag_llm.py`: LLM-based classification
+- `rag_llm/`: LLM-based classification
 - `adapter_sklearn.py`: Sklearn-compatible adapter for RAG models

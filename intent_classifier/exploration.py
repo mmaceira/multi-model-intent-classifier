@@ -1,34 +1,4 @@
-"""
-Text Dataset Exploration Module
-
-Version: 1.0.0
-
-Provides tools for analyzing and visualizing text classification datasets:
-- Class distribution analysis
-- Text length statistics
-- Vocabulary analysis
-- Stopword analysis
-- Vocabulary drift analysis
-- Publication-ready visualizations
-- CSV export capabilities
-
-Dependencies:
-- numpy>=1.21.0
-- pandas>=1.3.0
-- matplotlib>=3.4.0
-- seaborn>=0.11.0
-- typing>=3.7.4
-- os, collections, re (standard library)
-
-Usage:
-    >>> from exploration import comprehensive_analysis
-    >>> results = comprehensive_analysis(
-    ...     texts=documents,
-    ...     labels=class_labels,
-    ...     label_names=class_names,
-    ...     output_dir='./analysis_results'
-    ... )
-"""
+"""Dataset exploration utilities for text classification experiments."""
 
 from __future__ import annotations
 

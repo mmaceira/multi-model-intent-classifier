@@ -28,8 +28,10 @@ dependencies = [
 ]
 
 [project.scripts]
-multi-model-api = "scripts.api.main_api:main"
-multi-model-pipeline = "scripts.pipeline.run_all:main"
+intent-train = "scripts.pipeline.run_all:main"
+intent-classify = "scripts.classify_cli:main"
+rag-cli = "scripts.rag_cli:main"
+api-serve = "scripts.api.main_api:cli"
 
 [project.optional-dependencies]
 # Core pipeline dependencies (needed for running the full pipeline)
@@ -39,59 +41,31 @@ pipeline = [
     "dataframe_image~=0.2.7",
 ]
 api = [
-    "aiofiles~=24.1.0",
-    "fastapi~=0.115.12",
-    "fastapi-sso>=0.3.0",
-    "python-multipart~=0.0.20",
-    "prometheus-fastapi-instrumentator",
-    "uvicorn[standard]~=0.34.2",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "python-multipart>=0.0.9",
 ]
-demo = [
-    "gradio~=5.29.0",
-    "kaleido~=0.2.1",
-    "matplotlib~=3.10.1",
-    "seaborn~=0.13.2",
-    "umap-learn~=0.5.5",
-    "dataframe_image~=0.2.7",
+ui = [
+    "gradio>=5.0,<6",
 ]
 dev = [
-    "pre-commit",
-    "ruff",
-    "black",
-    "pytest",
-]
-tune = [
-    "ray[tune]~=2.45.0",
-]
-mlflow = [
-    "mlflow>=2.0.0",
-]
-viz = [
-    "matplotlib~=3.10.1",
-    "seaborn~=0.13.2",
-    "umap-learn~=0.5.5",
-    "kaleido~=0.2.1",
+    "pre-commit>=3.7,<4",
+    "pytest>=8.3,<9",
+    "pytest-cov>=5,<6",
+    "ruff>=0.6,<1",
+    "black>=24.0,<25",
 ]
 # Install all optional dependencies (combines all extras)
 all = [
-    "aiofiles~=24.1.0",
-    "fastapi~=0.115.12",
-    "fastapi-sso>=0.3.0",
-    "python-multipart~=0.0.20",
-    "prometheus-fastapi-instrumentator",
-    "uvicorn[standard]~=0.34.2",
-    "gradio~=5.29.0",
-    "kaleido~=0.2.1",
-    "matplotlib~=3.10.1",
-    "seaborn~=0.13.2",
-    "umap-learn~=0.5.5",
-    "dataframe_image~=0.2.7",
-    "pre-commit",
-    "ruff",
-    "black",
-    "pytest",
-    "ray[tune]~=2.45.0",
-    "mlflow>=2.0.0",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "python-multipart>=0.0.9",
+    "gradio>=5.0,<6",
+    "pre-commit>=3.7,<4",
+    "pytest>=8.3,<9",
+    "pytest-cov>=5,<6",
+    "ruff>=0.6,<1",
+    "black>=24.0,<25",
 ]
 
 [build-system]

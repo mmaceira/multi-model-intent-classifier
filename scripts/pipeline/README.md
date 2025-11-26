@@ -151,7 +151,7 @@ done
 
 ### Important Notes
 
-1. **Scripts must be run from the project root directory** (where `config/` and `src/` directories are located)
+1. **Scripts must be run from the project root directory** (where `config/` and `intent_classifier/` directories are located)
 
 2. **Ollama is the default**: The pipeline works out-of-the-box with Ollama (local, no API keys needed):
    - SBERT embeddings are built by default
@@ -174,11 +174,7 @@ done
 First, make sure all dependencies are installed:
 
 ```bash
-# Using uv (recommended)
-uv sync
-
-# Or using pip
-pip install -e .
+uv sync --extra all
 ```
 
 ### 2. Configuration Setup
@@ -261,10 +257,7 @@ All outputs are organized by experiment. Each experiment (e.g., `experiment_10_c
 - **Solution**: OpenAI models are disabled by default. The pipeline works fine without OpenAI. If you want to use OpenAI models, enable them in `config/models_config.yaml` and set `OPENAI_API_KEY` environment variable.
 
 **2. "Module not found" errors**
-- **Solution**: Make sure you're running from the project root and dependencies are installed:
-  ```bash
-  uv sync  # or pip install -e .
-  ```
+- **Solution**: Make sure you're running from the project root and dependencies are installed with `uv sync --extra all`.
 
 **3. "Configuration file not found"**
 - **Solution**: Make sure you're running scripts from the project root directory where `config/` folder exists.
