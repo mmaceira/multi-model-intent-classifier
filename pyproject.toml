@@ -38,6 +38,11 @@ pipeline = [
     "seaborn~=0.13.2",
     "dataframe_image~=0.2.7",
 ]
+api = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "python-multipart>=0.0.9",
+]
 ui = [
     "gradio>=5.0,<6",
 ]

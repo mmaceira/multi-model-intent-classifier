@@ -80,6 +80,24 @@ def test_predict_with_auth_required(monkeypatch):
     """When API_KEY is set, requests without key should be rejected."""
     from scripts.api import main_api as main_api_module
 
+    # Stub model loader to avoid hitting real models
+    class DummyModel:
+        def __init__(self) -> None:
+            self.classes_ = ["a", "b"]
+
+        def predict(self, texts: List[str]) -> List[str]:
+            return ["a" for _ in texts]
+
+        def predict_proba(self, texts: List[str]):
+            import numpy as np
+
+            return np.array([[0.9, 0.1] for _ in texts])
+
+    def fake_get_model(model_identifier: str) -> Any:
+        return DummyModel()
+
+    monkeypatch.setattr(main_api_module, "_get_model", fake_get_model)
+
     # Force API_KEY and re-create client to ensure middleware sees it
     monkeypatch.setattr(main_api_module, "API_KEY", "secret-key")
     test_client = TestClient(app)
