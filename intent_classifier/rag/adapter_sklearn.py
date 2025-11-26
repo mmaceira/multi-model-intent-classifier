@@ -44,6 +44,8 @@ import logging
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
+from intent_classifier.utils.method_logger import log_method
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,9 +54,11 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         self.rag = rag_clf
         self.rag_clf = rag_clf  # Add this for compatibility with clone()
 
+    @log_method
     def fit(self, X, y=None):
         return self
 
+    @log_method
     def predict(self, X):
         if isinstance(X, list):
             return self.rag.predict(X)
@@ -63,6 +67,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         else:
             raise ValueError(f"Input must be a list or numpy array, got {type(X)}")
 
+    @log_method
     def predict_proba(self, X):
         """Generate probability estimates for each class.
 
@@ -197,18 +202,9 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             # Store LLM model name if it's a RagLLM
             if state["rag_type"] == "RagLLM" and hasattr(self.rag, "model"):
                 state["llm_model"] = self.rag.model
-
-            # Store embedder model if available
-            if hasattr(self.rag, "embedder") and self.rag.embedder is not None:
-                if hasattr(self.rag.embedder, "model"):
-                    state["embedder_model"] = self.rag.embedder.model
-                elif hasattr(self.rag.embedder, "__class__"):
-                    # Try to infer from class name
-                    embedder_class = self.rag.embedder.__class__.__name__
-                    if embedder_class == "OpenAIEmbedder":
-                        state["embedder_type"] = "openai"
-                    else:
-                        state["embedder_type"] = "sbert"
+                # Store min_labels if available (new parameter)
+                if hasattr(self.rag, "min_labels"):
+                    state["min_labels"] = self.rag.min_labels
 
         return state
 
@@ -265,44 +261,17 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                 else:
                     logger.info(f"Restoring LLM model from saved state: {llm_model}")
 
-                # Get embedder model from state or config
-                embedder_model = state.get("embedder_model")
+                # Get min_labels from state (new parameter in new implementation)
+                min_labels = state.get("min_labels", 4)
 
-                # For LLM-based RAG
-                if use_openai:
-                    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
-
-                    # Use saved embedder model if available, otherwise from config
-                    embedder_model_name = embedder_model or openai_model
-                    embedder = OpenAIEmbedder(model=embedder_model_name, batch_size=50)
-                    # Try to get log_dir from config or environment
-                    log_dir = self._get_log_dir_from_config(config)
-                    self.rag = load_llm(
-                        top_k=top_k,
-                        model=llm_model,
-                        embedder=embedder,
-                        use_openai=True,
-                        log_dir=log_dir,
-                    )
-                else:
-                    # For local embeddings
-                    from intent_classifier.rag.vector_store import VectorStore
-
-                    # Use saved embedder model if available, otherwise from config
-                    embedder_model_name = embedder_model or sbert_model
-
-                    def embedder(texts):
-                        return VectorStore.embed(embedder_model_name, texts)
-
-                    # Try to get log_dir from config or environment
-                    log_dir = self._get_log_dir_from_config(config)
-                    self.rag = load_llm(
-                        top_k=top_k,
-                        model=llm_model,
-                        embedder=embedder,
-                        use_openai=False,
-                        log_dir=log_dir,
-                    )
+                # New implementation uses TF-IDF retrieval, no embedder needed
+                # The use_openai parameter is kept for compatibility but not used
+                self.rag = load_llm(
+                    top_k=top_k,
+                    model=llm_model,
+                    use_openai=use_openai,  # Kept for compatibility, but new impl doesn't use it
+                    min_labels=min_labels,
+                )
 
             # Update rag_clf for consistency
             self.rag_clf = self.rag

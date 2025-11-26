@@ -2,6 +2,11 @@
 
 # Expose key functions at the module level for easier imports
 from intent_classifier.utils.file_ops import ensure_dir  # noqa: F401
+from intent_classifier.utils.method_logger import (  # noqa: F401
+    MethodLogger,
+    get_logger,
+    log_method,
+)
 
 
 # Lazy import to avoid circular dependency
@@ -15,4 +20,4 @@ def load_models_from_config(*args, **kwargs):
     return _load_models_from_config(*args, **kwargs)
 
 
-__all__ = ["ensure_dir", "load_models_from_config"]
+__all__ = ["ensure_dir", "load_models_from_config", "MethodLogger", "get_logger", "log_method"]

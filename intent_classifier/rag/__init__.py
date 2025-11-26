@@ -12,9 +12,6 @@ Key Features:
 - Support for multiple embedding types (OpenAI, SentenceTransformer)
 - Optimized model loading
 
-Classes:
-- None (Module-level functions only)
-
 Functions:
 - set_artifacts_dir: Configure artifact and embedding directories
 - get_index_paths: Get paths for index and metadata files
@@ -262,3 +259,14 @@ def load_hybrid(use_openai: bool = False, artifacts_dir: Optional[Union[str, Pat
     with _temporary_dirs(artifacts_dir):
         cfg["use_openai"] = use_openai
         return _lazy_load("rag_hybrid", "RagHybrid", **cfg)
+
+
+__all__ = [
+    "set_artifacts_dir",
+    "get_index_paths",
+    "load_kmajority",
+    "load_centroid",
+    "load_llm",
+    "load_optimized_llm",
+    "load_hybrid",
+]

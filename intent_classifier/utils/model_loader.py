@@ -59,7 +59,6 @@ def process_config_vars(config_value: Any, main_config: Dict[str, Any]) -> Any:
 def load_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
     """Create a RAG model instance based on configuration parameters."""
     # Import here to avoid circular import
-    from intent_classifier.rag.vector_store import VectorStore
 
     method = params.get("method")
     # Ensure top_k is an integer
@@ -78,36 +77,21 @@ def load_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
 
     elif method == "llm":
         model_name = params.get("model", "ollama/llama3.1:8b")
-        use_openai = params.get("use_openai", False)
-
-        # Configure embedder for local embeddings
-        embedder = None
-        if not use_openai and "embedder_model" in params:
-            embedder_model = params.get("embedder_model")
-            logger.info(f"Setting up custom embedder using model: {embedder_model}")
-
-            def embedder(texts):
-                return VectorStore.embed(embedder_model, texts)
+        use_openai = params.get(
+            "use_openai", False
+        )  # Kept for compatibility, but new impl uses TF-IDF
+        min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
 
         logger.info(
-            f"Loading LLM RAG model with top_k={top_k}, model={model_name}, use_openai={use_openai}"
+            f"Loading LLM RAG model with top_k={top_k}, model={model_name}, min_labels={min_labels}"
         )
-        # Try to get log_dir from main_config
-        log_dir = None
-        if "paths" in params.get("main_config", {}):
-            predictions_dir = params["main_config"]["paths"].get("predictions_dir")
-            if predictions_dir:
-                from pathlib import Path
-
-                log_dir = Path(predictions_dir) / "rag_llm_logs"
 
         return RagSklearnAdapter(
             load_llm(
                 top_k=top_k,
                 model=model_name,
-                use_openai=use_openai,
-                embedder=embedder,
-                log_dir=log_dir,
+                use_openai=use_openai,  # Kept for compatibility
+                min_labels=min_labels,
             )
         )
 
