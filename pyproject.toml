@@ -2,9 +2,7 @@
 name = "multi-model-intent-classifier"
 version = "0.1.0"
 description = "A production-ready NLP pipeline for automated intent classification and semantic search, built on the CLINC150 dataset."
-authors = [
-  { name = "Marc Maceira" },
-]
+authors = [{ name = "Marc Maceira" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,16 +11,16 @@ dependencies = [
     "cryptography>=41.0.0",
     "datasets>=2.0.0",
     "email-validator>=2.0.0",
-    "faiss-cpu==1.11.0",  # Pin for ABI compatibility
+    "faiss-cpu==1.11.0",                 # Pin for ABI compatibility
     "litellm[proxy]>=1.0.0",
     "nest-asyncio~=1.6.0",
-    "numpy==2.2.5",  # Pin for compatibility
+    "numpy==2.2.5",                      # Pin for compatibility
     "openai~=1.77.0",
     "pandas~=2.2.3",
     "pydantic~=2.11.4",
     "python-dotenv~=1.1.0",
     "pyyaml",
-    "scikit-learn==1.6.1",  # Pin for compatibility
+    "scikit-learn==1.6.1",               # Pin for compatibility
     "sentence-transformers~=4.1.0",
     "tqdm~=4.67.1",
 ]
@@ -39,11 +37,6 @@ pipeline = [
     "matplotlib~=3.10.1",
     "seaborn~=0.13.2",
     "dataframe_image~=0.2.7",
-]
-api = [
-    "fastapi>=0.115,<1",
-    "uvicorn[standard]>=0.30,<1",
-    "python-multipart>=0.0.9",
 ]
 ui = [
     "gradio>=5.0,<6",
@@ -75,8 +68,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = ["rag_llm"]
 
-[tool.setuptools.packages.find]
-# Tell setuptools which packages to include/exclude
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["intent_classifier*"]
