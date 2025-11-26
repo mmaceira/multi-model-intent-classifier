@@ -1,4 +1,4 @@
-## Running Experiments
+g## Running Experiments
 
 This guide focuses on **how to run the pipeline**. For background on data splits, configuration, and algorithms, see `pipeline.md`, `experiments.md`, and `configuration.md`.
 

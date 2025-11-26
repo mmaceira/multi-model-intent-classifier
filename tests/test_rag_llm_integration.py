@@ -506,7 +506,7 @@ class TestProviderIntegration:
         assert model == "ollama/llama3.1:8b", "Ollama model name should be passed correctly"
         assert result["label"] in result["allowed_labels"]
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_openai_model_name_passed_correctly(self, mock_llm, retriever, label_defs):
         """Test that OpenAI model names are passed correctly to LiteLLM."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'
@@ -527,7 +527,7 @@ class TestProviderIntegration:
         assert model == "gpt-4o-mini", "OpenAI model name should be passed correctly"
         assert result["label"] in result["allowed_labels"]
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_ollama_vs_openai_same_behavior(self, mock_llm, retriever, label_defs):
         """Test that both Ollama and OpenAI models produce same structure."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.85}'
