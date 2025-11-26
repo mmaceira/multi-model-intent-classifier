@@ -18,7 +18,12 @@ import pytest
 project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
-from rag_llm import Example, Retriever, _load_examples, classify_single  # noqa: E402
+from intent_classifier.rag.rag_llm import (  # noqa: E402
+    Example,
+    Retriever,
+    _load_examples,
+    classify_single,
+)
 
 
 class TestDataLoading:
@@ -172,7 +177,7 @@ class TestClassifySingle:
             "time_query": "Questions about current time",
         }
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_success(self, mock_llm, retriever, label_defs):
         """Test successful classification with mocked LLM."""
         # Mock LLM response
@@ -191,7 +196,7 @@ class TestClassifySingle:
         assert 0.0 <= result["confidence"] <= 1.0
         assert result["label"] == "weather_query"
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_repairs_invalid_json(self, mock_llm, retriever, label_defs):
         """Test that invalid JSON triggers repair."""
         # First call returns invalid JSON, second returns valid
@@ -210,7 +215,7 @@ class TestClassifySingle:
         assert mock_llm.call_count == 2, "Should call LLM twice (initial + repair)"
         assert result["label"] in result["allowed_labels"]
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_strips_code_fences(self, mock_llm, retriever, label_defs):
         """Test that code fences are stripped from LLM response."""
         mock_llm.return_value = '```json\n{"label": "weather_query", "confidence": 0.9}\n```'
@@ -224,7 +229,7 @@ class TestClassifySingle:
         )
         assert result["label"] == "weather_query"
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_clamps_confidence(self, mock_llm, retriever, label_defs):
         """Test that confidence is clamped to [0, 1]."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 1.5}'
@@ -249,7 +254,7 @@ class TestClassifySingle:
         )
         assert result["confidence"] == 0.0
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_invalid_label_raises(self, mock_llm, retriever, label_defs):
         """Test that invalid labels raise an error."""
         mock_llm.return_value = '{"label": "invalid_label", "confidence": 0.8}'
@@ -263,7 +268,7 @@ class TestClassifySingle:
                 m=2,
             )
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_includes_metadata(self, mock_llm, retriever, label_defs):
         """Test that result includes metadata like allowed_labels and shots_used."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'
@@ -297,8 +302,8 @@ class TestCLI:
         # Help text should mention RAG-LLM CLI description
         assert "rag-llm classifier cli" in result.stdout.lower()
 
-    @patch("rag_llm._call_llm")
-    @patch("rag_llm._load_examples")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._load_examples")
     def test_cli_basic_execution(self, mock_load, mock_llm, tmp_path):
         """Test basic CLI execution with mocked dependencies."""
         from scripts.rag_cli import build_arg_parser, main
@@ -380,7 +385,7 @@ class TestCLI:
 class TestEndToEnd:
     """End-to-end integration tests."""
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_full_pipeline_with_real_data(self, mock_llm):
         """Test the full pipeline from data loading to classification."""
         # Load real data
@@ -409,7 +414,7 @@ class TestEndToEnd:
         assert result["label"] in result["allowed_labels"]
         assert result["label"] in {ex.label for ex in examples}
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_retrieval_affects_classification(self, mock_llm):
         """Test that different queries retrieve different examples."""
         examples = [
@@ -480,7 +485,7 @@ class TestProviderIntegration:
             "time_query": "Questions about current time",
         }
 
-    @patch("rag_llm._call_llm")
+    @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_ollama_model_name_passed_correctly(self, mock_llm, retriever, label_defs):
         """Test that Ollama model names are passed correctly to LiteLLM."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'

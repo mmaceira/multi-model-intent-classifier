@@ -1,177 +1,65 @@
-# Configuration
+## Configuration
 
-The project uses YAML configuration files to manage experiments and model settings.
+This project uses **YAML files + environment variables** to control datasets, models, and experiments. Most users only need to edit one of the config files in `config/` and optionally set a few env vars.
 
-## Configuration Reference
+## Main config (`config/config.yaml`)
 
-| Key | Type | Default | Description | Env Override |
-|-----|------|---------|-------------|--------------|
-| `general.seed` | int | 42 | Global random seed | `SEED` |
-| `general.run_name` | str | "experiment_100_classes" | Experiment identifier | - |
-| `dataset.name` | str | "clinc150" | Dataset loader to use | `DATASET_NAME` |
-| `dataset.use_oos` | bool | false | Include out-of-scope examples | - |
-| `dataset.max_classes` | int \| None | None | Limit number of classes | - |
-| `dataset.max_train_samples` | int \| None | None | Limit training samples | - |
-| `dataset.max_test_samples` | int \| None | None | Limit test samples | - |
-| `model.embedding_backend` | str | "sbert" | Embedding backend: sbert \| openai | - |
-| `model.sbert_model_name` | str | "sentence-transformers/all-MiniLM-L6-v2" | SBERT model name | - |
-| `model.openai_model_name` | str | "text-embedding-3-small" | OpenAI model name | - |
-| `model.classifier` | str | "linear_svm" | Classifier algorithm | `MODEL_TYPE` |
-| `model.rag_top_k` | int | 25 | Neighbors per label for RAG | `RAG_K` |
-| `model.llm_model` | str | "ollama/llama3.1:8b" | LLM model for RAG-LLM | `MODEL_ID` |
+The main config defines:
 
-## Main Configuration (`config/config.yaml`)
+- **General**: `general.run_name`, `general.seed`.
+- **Dataset**: `dataset.name`, `dataset.use_oos`, and optional limits such as `dataset.max_classes`, `dataset.max_train_samples`, `dataset.max_test_samples`.
+- **Paths**: where to store embeddings, models, predictions, and results (all relative to the repo root and typically using `${general.run_name}`).
+- **Model**:
+  - `model.embedding_backend`: `"sbert"` or `"openai"`.
+  - `model.sbert_model_name`, `model.openai_model_name`.
+  - `model.classifier`: e.g. `"linear_svm"`, `"naive_bayes"`, `"transformer_logreg"`, or a RAG adapter.
+  - `model.rag_top_k`: number of neighbors for RAG models.
+  - `model.llm_model`: identifier for the default LLM used in RAG‑LLM.
 
-The main configuration file controls experiment settings, dataset parameters, and model defaults:
+Environment variables can override some of these (e.g. `SEED`, `MODEL_TYPE`, `RAG_K`, `MODEL_ID`, `DATASET_NAME`, `CONFIG_FILE`).
 
-```yaml
-# General Configuration
-general:
-  run_name: "experiment_10_classes"     # Experiment identifier (used in output paths)
-  seed: 42                              # Random seed for reproducibility
+## Model selection (`config/models_config.yaml`)
 
-# Dataset configuration
-dataset:
-  name: "clinc150"                      # Dataset name
-  use_oos: false                        # Include out-of-scope examples
+`models_config.yaml` controls **which models are actually run** and with what adapter classes:
 
-# Paths (all are resolved relative to repo root)
-paths:
-  data_exploration_dir: "output/${general.run_name}/data_exploration"
-  embeddings_dir: "output/${general.run_name}/embeddings"
-  models_dir: "output/${general.run_name}/models"
-  predictions_dir: "output/${general.run_name}/predictions"
-  results_dir: "output/${general.run_name}/results"
+- Each entry under `models:` has:
+  - `enabled`: turn a model on/off.
+  - `name`: human‑readable label for reports.
+  - `class`: Python class name (e.g. `NaiveBayesClassifier`, `RagSklearnAdapter`).
+  - Optional `params`: model‑specific arguments such as `method`, `top_k`, `model`, `use_openai`.
+- String interpolation lets you reuse values from `config.yaml`, e.g. `top_k: "${model.rag_top_k}"`, `model: "${model.llm_model}"`.
 
-# Model configuration
-model:
-  embedding_backend: "sbert"            # [sbert | openai]
-  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
-  openai_model_name: "text-embedding-3-small"
-  classifier: "linear_svm"             # [linear_svm | naive_bayes | transformer_logreg]
-  rag_top_k: 25                         # Number of neighbors for RAG models
-  llm_model: "ollama/llama3.1:8b"      # Default LLM for RAG-LLM models
-```
+Typical workflow:
+- Enable/disable models by toggling `enabled`.
+- Adjust RAG parameters in `params` while keeping base defaults in `config.yaml`.
 
-### Key Configuration Options
+## Multiple experiment configs
 
-- `general.run_name`: Sets the experiment identifier and output directory name
-- `model.llm_model`: Default LLM model for RAG-LLM (supports Ollama, OpenAI, Anthropic, etc.)
-- `model.rag_top_k`: Number of similar examples to retrieve for RAG models
-- `dataset.use_oos`: Whether to include out-of-scope examples as an extra class
-- `dataset.max_classes`: Limit number of classes (None = all 150 classes)
-- `dataset.max_train_samples`: Limit training samples (None = all ~23k samples)
-- `dataset.max_test_samples`: Limit test samples (None = all ~5.7k samples)
+The repo ships with several configs such as:
 
-## Model Selection Configuration (`config/models_config.yaml`)
+- `config/config.yaml`: default full‑dataset run.
+- `config/config_10_classes.yaml`, `config/config_25_classes.yaml`: smaller‑class experiments.
+- `config/config_tiny_dataset.yaml`: very small setup for quick tests.
 
-This file controls which models are trained and their specific parameters:
-
-```yaml
-models:
-  naive_bayes:
-    enabled: true
-    name: "Naive Bayes"
-    class: "NaiveBayesClassifier"
-
-  rag_llm:
-    enabled: true
-    name: "RAG-LLM"
-    class: "RagSklearnAdapter"
-    params:
-      method: "llm"
-      top_k: "${model.rag_top_k}"
-      model: "${model.llm_model}"      # Uses value from config.yaml
-      use_openai: false                 # false = SBERT embeddings, true = OpenAI embeddings
-```
-
-### Model Configuration Tips
-
-- Set `enabled: false` to skip training a model
-- Use `${model.rag_top_k}` to reference values from `config.yaml`
-- For RAG-LLM, set `use_openai: true` to use OpenAI embeddings (requires `OPENAI_API_KEY`)
-- Change `model` parameter to switch LLM providers (Ollama, OpenAI, etc.)
-
-## Multiple Experiment Configurations
-
-The project includes several pre-configured experiment files:
-- `config/config.yaml` - Default experiment (full dataset)
-- `config/config_10_classes.yaml` - 10 classes experiment (full dataset, 10 classes)
-- `config/config_25_classes.yaml` - 25 classes experiment (full dataset)
-- `config/config_tiny_dataset.yaml` - Small dataset for quick testing (10 classes, 100 train samples, 50 test samples)
-
-**To use a different configuration file:**
+To switch configs, set `CONFIG_FILE`:
 
 ```bash
-# Set CONFIG_FILE environment variable
-export CONFIG_FILE=config_tiny_dataset.yaml
-python scripts/pipeline/run_all.py
-
-# Or inline
-CONFIG_FILE=config_25_classes.yaml python scripts/pipeline/run_all.py
+CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
 ```
 
-## Dataset Configuration
+## Datasets and hyperparameters
 
-See [Experiments](experiments.md) for detailed information on dataset parameters.
+- Dataset‑related options (class limits, sample caps, OOS behavior) live under `dataset:` and are documented in more detail in `experiments.md`.
+- Tuned hyperparameters are loaded from `config/hyperparameters/{config_name}/`. See `hyperparameter_tuning.md` for how these files are created and used.
 
-### Example Dataset Configuration
+## Environment variables (summary)
 
-```yaml
-# Dataset configuration
-dataset:
-  name: "clinc150"                           # dataset name (CLINC150 intent classification)
-  use_oos: false                             # include out-of-scope examples
-  max_classes: 10                            # Limit number of classes (None = all 150 classes)
-  max_train_samples: 1000                    # Limit training samples (None = all ~23k samples)
-  max_test_samples: 500                     # Limit test samples (None = all ~5.7k samples)
-```
+Common env vars:
 
-## Hyperparameter Configuration
+- **Config and dataset**: `CONFIG_FILE`, `DATASET_NAME`, `SEED`.
+- **Embedding / LLM**: `OPENAI_API_KEY` (required for OpenAI features), `LLM_MODEL`.
+- **API server**: `API_KEY`, `CORS_ORIGINS`, `MODEL_CACHE_SIZE`, `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW`.
+- **Embedding batch sizes and threading**: `SBERT_BATCH`, `OPENAI_BATCH`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`.
+- **Testing / tracking**: `TEST_REAL_APIS`, `MLFLOW_TRACKING_URI`.
 
-Tuned hyperparameters are automatically loaded from `config/hyperparameters/{config_name}/`. See [Hyperparameter Tuning](hyperparameter_tuning.md) for details.
-
-## Environment Variables
-
-The following environment variables can be used. Only `OPENAI_API_KEY` is strictly required (and only when using OpenAI-backed features); the rest are optional:
-
-- `CONFIG_FILE`: Override the default config file (e.g., `CONFIG_FILE=config_tiny_dataset.yaml`)
-- `OPENAI_API_KEY`: Required for OpenAI embeddings and OpenAI-backed RAG-LLM models
-- `LLM_MODEL`: Default LLM identifier for RAG-LLM components (e.g., `ollama/llama3.1:8b`, `gpt-4o-mini`)
-- `API_KEY`: Optional API key for the FastAPI server (if set, clients must send `X-API-Key`)
-- `CORS_ORIGINS`: Comma-separated list of allowed CORS origins for the API (default: `"*"`)
-- `MODEL_CACHE_SIZE`: Maximum number of models to keep in memory in the API (default: `"10"`)
-- `SEED`: Global seed for reproducibility across API and pipeline entry points (default: `"42"`)
-- `RATE_LIMIT_REQUESTS`: Maximum number of API requests per window (default: `"100"`)
-- `RATE_LIMIT_WINDOW`: Window size in seconds for rate limiting (default: `"60"`)
-- `SBERT_BATCH`: Batch size for SBERT embedding generation (default: `"32"`)
-- `OPENAI_BATCH`: Batch size for OpenAI embedding generation (default: `"32"`)
-- `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`: Optional BLAS thread limits to improve stability on large runs
-- `TEST_REAL_APIS`: When set to `1`/`true`/`yes`, enables integration tests that call real LLM/embedding APIs
-- `MLFLOW_TRACKING_URI`: Optional MLflow tracking server URI
-
-## Configuration Validation
-
-The project uses Pydantic schemas for type-safe configuration validation. Invalid configurations will raise clear error messages indicating what needs to be fixed.
-
-## Creating Custom Configurations
-
-1. Copy an existing config file:
-   ```bash
-   cp config/config.yaml config/my_experiment.yaml
-   ```
-
-2. Edit `my_experiment.yaml` with your settings
-
-3. Use it:
-   ```bash
-   CONFIG_FILE=my_experiment.yaml python scripts/pipeline/run_all.py
-   ```
-
-## Configuration Best Practices
-
-1. **Use Descriptive Run Names**: Choose `run_name` that describes your experiment
-2. **Version Control Configs**: Commit your config files to git
-3. **Separate Configs for Different Experiments**: Don't modify the default config, create new ones
-4. **Document Changes**: Add comments in config files explaining non-standard settings
-5. **Test with Small Datasets First**: Use `config_tiny_dataset.yaml` for initial testing
+The configuration layer is validated with Pydantic schemas, so invalid or missing fields should produce clear error messages when you start the pipeline or API.

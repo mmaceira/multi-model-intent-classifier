@@ -68,9 +68,6 @@ all = [
 requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = ["rag_llm"]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["intent_classifier*"]

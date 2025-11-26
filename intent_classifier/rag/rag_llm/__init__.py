@@ -46,6 +46,6 @@ Example usage:
     ```
 """
 
-from .classifier import RagLLM
+from .classifier import Example, RagLLM, Retriever, _load_examples, classify_single
 
-__all__ = ["RagLLM"]
+__all__ = ["RagLLM", "Example", "Retriever", "classify_single", "_load_examples"]

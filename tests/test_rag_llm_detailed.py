@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
-import rag_llm
+from intent_classifier.rag.rag_llm import classifier as rag_llm
 
 
 def _build_examples() -> List[rag_llm.Example]:

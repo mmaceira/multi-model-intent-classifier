@@ -1,195 +1,104 @@
-# Algorithms
+## Algorithms
 
-This document describes the algorithms used in this project, how they are implemented, and why they were chosen.
+This document gives a high‑level overview of the main models in this project and how they behave. It focuses on **what each model does**, **how it represents text**, and **when you would typically choose it**, without claiming specific performance numbers.
 
 ## Overview
 
-The project implements multiple classification algorithms, ranging from traditional machine learning approaches to modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques. Each algorithm is chosen for different use cases based on performance, speed, and resource requirements.
+The project includes:
 
-## Model Comparison
-
-| Model | Architecture | Use Case |
-|-------|--------------|---------|
-| Multinomial Naive Bayes | TF-IDF + Naive Bayes | Fast, lightweight classification |
-| Linear SVM | TF-IDF + SVM | Balanced speed and accuracy |
-| MiniLM + LogReg | Transformer + Logistic Regression | High-accuracy classification |
-| Embedding + LogReg | Flexible embeddings (SBERT/OpenAI) + Logistic Regression | High-accuracy with flexible embedding backend |
-| RAG-CentroidNN | FAISS + Nearest Neighbors | Semantic search and classification |
-| RAG-LLM | FAISS + LLM (Ollama/OpenAI) | Context-aware classification with flexible LLM provider |
+- **Multinomial Naive Bayes (`nb_tfidf`)**: classic bag‑of‑words baseline.
+- **Linear SVM (`svm_linear`, `svm_bigram`)**: stronger linear classifier on TF‑IDF features.
+- **MiniLM + Logistic Regression (`transformer_logreg`)**: transformer embeddings + simple classifier.
+- **Embedding + Logistic Regression (`embedding_logreg`)**: same idea as above, but with pluggable embedding backends.
+- **RAG‑based models (`rag_faiss`, `rag_llm`, centroid / k‑NN variants)**: retrieval‑augmented, context‑aware classification.
 
 ## 1. Multinomial Naive Bayes (`nb_tfidf`)
 
-### Implementation
+**Core idea**: represent each document as a sparse TF‑IDF vector and assume that word occurrences are conditionally independent given the class. The model learns, for each label, which words are comparatively more or less likely.
 
-**Why**: Naive Bayes is chosen for its simplicity, speed, and effectiveness on text classification tasks. It's particularly good for baseline comparisons and real-time applications where speed is critical.
+**How it models text**
+- Uses a **bag‑of‑words** representation: only word counts and frequencies matter, not order.
+- TF‑IDF down‑weights very common words and up‑weights words that are distinctive for particular documents or classes.
+- Each class is associated with a **probability distribution over words**, estimated with smoothing to avoid zero probabilities.
 
-**How**:
-- **Text Preprocessing**: Standard text cleaning (lowercasing, punctuation removal)
-- **TF-IDF Vectorization**: Converts text to numerical features using Term Frequency-Inverse Document Frequency
-- **Model Training**: Multinomial Naive Bayes classifier with Laplace smoothing
-- **Inference**: Fast probabilistic classification
-
-**Pipeline**: Text preprocessing → TF-IDF vectorization → Model training → Fast inference
-
-**Performance**:
-- Training: ~2 min/2M docs
-- Inference: 60k docs/s
-- Resources: < 2GB RAM, CPU-only
-
-**Use Cases**:
-- Real-time classification where speed is critical
-- Baseline model for comparison
-- Resource-constrained environments
+**Behavior and trade‑offs**
+- Tends to work well when classes are characterized by a few **strong, label‑specific keywords**.
+- Can struggle when distinguishing relies on **word order, subtle phrasing, or long‑range context**.
+- Very simple to train and interpret; often used as a **baseline model** or when resources are limited.
 
 ## 2. Linear SVM (`svm_linear`, `svm_bigram`)
 
-### Implementation
+**Core idea**: still uses high‑dimensional TF‑IDF features, but instead of modeling word probabilities, it learns a **linear decision boundary** that separates classes in feature space.
 
-**Why**: Linear SVM provides an excellent balance between speed and accuracy. It's robust to overfitting and works well with high-dimensional sparse features like TF-IDF vectors.
+**How it models text**
+- Uses TF‑IDF on **uni‑grams** (single words) and, in the `svm_bigram` variant, **bi‑grams** (two‑word sequences).
+- Bi‑grams help capture short patterns like "stock market", "not good", or "interest rates" that Naive Bayes and uni‑grams alone may blur.
+- The SVM assigns **weights to each feature** (word or n‑gram). The sign and magnitude of those weights reflect how strongly that feature pushes predictions toward or away from a class.
 
-**How**:
-- **Text Preprocessing**: Standard text cleaning
-- **N-gram Extraction**: Uni-grams and bi-grams capture word order and context
-- **TF-IDF Vectorization**: Converts n-grams to numerical features
-- **SVM Training**: Linear SVM with L2 regularization
-- **Calibration**: Probability calibration enabled by default for better probability estimates
-
-**Pipeline**: Text preprocessing → N-gram extraction → TF-IDF → SVM training
-
-**Performance**:
-- Training: 7-8 min
-- Inference: 12-15k docs/s
-- Resources: < 5GB RAM, CPU-only
-
-**Use Cases**:
-- Production systems requiring good accuracy and reasonable speed
-- When interpretability is important (linear decision boundaries)
-- Balanced performance requirements
+**Behavior and trade‑offs**
+- Usually more robust than Naive Bayes when the data is high‑dimensional and not strictly separable by independent word counts.
+- The linear decision boundary makes it relatively **interpretable**: you can inspect top‑weighted features per class.
+- Still relies on sparse, surface‑level features; it does not capture deeper semantics or synonymy on its own.
 
 ## 3. MiniLM + Logistic Regression (`transformer_logreg`)
 
-### Implementation
+**Core idea**: use a transformer encoder (MiniLM) to produce **dense semantic embeddings** for each document, then train a logistic regression classifier on top of these embeddings.
 
-**Why**: Transformer embeddings capture semantic meaning better than bag-of-words approaches. MiniLM is chosen for its balance between quality and speed.
+**How it models text**
+- The transformer reads the full text with attention, allowing it to encode **word order, context, and long‑range dependencies**.
+- Each document is mapped to a **low‑dimensional dense vector** where semantically similar documents have similar embeddings, even if they share few exact words.
+- Logistic regression then learns **linear decision surfaces in embedding space**, effectively separating clusters of documents by label.
 
-**How**:
-- **Text Preprocessing**: Standard text cleaning
-- **MiniLM Embedding**: Uses `sentence-transformers/all-MiniLM-L6-v2` to generate dense vector representations
-- **Dimensionality Reduction**: Optional PCA or feature selection
-- **Classification**: Logistic Regression on embeddings
-
-**Pipeline**: Text preprocessing → MiniLM embedding → Dimensionality reduction → Classification
-
-**Performance**:
-- Training: ~45 min on A10 GPU
-- Inference: 1k docs/s
-- Resources: 12GB GPU
-
-**Use Cases**:
-- High-accuracy requirements
-- Semantic understanding is important
-- When you have GPU resources available
+**Behavior and trade‑offs**
+- Typically stronger when labels depend on **semantic intent**, paraphrases, or subtle phrasing rather than exact keywords.
+- More robust to vocabulary shifts (e.g., synonyms, rephrasings) because the transformer maps similar meanings close together.
+- Requires more compute than purely TF‑IDF models, but the classifier itself remains simple and easy to analyze via feature weights on embedding dimensions.
 
 ## 4. Embedding + Logistic Regression (`embedding_logreg`)
 
-### Implementation
+**Core idea**: keep the same simple classifier (logistic regression) but allow **different embedding backends** so you can swap how text is encoded without changing the downstream model.
 
-**Why**: Provides flexibility in embedding backends while maintaining the same classification architecture. Allows switching between local (SBERT) and API-based (OpenAI) embeddings.
+**How it models text**
+- The pipeline is: text → embedding model → dense vector → logistic regression.
+- Embeddings can come from:
+  - A **local SBERT model** (e.g., `sentence-transformers/all-MiniLM-L6-v2`), running on your own hardware.
+  - An **API‑based embedding model** (e.g., OpenAI), called remotely.
+- The classifier only sees the final embedding, so you can experiment with different encoders while keeping the training and prediction interface stable.
 
-**How**:
-- **Text Preprocessing**: Standard text cleaning
-- **Embedding Generation**:
-  - **SBERT mode** (default): Local embeddings using `sentence-transformers/all-MiniLM-L6-v2`, no API key needed
-  - **OpenAI mode**: API-based embeddings using `text-embedding-3-small`, requires `OPENAI_API_KEY`
-- **Feature Scaling**: StandardScaler normalization
-- **Classification**: Logistic Regression on embeddings
+**Behavior and trade‑offs**
+- Lets you trade off **latency, cost, and privacy** by choosing local vs. remote embeddings.
+- As with MiniLM + LogReg, the model benefits from **semantic similarity**: documents with similar meaning cluster together regardless of exact words.
+- A good choice when you want to keep a **simple, well‑understood classifier**, but improve or change the underlying language representation.
 
-**Pipeline**: Text preprocessing → Embedding (SBERT local or OpenAI API) → StandardScaler → Classification
+## 5. RAG‑based Classification (`rag_faiss`, `rag_llm`, centroid / k‑NN)
 
-**Features**:
-- **SBERT mode** (default): Local embeddings, no API key needed
-- **OpenAI mode**: API-based embeddings, requires OPENAI_API_KEY
-- Same architecture as MiniLM + LogReg but with flexible embedding backend
+**Core idea**: instead of classifying each document in isolation, RAG models **retrieve similar examples** and optionally use an LLM to make a decision **conditioned on those neighbors**. This combines semantic search with classification.
 
-**Performance**:
-- Training: ~45 min (SBERT) or depends on API rate limits (OpenAI)
-- Inference: 1k docs/s (SBERT) or depends on API rate limits (OpenAI)
-- Resources: 12GB GPU (SBERT) or minimal (OpenAI, API-based)
+**Common components**
+- **Embedding model**: converts each document into a dense vector representation.
+- **FAISS index or similar retrieval backend**: supports fast nearest‑neighbor search over all embedded documents.
+- **Retrieved context**: for a query document, the system fetches the most similar labeled examples and uses them as context for classification.
 
-**Use Cases**:
-- When you want flexibility in embedding backends
-- API-based embeddings for resource-constrained environments
-- Local embeddings for privacy-sensitive applications
+**Main variants**
+- **k‑NN / k‑majority**: classify a document by looking at the labels of its nearest neighbors and aggregating them (e.g., majority vote or distance‑weighted vote).
+- **Centroid‑based**: compute a centroid (average embedding) per class and assign the label whose centroid is closest to the query embedding.
+- **RAG‑LLM (`rag_llm`)**: feed the query text plus retrieved examples to an LLM, which outputs a label (and optionally an explanation) based on both the document and its neighbors.
 
-## 5. RAG Classification Implementation (`rag_faiss`)
+**Behavior and trade‑offs**
+- Naturally supports **few‑shot and evolving label behavior**: adding new labeled examples to the index can immediately influence predictions without fully retraining a parametric model.
+- Particularly useful when you want **explanations** grounded in real examples (you can show which neighbors were used) or when context from similar documents is crucial.
+- RAG‑LLM variants add the ability to reason over retrieved context in natural language but depend on LLM availability and configuration.
 
-### Implementation
+## Where to find the implementations
 
-**Why**: RAG (Retrieval-Augmented Generation) combines semantic search with large language models to make context-aware classification decisions. This approach leverages both the power of dense embeddings for retrieval and LLMs for understanding context.
+- Algorithms live in `intent_classifier/algorithms/`:
+  - `naive_bayes.py`: Multinomial Naive Bayes on TF‑IDF.
+  - `linear_svm.py`: Linear SVM on uni‑gram / bi‑gram TF‑IDF.
+  - `transformer_logreg.py`: MiniLM embeddings + logistic regression.
+  - `embedding_logreg.py`: Flexible embedding backends + logistic regression.
 
-**How**:
-
-1. **Document Embedding**
-   - Input documents are converted into dense vector representations
-   - Uses `openai text-embedding-3-small` or `sentence-transformers/all-MiniLM-L6-v2` for high-quality embeddings
-   - Embeddings capture semantic meaning and document context
-
-2. **Context Retrieval**
-   - FAISS (Facebook AI Similarity Search) is used for efficient similarity search
-   - For each document, retrieves `top_k` (default: 5) most similar documents
-   - Similar documents serve as contextual examples for classification
-   - Optimized for speed with approximate nearest neighbor search
-
-3. **Classification Methods**:
-   - **k-Majority**: Simple majority voting among retrieved neighbors
-   - **Centroid**: Uses centroid of retrieved examples for classification
-   - **LLM**: Uses large language models (Ollama/OpenAI) to make context-aware decisions
-
-**LLM Classification Details**:
-   - Uses litellm which supports multiple LLM providers (Ollama, OpenAI, Anthropic, etc.)
-   - Default: Ollama ("ollama/llama3.1:8b") for local, cost-free inference
-   - Easy to switch to OpenAI models (e.g., "gpt-4o-mini", "gpt-4o") by changing the `model` parameter
-   - Provides the model with:
-     - Document to classify
-     - Retrieved similar documents as context
-     - List of valid classification labels
-   - Returns JSON-formatted classification decisions
-
-**Pipeline**: Document embedding → FAISS index → Query embedding → ANN search → Classification (k-Majority/Centroid/LLM)
-
-**Performance**:
-- Index Build: ~25 min
-- Query Speed: 200 QPS (k-Majority/Centroid), 150-180 QPS (LLM)
-- Resources: 16GB RAM + LLM (for LLM mode)
-
-**Use Cases**:
-- When semantic understanding and context are critical
-- Few-shot learning scenarios
-- When you need explainable predictions (can show retrieved examples)
-- Applications requiring high-quality classification with context awareness
-
-## Algorithm Selection Guide
-
-Choose an algorithm based on your requirements:
-
-1. **Speed Critical**: Use Naive Bayes or Linear SVM
-2. **Accuracy Critical**: Use MiniLM + LogReg or Embedding + LogReg
-3. **Context Awareness**: Use RAG-LLM
-4. **Resource Constrained**: Use Naive Bayes or Linear SVM
-5. **GPU Available**: Use MiniLM + LogReg or Embedding + LogReg (SBERT mode)
-6. **No GPU, API Available**: Use Embedding + LogReg (OpenAI mode)
-7. **Local Only, No API**: Use Naive Bayes, Linear SVM, or RAG with Ollama
-
-## Implementation Details
-
-All algorithms are implemented in `intent_classifier/algorithms/`:
-- `naive_bayes.py`: Multinomial Naive Bayes
-- `linear_svm.py`: Linear SVM
-- `transformer_logreg.py`: MiniLM + Logistic Regression
-- `embedding_logreg.py`: Flexible embedding + Logistic Regression (SBERT/OpenAI)
-
-RAG implementations are in `intent_classifier/rag/`:
-- `rag_kmajority.py`: k-Majority voting
-- `centroid_nn.py`: Centroid-based classification
-- `rag_llm/`: LLM-based classification
-- `adapter_sklearn.py`: Sklearn-compatible adapter for RAG models
+- RAG components live in `intent_classifier/rag/`:
+  - `rag_kmajority.py`: k‑NN / k‑majority style classification on retrieved neighbors.
+  - `centroid_nn.py`: centroid‑based nearest‑neighbor classifier.
+  - `rag_llm/`: LLM‑based RAG classifier.
+  - `adapter_sklearn.py`: sklearn‑compatible adapter for RAG models.

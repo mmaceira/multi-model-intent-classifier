@@ -3,7 +3,7 @@
 RAG-LLM Classifier CLI
 
 This script provides a command-line interface for RAG-LLM classification.
-It uses the standalone rag_llm implementation for flexible LLM provider support.
+It uses the shared implementation under intent_classifier.rag.rag_llm.
 """
 
 import argparse
@@ -75,11 +75,11 @@ def main(argv: list[str] | None = None):
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    # Import rag_llm module (heavy import, done after --help)
+    # Import RAG-LLM implementation (heavy import, done after --help)
     try:
-        from rag_llm import Retriever, _load_examples, classify_single
+        from intent_classifier.rag.rag_llm import Retriever, _load_examples, classify_single
     except ImportError as e:
-        print(f"❌ Error: Could not import rag_llm module: {e}", file=sys.stderr)
+        print(f"❌ Error: Could not import RAG-LLM implementation: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Load labels from JSON file
