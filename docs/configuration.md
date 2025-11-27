@@ -58,7 +58,7 @@ Common env vars:
 
 - **Config and dataset**: `CONFIG_FILE`, `DATASET_NAME`, `SEED`.
 - **Embedding / LLM**: `OPENAI_API_KEY` (required for OpenAI features), `LLM_MODEL`.
-- **API server**: `API_KEY`, `CORS_ORIGINS`, `MODEL_CACHE_SIZE`, `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW`.
+- **API server**: `CORS_ORIGINS`, `MODEL_CACHE_SIZE`, `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW`.
 - **Embedding batch sizes and threading**: `SBERT_BATCH`, `OPENAI_BATCH`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`.
 - **Testing / tracking**: `TEST_REAL_APIS`, `MLFLOW_TRACKING_URI`.
 

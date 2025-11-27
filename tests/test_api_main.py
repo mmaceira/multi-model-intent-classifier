@@ -41,9 +41,6 @@ def client(monkeypatch) -> TestClient:
 
     monkeypatch.setattr(main_api_module, "_get_model", fake_get_model)
 
-    # Ensure API_KEY is empty for most tests (no auth)
-    monkeypatch.setattr(main_api_module, "API_KEY", None)
-
     return TestClient(app)
 
 
@@ -64,8 +61,8 @@ def test_ready_endpoint(client: TestClient):
     assert "models_loaded" in data
 
 
-def test_predict_without_auth(client: TestClient):
-    # With API_KEY disabled, prediction should work without headers
+def test_predict(client: TestClient):
+    """Test prediction endpoint works without authentication."""
     model_id = next(iter(MODELS_INFO.keys()))
     payload: Dict[str, Any] = {"model_id": model_id, "text": "some example text"}
     resp = client.post("/v1/predict", json=payload)
@@ -74,45 +71,3 @@ def test_predict_without_auth(client: TestClient):
     assert data["label"] in ["a", "b", "__ABSTAIN__"]
     assert "confidence" in data
     assert "request_id" in data
-
-
-def test_predict_with_auth_required(monkeypatch):
-    """When API_KEY is set, requests without key should be rejected."""
-    from scripts.api import main_api as main_api_module
-
-    # Stub model loader to avoid hitting real models
-    class DummyModel:
-        def __init__(self) -> None:
-            self.classes_ = ["a", "b"]
-
-        def predict(self, texts: List[str]) -> List[str]:
-            return ["a" for _ in texts]
-
-        def predict_proba(self, texts: List[str]):
-            import numpy as np
-
-            return np.array([[0.9, 0.1] for _ in texts])
-
-    def fake_get_model(model_identifier: str) -> Any:
-        return DummyModel()
-
-    monkeypatch.setattr(main_api_module, "_get_model", fake_get_model)
-
-    # Force API_KEY and re-create client to ensure middleware sees it
-    monkeypatch.setattr(main_api_module, "API_KEY", "secret-key")
-    test_client = TestClient(app)
-
-    model_id = next(iter(MODELS_INFO.keys()))
-    payload = {"model_id": model_id, "text": "some example text"}
-
-    # Missing key → 401
-    resp = test_client.post("/v1/predict", json=payload)
-    assert resp.status_code == 401
-
-    # Correct key via X-API-Key → 200
-    resp = test_client.post(
-        "/v1/predict",
-        json=payload,
-        headers={"X-API-Key": "secret-key"},
-    )
-    assert resp.status_code == 200

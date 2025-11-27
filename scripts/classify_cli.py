@@ -10,10 +10,6 @@ from pathlib import Path
 repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 
-from intent_classifier.utils.model_loader import (  # noqa: E402
-    load_persisted_model,
-)
-
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line argument parser."""
@@ -107,7 +103,6 @@ def main():
 
             with open(model_path, "rb") as f:
                 model = cloudpickle.load(f)
-            model_name = model_path.stem
         else:
             # Try loading as a model directory (e.g., "Linear SVM/model.pkl")
             model_file = model_path / "model.pkl"
@@ -116,11 +111,15 @@ def main():
 
                 with open(model_file, "rb") as f:
                     model = cloudpickle.load(f)
-                model_name = model_path.name
             else:
-                # Try using load_persisted_model utility
-                model_name = model_path.name
-                model = load_persisted_model(model_name, models_dir=model_path.parent)
+                # Path doesn't exist as file or directory with model.pkl
+                print(
+                    f"❌ Error: Model path not found: {model_path}\n"
+                    "   Expected either a model file (.pkl or .joblib) "
+                    "or a directory containing model.pkl",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
     except Exception as e:
         print(f"❌ Error loading model: {e}", file=sys.stderr)
         import traceback

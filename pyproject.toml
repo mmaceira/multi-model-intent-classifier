@@ -70,7 +70,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["intent_classifier*"]
+include = ["intent_classifier*", "scripts*"]
 exclude = ["setup*", "tests*"]
 
 [tool.black]

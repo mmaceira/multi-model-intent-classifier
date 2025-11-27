@@ -91,7 +91,6 @@ models/
 ### Environment Variables
 
 - `MIN_CONFIDENCE` (default: 0.6): Minimum confidence threshold for predictions. If a prediction's confidence is below this threshold, the API will return `"__ABSTAIN__"` as the label.
-- `API_KEY`: Optional API key for authentication. If set, all requests must include `X-API-Key` header.
 - `RATE_LIMIT_REQUESTS` (default: 100): Maximum number of requests per window.
 - `RATE_LIMIT_WINDOW` (default: 60): Time window in seconds for rate limiting.
 - `CORS_ORIGINS`: Comma-separated list of allowed CORS origins (default: "*").

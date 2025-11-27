@@ -19,8 +19,8 @@ source .venv/bin/activate
 pip install -U pip
 pip install -e ".[all]"
 
-# Run a tiny end-to-end experiment (< 2 minutes)
-CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
+# Run a tiny end-to-end experiment (< 5 minutes)
+CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
 ```
 
 That's it! The pipeline will automatically download CLINC150, tune hyperparameters, train models, and generate predictions and evaluations.
@@ -38,7 +38,6 @@ Comprehensive documentation is available in the [`docs/`](docs/) folder:
 - **[Hyperparameter Tuning](docs/hyperparameter_tuning.md)** - Hyperparameter optimization guide
 - **[Model Architecture](docs/model_architecture.md)** - Detailed model architecture specifications
 - **[LLM Providers](docs/llm_providers.md)** - Switching between Ollama, OpenAI, and other providers
-- **[Performance](docs/performance.md)** - Performance metrics, resource requirements, and scaling
 - **[Development](docs/development.md)** - Development setup, code style, and contributing
 
 ## 📋 Overview
@@ -48,7 +47,6 @@ This project implements a comprehensive NLP pipeline for:
 - Semantic search and document retrieval
 - Business insights generation
 - Real-time document similarity matching
-- Multi-language support
 
 Built on the CLINC150 dataset, it provides a production-ready solution for intent classification and information retrieval. The system combines traditional machine learning approaches with modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques.
 
@@ -75,6 +73,7 @@ Built on the CLINC150 dataset, it provides a production-ready solution for inten
 │   └── utils/                # Utility functions
 ├── scripts/                   # Utility scripts
 │   ├── api/                  # FastAPI implementation
+│   ├── demos/                # Interactive Gradio demos
 │   └── pipeline/             # Training pipeline scripts
 ├── tests/                     # Test files
 ├── pyproject.toml            # Package configuration
@@ -85,14 +84,14 @@ Built on the CLINC150 dataset, it provides a production-ready solution for inten
 
 The pipeline includes multiple classification algorithms:
 
-| Model | Architecture | Use Case |
-|-------|--------------|---------|
-| Multinomial Naive Bayes | TF-IDF + Naive Bayes | Fast, lightweight classification |
-| Linear SVM | TF-IDF + SVM | Balanced speed and accuracy |
-| MiniLM + LogReg | Transformer + Logistic Regression | High-accuracy classification |
-| Embedding + LogReg | Flexible embeddings (SBERT/OpenAI) + Logistic Regression | High-accuracy with flexible embedding backend |
-| RAG-CentroidNN | FAISS + Nearest Neighbors | Semantic search and classification |
-| RAG-LLM | FAISS + LLM (Ollama/OpenAI) | Context-aware classification |
+| Model | Architecture | Architecture Explanation | Use Case |
+|-------|--------------|------------------------|---------|
+| Multinomial Naive Bayes | TF-IDF + Naive Bayes | Text is converted to TF-IDF vectors (term frequency-inverse document frequency), then a probabilistic Naive Bayes classifier learns word probabilities per class assuming conditional independence | Fast, lightweight classification |
+| Linear SVM | TF-IDF + SVM | Text is vectorized using TF-IDF (unigrams), then a Support Vector Machine with linear kernel learns optimal decision boundaries in the high-dimensional feature space | Balanced speed and accuracy |
+| MiniLM + LogReg | Transformer + Logistic Regression | Text is encoded by a transformer model (MiniLM) into dense semantic embeddings, then a Logistic Regression classifier learns to separate classes in embedding space | High-accuracy classification |
+| Embedding + LogReg | Flexible embeddings (SBERT/OpenAI) + Logistic Regression | Text is embedded using either local SBERT or OpenAI API embeddings into dense vectors, then Logistic Regression classifies in embedding space | High-accuracy with flexible embedding backend |
+| RAG-CentroidNN | FAISS + Nearest Neighbors | Text is embedded, then FAISS retrieves k most similar training examples. The centroid (average) of their embeddings is computed, and classification is based on nearest neighbor to this centroid | Semantic search and classification |
+| RAG-LLM | FAISS + LLM (Ollama/OpenAI) | Text is embedded, FAISS retrieves k most similar examples, then an LLM (Ollama or OpenAI) analyzes the query and retrieved context to make a context-aware classification decision | Context-aware classification |
 
 See [Algorithms](docs/algorithms.md) and [Model Architecture](docs/model_architecture.md) for detailed information.
 
@@ -109,33 +108,47 @@ See [Algorithms](docs/algorithms.md) and [Model Architecture](docs/model_archite
 
 ### Classify via CLI
 
+The `intent-classify` command works with any trained model. You can specify:
+- A direct model file path: `--model-path artifacts/model.pkl`
+- A model directory: `--model-path output/experiment/models/Linear\ SVM/`
+
+**Note**: The API server is **not required** for CLI classification. Models are loaded directly from disk.
+
 ```bash
+# Using a model file path
 intent-classify --model-path artifacts/model.pkl --text "what's my account balance?"
 # → {"label": "banking_balance", "confidence": 0.97}
+
+# Using a model directory (models are stored here after training)
+intent-classify --model-path output/experiment_tiny_dataset/models/Linear\ SVM/ --text "book me a flight to London"
 ```
 
-Or run a tiny end-to-end example using the default config:
-
+After training models:
 ```bash
-intent-train --config config/config_tiny_dataset.yaml
-intent-classify --model linear_svm --text "book me a flight to London"
+# Train models (use CONFIG_FILE environment variable, not --config flag)
+# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
+CONFIG_FILE=config_tiny_dataset.yaml intent-train
+intent-classify --model-path output/experiment_tiny_dataset/models/Linear\ SVM/ --text "book me a flight to London"
 ```
 
 ### Serve API
 
-```bash
-api-serve --host 0.0.0.0 --port 8000
-# then open /docs and POST /v1/predict with {"model_id": "...", "text": "..."}
-```
-
-If API key auth is enabled, include the header:
+The API server loads models from the experiment directory specified by `CONFIG_FILE` or `EXPERIMENT_NAME` environment variable. If neither is set, it defaults to `{repo_root}/models/`.
 
 ```bash
-curl -X POST "http://localhost:8000/v1/predict" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d '{"model_id": "linear_svm", "text": "what is my account balance?"}'
+# Install API dependencies first
+uv sync --extra api
+
+# Use the same config file as training to load models from the correct directory
+# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
+CONFIG_FILE=config_tiny_dataset.yaml api-serve --host 0.0.0.0 --port 8000
+# Or specify experiment name directly
+EXPERIMENT_NAME=experiment_tiny_dataset api-serve --host 0.0.0.0 --port 8000
+
+# Then open /docs and POST /v1/predict with {"model_id": "...", "text": "..."}
 ```
+
+**Supported model IDs**: `naive_bayes`, `linear_svm`, `tfidf_svm`, `minilm_logreg`, `rag_centroid`, `rag_kmajority`, `rag_llm_local`, `rag_llm_openai`
 
 See `scripts/api/README_API.md` for endpoint details.
 
@@ -179,10 +192,15 @@ Under the hood, the `rag-cli` entry point uses the shared `rag_llm` module, and 
 
 ```bash
 # Run with default config
+intent-train
+# Or use the script directly:
 python scripts/pipeline/run_all.py
 
 # Run with custom config and tuning
-CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
+# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
+CONFIG_FILE=config_tiny_dataset.yaml intent-train --tune --save-model artifacts/model.pkl
+# Or use the script directly:
+CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
 ```
 
 ### Individual Steps (Advanced)
@@ -200,13 +218,23 @@ See [Running Experiments](docs/running_experiments.md) for more details.
 
 ## ⚙️ Configuration
 
-The project uses YAML configuration files. See [Configuration](docs/configuration.md) for details.
+The project uses YAML configuration files:
+
+- **Main config** (`config/config.yaml` or `config/config_*.yaml`): Controls dataset, paths, embedding backends, and LLM models
+- **Models config** (`config/models_config.yaml`): Controls which models are trained and their hyperparameters
+
+See [Configuration](docs/configuration.md) for details.
 
 **Quick example:**
 ```bash
-# Use a different config file
-CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+# Use a different config file (use CONFIG_FILE environment variable)
+# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
+CONFIG_FILE=config_tiny_dataset.yaml intent-train
+# Or use the script directly:
+CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
 ```
+
+**To enable/disable models**: Edit `config/models_config.yaml` and set `enabled: true/false` for each model.
 
 ## 🎯 Hyperparameter Tuning
 
@@ -214,17 +242,20 @@ Hyperparameter tuning is integrated into the pipeline:
 
 ```bash
 # Run pipeline with tuning
+intent-train --tune
+# Or use the script directly:
 python scripts/pipeline/run_all.py --tune
 
 # Or tune separately
-python scripts/tune_hyperparams.py --config config/config.yaml --all
+# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
+CONFIG_FILE=config.yaml python scripts/tune_hyperparams.py --all
 ```
 
 Tuned hyperparameters are automatically used during training. See [Hyperparameter Tuning](docs/hyperparameter_tuning.md) for details.
 
 ## 📊 Performance
 
-See [Performance](docs/performance.md) for detailed metrics and scaling guidance, including CPU-only runtimes and memory usage. Most of the pipeline runs comfortably on CPU; GPU is only required for the heaviest transformer-based models.
+Performance metrics, resource requirements, and scaling guidance are provided below. Most of the pipeline runs comfortably on CPU; GPU is only required for the heaviest transformer-based models.
 
 ### CLINC150 (100-class subset) benchmark
 
@@ -251,7 +282,7 @@ Published CLINC150 baselines on the full 150-intent dataset typically report tra
 
 ## 🛠️ Development
 
-See [Development](docs/development.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and contributing guidelines.
+See [Development](docs/development.md) for development setup, code style, and contributing guidelines.
 
 **Quick setup:**
 ```bash
@@ -307,5 +338,4 @@ uv run ruff check intent_classifier/ scripts/
 - [Hyperparameter Tuning](docs/hyperparameter_tuning.md)
 - [Model Architecture](docs/model_architecture.md)
 - [LLM Providers](docs/llm_providers.md)
-- [Performance Guide](docs/performance.md)
 - [Development Guide](docs/development.md)

@@ -63,11 +63,8 @@ async def rate_limit_middleware(request: Request, call_next):
     if request.url.path in ["/health", "/ready", "/metrics"]:
         return await call_next(request)
 
-    # Get client identifier (IP address or API key)
+    # Get client identifier (IP address)
     client_id = request.client.host if request.client else "unknown"
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
-        client_id = f"api_key:{api_key}"
 
     # Clean old entries
     now = datetime.now()
@@ -92,30 +89,6 @@ async def rate_limit_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response
-
-
-# API Key authentication (optional)
-API_KEY = os.getenv("API_KEY")  # Set API_KEY env var to enable auth
-
-
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    """API key authentication middleware."""
-    # Skip auth for health/ready/metrics/docs endpoints
-    if request.url.path in ["/health", "/ready", "/metrics", "/docs", "/redoc", "/openapi.json"]:
-        return await call_next(request)
-
-    if API_KEY:
-        api_key = request.headers.get("X-API-Key") or request.headers.get(
-            "Authorization", ""
-        ).replace("Bearer ", "")
-        if api_key != API_KEY:
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Invalid or missing API key"},
-            )
-
-    return await call_next(request)
 
 
 # Prometheus metrics (if available)
@@ -187,8 +160,69 @@ class ReadyResponse(BaseModel):
 # Maximum number of models to keep in cache (default: 10)
 MAX_CACHE_SIZE = int(os.getenv("MODEL_CACHE_SIZE", "10"))
 _model_cache: OrderedDict[str, Any] = OrderedDict()
-MODELS_DIR = get_models_dir()
-EMBEDDINGS_DIR = get_embeddings_dir()
+
+
+# Determine experiment name from config or environment variable
+def _get_experiment_name() -> Optional[str]:
+    """Get experiment name from CONFIG_FILE or EXPERIMENT_NAME env var."""
+    experiment_name = os.getenv("EXPERIMENT_NAME")
+    if experiment_name:
+        return experiment_name
+
+    # Try to read from config file
+    config_file = os.getenv("CONFIG_FILE")
+    if not config_file:
+        return None
+
+    try:
+        import yaml
+
+        from intent_classifier.utils.paths import get_repo_root
+
+        repo_root = get_repo_root()
+        # Handle both "config_tiny_dataset.yaml" and "config/config_tiny_dataset.yaml"
+        if config_file.startswith("config/"):
+            config_path = repo_root / config_file
+        else:
+            config_path = repo_root / "config" / config_file
+
+        if not config_path.exists():
+            logger.warning(
+                f"Config file not found: {config_path}. "
+                f"Using default models directory. "
+                f"Set EXPERIMENT_NAME or ensure CONFIG_FILE points to a valid config file."
+            )
+            return None
+
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+            run_name = config.get("general", {}).get("run_name")
+            if run_name:
+                logger.info(f"Loaded experiment name '{run_name}' from config file: {config_path}")
+            else:
+                logger.warning(
+                    f"Config file {config_path} does not contain 'general.run_name'. "
+                    f"Using default models directory."
+                )
+            return run_name
+    except Exception as e:
+        logger.warning(
+            f"Failed to read config file '{config_file}': {e}. "
+            f"Using default models directory. "
+            f"Set EXPERIMENT_NAME or ensure CONFIG_FILE points to a valid config file."
+        )
+        return None
+
+
+# Get models and embeddings directories
+# If EXPERIMENT_NAME or CONFIG_FILE is set, use that experiment's directory
+# Otherwise, default to root models/ directory
+experiment_name = _get_experiment_name()
+MODELS_DIR = get_models_dir(experiment_name) if experiment_name else get_models_dir()
+EMBEDDINGS_DIR = get_embeddings_dir(experiment_name) if experiment_name else get_embeddings_dir()
+
+logger.info(f"Using models directory: {MODELS_DIR}")
+logger.info(f"Using embeddings directory: {EMBEDDINGS_DIR}")
 
 # Model info mapping
 MODELS_INFO = {
@@ -462,7 +496,6 @@ def cli():
     logger.info(f"Starting API server on {args.host}:{args.port}")
     logger.info(f"CORS origins: {CORS_ORIGINS}")
     logger.info(f"Rate limit: {RATE_LIMIT_REQUESTS} requests per {RATE_LIMIT_WINDOW}s")
-    logger.info(f"API key auth: {'enabled' if API_KEY else 'disabled'}")
 
     uvicorn.run(
         app,
