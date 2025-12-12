@@ -10,7 +10,7 @@ import os
 import sys
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Add project root to path
 project_root = get_repo_root()
@@ -20,7 +20,7 @@ from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.rag.rag_llm import RagLLM  # noqa: E402
 
 
-def run_predictions(model_name: str, use_openai: bool = False, test_docs: list = None):
+def run_predictions(model_name: str, use_openai: bool = False, test_docs: list | None = None):
     """Test predictions with a specific model configuration.
 
     Args:
@@ -28,9 +28,9 @@ def run_predictions(model_name: str, use_openai: bool = False, test_docs: list =
         use_openai: Whether to use OpenAI embeddings
         test_docs: List of test documents to classify
     """
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"Testing {model_name}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print("Configuration:")
     print(f"  - Model: {model_name}")
     print(f"  - Use OpenAI embeddings: {use_openai}")
@@ -161,9 +161,9 @@ def main():
             print(f"  {i}. {doc_preview}")
             print(f"     True: {true_label}")
             if ollama_success:
-                print(f"     Ollama: {ollama_preds[i-1]}")
+                print(f"     Ollama: {ollama_preds[i - 1]}")
             if openai_success:
-                print(f"     OpenAI: {openai_preds[i-1]}")
+                print(f"     OpenAI: {openai_preds[i - 1]}")
             print()
 
     print("=" * 70)

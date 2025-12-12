@@ -7,8 +7,9 @@ produces comprehensive, publication‑quality reports and visualisations.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Sequence
+from typing import Any, Literal
 
 import dataframe_image as dfi
 
@@ -87,11 +88,11 @@ def save_metric_table(
     title: str,
     *,
     number_format: str = "{:.3f}",
-    highlight: Optional[Literal["row", "col"]] = "col",
+    highlight: Literal["row", "col"] | None = "col",
     highlight_mode: Literal["max", "min"] = "max",
     highlight_abs: bool = False,
     highlight_color: str = _HIGHLIGHT_COLOR,
-    **kwargs,
+    **kwargs: Any,
 ) -> None:
     """Render *df* as a high‑resolution PNG using **dataframe_image**.
 
@@ -163,7 +164,7 @@ def analyze_rag_documents(
         logger.warning("Missing RAG document or query information – skipping.")
         return
 
-    analysis_results: List[Dict[str, Any]] = []
+    analysis_results: list[dict[str, Any]] = []
     for idx, row in predictions_df.iterrows():
         query, docs = row["query"], row["retrieved_docs"]
         for pos, doc in enumerate(docs[:top_n], start=1):
@@ -190,12 +191,12 @@ def analyze_rag_documents(
 
 
 def run_evaluations(
-    model_names: List[str] | Dict[str, Any] | None,
+    model_names: list[str] | dict[str, Any] | None,
     *,
     artefacts_root: str | Path = "artefacts",
     output_dir: str | Path = "results",
     verbose: bool = True,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Compute metrics from persisted predictions and render rich reports.
 
     This function automatically detects whether the task is single-label or multi-label
@@ -211,6 +212,7 @@ def run_evaluations(
     Returns:
         Dictionary mapping model names to their metrics
     """
+    from intent_classifier.evaluation.base import BaseEvaluationRunner
     from intent_classifier.evaluation.multilabel import MultiLabelEvaluationRunner
     from intent_classifier.evaluation.singlelabel import SingleLabelEvaluationRunner
 
@@ -256,6 +258,7 @@ def run_evaluations(
                 break
 
     # Select appropriate runner based on label type
+    runner: BaseEvaluationRunner
     if is_multi_format:
         runner = MultiLabelEvaluationRunner(verbose=verbose)
     else:
@@ -275,8 +278,8 @@ def run_evaluations(
 
 
 def display_detailed_results(
-    results: Dict[str, Dict[str, Any]],
-    model_order: Optional[List[str]] = None,
+    results: dict[str, dict[str, Any]],
+    model_order: list[str] | None = None,
     output_dir: str | Path = "results",
 ) -> None:
     """Convenience helper to pretty‑print and persist the key result tables."""

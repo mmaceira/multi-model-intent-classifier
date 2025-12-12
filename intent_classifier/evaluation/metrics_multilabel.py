@@ -7,8 +7,9 @@ accuracy, Hamming loss, Jaccard similarity, precision, recall, and F1 scores.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -33,7 +34,7 @@ def compute_multilabel_metrics(
     split_name: str,
     output_dir: Path,
     logger: Any,
-) -> Dict[str, float] | None:
+) -> dict[str, float] | None:
     """Compute comprehensive multi-label classification metrics.
 
     This function computes all main multi-label metrics:
@@ -114,7 +115,7 @@ def _compute_aggregated_metrics(
     y_true_binary: np.ndarray,
     y_pred_binary: np.ndarray,
     split_name: str,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute aggregated multi-label metrics.
 
     Parameters
@@ -181,8 +182,8 @@ def _compute_aggregated_metrics(
 def _compute_per_label_metrics(
     y_true_binary: np.ndarray,
     y_pred_binary: np.ndarray,
-    all_classes: List[str],
-) -> List[Dict[str, Any]]:
+    all_classes: list[str],
+) -> list[dict[str, Any]]:
     """Compute per-label metrics (precision, recall, F1 per class).
 
     Parameters
@@ -227,7 +228,7 @@ def _compute_per_label_metrics(
     return per_label_metrics
 
 
-def get_multilabel_overfitting_metrics() -> List[str]:
+def get_multilabel_overfitting_metrics() -> list[str]:
     """Get list of metrics to use for overfitting analysis in multi-label tasks.
 
     Returns
@@ -247,7 +248,7 @@ def get_multilabel_overfitting_metrics() -> List[str]:
     ]
 
 
-def get_multilabel_summary_metrics() -> List[str]:
+def get_multilabel_summary_metrics() -> list[str]:
     """Get list of metrics to include in summary tables for multi-label tasks.
 
     Returns
@@ -267,7 +268,7 @@ def get_multilabel_summary_metrics() -> List[str]:
     ]
 
 
-def _get_multilabel_metric_descriptions() -> Dict[str, str]:
+def _get_multilabel_metric_descriptions() -> dict[str, str]:
     """Get descriptions for multi-label classification metrics.
 
     Returns
@@ -276,22 +277,62 @@ def _get_multilabel_metric_descriptions() -> Dict[str, str]:
         Dictionary mapping metric names to their descriptions.
     """
     return {
-        "accuracy": "Subset Accuracy (Exact Match Ratio): Proportion of samples where all predicted labels match exactly with the true labels. Strict metric: all labels must be correct.",
-        "hamming_loss": "Hamming Loss: Average proportion of incorrect labels per sample. Counts errors per label. Lower values are better (0 = perfect, 1 = worst).",
-        "jaccard_samples": "Jaccard Similarity (per sample): Average of intersection over union of labels for each sample. Measures similarity between predicted and true label sets.",
-        "jaccard_macro": "Jaccard Similarity (macro): Unweighted mean of Jaccard similarity per class. Treats all classes equally, regardless of frequency.",
-        "jaccard_weighted": "Jaccard Similarity (weighted): Weighted mean by the frequency of each class. More frequent classes have more weight.",
-        "precision_macro": "Precision (macro): Unweighted mean of precision per class. Proportion of correct positive predictions per class, arithmetic mean.",
-        "precision_micro": "Precision (micro): Precisions aggregated at global level. Counts all true positives, false positives and calculates global precision.",
-        "recall_macro": "Recall (macro): Unweighted mean of recall per class. Proportion of actual cases detected per class, arithmetic mean.",
-        "recall_micro": "Recall (micro): Recalls aggregated at global level. Counts all true positives, false negatives and calculates global recall.",
-        "macro_f1": "F1-Score (macro): Unweighted harmonic mean of precision and recall per class. Balances precision and recall, treating all classes equally.",
-        "micro_f1": "F1-Score (micro): F1 aggregated at global level. Equivalent to micro precision/recall when they are equal. Better for imbalanced datasets.",
+        "accuracy": (
+            "Subset Accuracy (Exact Match Ratio): Proportion of samples where "
+            "all predicted labels match exactly with the true labels. Strict "
+            "metric: all labels must be correct."
+        ),
+        "hamming_loss": (
+            "Hamming Loss: Average proportion of incorrect labels per sample. "
+            "Counts errors per label. Lower values are better (0 = perfect, "
+            "1 = worst)."
+        ),
+        "jaccard_samples": (
+            "Jaccard Similarity (per sample): Average of intersection over "
+            "union of labels for each sample. Measures similarity between "
+            "predicted and true label sets."
+        ),
+        "jaccard_macro": (
+            "Jaccard Similarity (macro): Unweighted mean of Jaccard similarity "
+            "per class. Treats all classes equally, regardless of frequency."
+        ),
+        "jaccard_weighted": (
+            "Jaccard Similarity (weighted): Weighted mean by the frequency of "
+            "each class. More frequent classes have more weight."
+        ),
+        "precision_macro": (
+            "Precision (macro): Unweighted mean of precision per class. "
+            "Proportion of correct positive predictions per class, arithmetic "
+            "mean."
+        ),
+        "precision_micro": (
+            "Precision (micro): Precisions aggregated at global level. Counts "
+            "all true positives, false positives and calculates global "
+            "precision."
+        ),
+        "recall_macro": (
+            "Recall (macro): Unweighted mean of recall per class. Proportion "
+            "of actual cases detected per class, arithmetic mean."
+        ),
+        "recall_micro": (
+            "Recall (micro): Recalls aggregated at global level. Counts all "
+            "true positives, false negatives and calculates global recall."
+        ),
+        "macro_f1": (
+            "F1-Score (macro): Unweighted harmonic mean of precision and "
+            "recall per class. Balances precision and recall, treating all "
+            "classes equally."
+        ),
+        "micro_f1": (
+            "F1-Score (micro): F1 aggregated at global level. Equivalent to "
+            "micro precision/recall when they are equal. Better for imbalanced "
+            "datasets."
+        ),
     }
 
 
 def _save_and_print_metric_descriptions(
-    descriptions: Dict[str, str],
+    descriptions: dict[str, str],
     split_name: str,
     output_dir: Path,
     logger: Any,

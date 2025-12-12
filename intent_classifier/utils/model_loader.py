@@ -7,8 +7,9 @@ Model instantiation is handled by model_factory.py to separate loading from crea
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+import numpy as np
 import yaml
 
 from intent_classifier.utils.model_registry import discover_and_register_models
@@ -18,13 +19,14 @@ logger = logging.getLogger(__name__)
 
 # Import all algorithm classes to trigger their @register_model decorators
 # This ensures models are registered when this module is imported
-from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg  # noqa: F401
-from intent_classifier.algorithms.linear_svm import (  # noqa: F401
+# These imports must stay here (after logger setup) to trigger registration
+from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg  # noqa: F401, E402
+from intent_classifier.algorithms.linear_svm import (  # noqa: F401, E402
     LinearSVMBigrams,
     LinearSVMClassifier,
 )
-from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier  # noqa: F401
-from intent_classifier.algorithms.transformer_logreg import TransformerLogReg  # noqa: F401
+from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier  # noqa: F401, E402
+from intent_classifier.algorithms.transformer_logreg import TransformerLogReg  # noqa: F401, E402
 
 # Auto-discover and register any additional models from algorithms package
 # (This is a fallback for models that might not be explicitly imported above)
@@ -36,9 +38,9 @@ from intent_classifier.utils.config_loader import process_config_vars  # noqa: E
 
 
 def load_tuned_hyperparameters(
-    hyperparams_path: Optional[str] = None,
-    config_name: Optional[str] = None,
-) -> Dict[str, Dict[str, Any]]:
+    hyperparams_path: str | None = None,
+    config_name: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Load tuned hyperparameters from individual model files.
 
     Each model has its own file: best_{model_name}.yaml
@@ -99,7 +101,7 @@ def load_tuned_hyperparameters(
     for file_path in hyperparams_dir.glob(pattern):
         try:
             model_name = file_path.stem.replace("best_", "")  # Remove "best_" prefix
-            with open(file_path) as f:
+            with open(file_path, encoding="utf-8") as f:
                 params = yaml.safe_load(f)
             if params:  # Only add if file has content
                 hyperparams[model_name] = params
@@ -122,15 +124,16 @@ def load_tuned_hyperparameters(
 def load_models_from_config(
     models_config_path: str = "config/algorithm/models_config.yaml",
     main_config_path: str | None = None,
-    hyperparams_path: Optional[str] = None,
-    config_name: Optional[str] = None,
-) -> Dict[str, Any]:
+    hyperparams_path: str | None = None,
+    config_name: str | None = None,
+) -> dict[str, Any]:
     """Load and instantiate models based on configuration.
 
     Args:
         models_config_path: Path to the models configuration file
-        main_config_path: Path to the main configuration file for variable substitution.
-                         If None, tries to discover from CONFIG_FILE env var or first available dataset.
+        main_config_path: Path to the main configuration file for variable
+                         substitution. If None, tries to discover from CONFIG_FILE
+                         env var or first available dataset.
         hyperparams_path: Path to tuned hyperparameters file. If None, hyperparameter tuning
                          results are not loaded. If file doesn't exist, defaults are used.
 
@@ -143,21 +146,22 @@ def load_models_from_config(
     repo_root = get_repo_root()
     from intent_classifier.utils.paths import get_config_path
 
-    models_config_path = repo_root / models_config_path
+    models_config_path_obj = repo_root / models_config_path
 
     # Handle main_config_path discovery if not provided
+    main_config_path_obj: Path
     if main_config_path is None:
         # Use centralized config discovery
         from intent_classifier.utils.config_loader import discover_config_file
 
         config_file = discover_config_file()
-        main_config_path = get_config_path(config_file)
+        main_config_path_obj = get_config_path(config_file)
     else:
         # Use get_config_path to handle paths that already start with "config/"
-        main_config_path = get_config_path(main_config_path)
+        main_config_path_obj = get_config_path(main_config_path)
 
     # Load configurations
-    with open(models_config_path) as f:
+    with open(models_config_path_obj, encoding="utf-8") as f:
         models_config = yaml.safe_load(f)
 
     # Convert main_config_path (absolute Path from get_config_path) to relative string
@@ -169,7 +173,7 @@ def load_models_from_config(
     )
 
     # Use centralized helper to convert Path to config file string format
-    config_file_str = path_to_config_file_str(main_config_path)
+    config_file_str = path_to_config_file_str(main_config_path_obj)
 
     # Load main config using centralized loader to get merged LLM config
     # We disable variable substitution here and apply it later with process_config_vars
@@ -250,8 +254,8 @@ def load_models_from_config(
 
 def load_persisted_model(
     model_identifier: str,
-    models_dir: Optional[Path] = None,
-    embeddings_dir: Optional[Path] = None,
+    models_dir: Path | None = None,
+    embeddings_dir: Path | None = None,
 ) -> Any:
     """Load a persisted model from disk (for API/inference use).
 
@@ -376,7 +380,7 @@ def load_persisted_model(
         # Load passages from meta.jsonl
         passages = []
         if meta_path.exists():
-            with open(meta_path, "r") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 for line in f:
                     try:
                         meta = json.loads(line)
@@ -392,7 +396,7 @@ def load_persisted_model(
                 if model_path.suffix == ".pkl":
                     import cloudpickle
 
-                    with open(model_path, "rb") as f:
+                    with open(str(model_path), "rb") as f:  # type: ignore[assignment]
                         classifier_obj = cloudpickle.load(f)
                 else:
                     classifier_obj = joblib.load(model_path)
@@ -413,7 +417,8 @@ def load_persisted_model(
                             api_key = os.getenv("OPENAI_API_KEY")
                             if not api_key:
                                 raise ValueError(
-                                    "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+                                    "OPENAI_API_KEY environment variable must be set "
+                                    "for OpenAI embeddings"
                                 )
                             embedder = EmbeddingGenerator(
                                 api_key=api_key, model="text-embedding-3-small", batch_size=50
@@ -426,7 +431,7 @@ def load_persisted_model(
                             )
                         else:
 
-                            def embedder(texts):
+                            def embedder(texts: list[str]) -> np.ndarray:  # type: ignore[misc]
                                 return VectorStore.embed(
                                     "sentence-transformers/all-MiniLM-L6-v2", texts
                                 )
@@ -451,7 +456,7 @@ def load_persisted_model(
         if model_path.suffix == ".pkl":
             import cloudpickle
 
-            with open(model_path, "rb") as f:
+            with open(str(model_path), "rb") as f:  # type: ignore[assignment]
                 artefact = cloudpickle.load(f)
         else:
             artefact = joblib.load(model_path)
@@ -459,7 +464,7 @@ def load_persisted_model(
         # Fallback to cloudpickle
         import cloudpickle
 
-        with open(model_path, "rb") as f:
+        with open(str(model_path), "rb") as f:  # type: ignore[assignment]
             artefact = cloudpickle.load(f)
 
     # Wrap with vectorizer if needed
@@ -474,7 +479,7 @@ def load_persisted_model(
                 if vec_path.suffix == ".pkl":
                     import cloudpickle
 
-                    with open(vec_path, "rb") as f:
+                    with open(str(vec_path), "rb") as f:  # type: ignore[assignment]
                         vectorizer = cloudpickle.load(f)
                 else:
                     vectorizer = joblib.load(vec_path)

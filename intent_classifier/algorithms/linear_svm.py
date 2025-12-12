@@ -25,7 +25,6 @@ from intent_classifier.utils.model_registry import register_model
 
 @register_model("LinearSVMClassifier")
 class LinearSVMClassifier(TextClassifier):
-    _expects_vectors = False
     """TF-IDF + Linear SVM classifier.
 
     This class implements a text classifier using TF-IDF features and
@@ -41,6 +40,8 @@ class LinearSVMClassifier(TextClassifier):
         >>> clf.fit(X_train, y_train)
         >>> y_pred = clf.predict(X_test)
     """
+
+    _expects_vectors = False
 
     def __init__(
         self,
@@ -191,7 +192,6 @@ class LinearSVMClassifier(TextClassifier):
 
 @register_model("LinearSVMBigrams")
 class LinearSVMBigrams(TextClassifier):
-    _expects_vectors = False
     """TF-IDF with bigrams + Linear SVM classifier.
 
     This class extends the basic LinearSVMClassifier by using both
@@ -207,6 +207,8 @@ class LinearSVMBigrams(TextClassifier):
         >>> clf.fit(X_train, y_train)
         >>> y_pred = clf.predict(X_test)
     """
+
+    _expects_vectors = False
 
     def __init__(
         self,

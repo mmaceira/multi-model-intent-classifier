@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -29,25 +29,26 @@ class BaseEvaluationRunner(ABC):
         self.logger = setup_logging(verbose)
 
     @abstractmethod
-    def parse_labels_from_csv(self, labels: pd.Series) -> List[Any]:
+    def parse_labels_from_csv(self, labels: pd.Series) -> list[Any]:
         """Parse labels from CSV format (comma-separated strings) to native format.
 
         Args:
             labels: Series of labels from CSV (may be comma-separated strings)
 
         Returns:
-            List of labels in native format (list of strings for multi-label, strings for single-label)
+            List of labels in native format (list of strings for multi-label,
+            strings for single-label)
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
     def compute_metrics(
         self,
-        y_true: List[Any],
-        y_pred: List[Any],
+        y_true: list[Any],
+        y_pred: list[Any],
         split_name: str,
         output_dir: Path,
-    ) -> Optional[Dict[str, float]]:
+    ) -> dict[str, float] | None:
         """Compute metrics for a split.
 
         Args:
@@ -59,25 +60,25 @@ class BaseEvaluationRunner(ABC):
         Returns:
             Dictionary of metric names to values, or None if computation failed
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
-    def get_overfitting_metrics(self) -> List[str]:
+    def get_overfitting_metrics(self) -> list[str]:
         """Get list of metrics to use for overfitting analysis.
 
         Returns:
             List of metric names (without 'train_' or 'test_' prefix)
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
-    def get_summary_metrics(self) -> List[str]:
+    def get_summary_metrics(self) -> list[str]:
         """Get list of metrics to include in summary tables.
 
         Returns:
             List of metric names (without 'test_' prefix)
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
     def should_generate_visualizations(self) -> bool:
@@ -86,15 +87,15 @@ class BaseEvaluationRunner(ABC):
         Returns:
             True if visualizations should be generated, False otherwise
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     def run_evaluations(
         self,
-        model_names: List[str] | Dict[str, Any] | None,
+        model_names: list[str] | dict[str, Any] | None,
         *,
         artefacts_root: str | Path = "artefacts",
         output_dir: str | Path = "results",
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """Compute metrics from persisted predictions and render rich reports.
 
         Args:
@@ -106,7 +107,7 @@ class BaseEvaluationRunner(ABC):
         Returns:
             Dictionary mapping model names to their metrics
         """
-        results: Dict[str, Dict[str, Any]] = {}
+        results: dict[str, dict[str, Any]] = {}
         artefacts_root, output_dir = Path(artefacts_root), ensure_dir(output_dir)
 
         predictions_dict = load_all_prediction_files(artefacts_root)
@@ -121,7 +122,7 @@ class BaseEvaluationRunner(ABC):
 
         # Extract classes from test set
         test_df = predictions_dict[first_model]["test"]
-        classes = self._extract_classes(test_df)
+        self._extract_classes(test_df)
 
         # If model_names is None or empty, use all models that have predictions
         if not model_names:
@@ -138,7 +139,7 @@ class BaseEvaluationRunner(ABC):
             model_out_dir = ensure_dir(output_dir / name)
             self.logger.info("Processing model %s", name)
 
-            model_results: Dict[str, float] = {}
+            model_results: dict[str, float] = {}
             for split_name, df in model_predictions.items():
                 split_out_dir = ensure_dir(model_out_dir / split_name)
                 y_true_raw, y_pred_raw = df["y_true"].values, df["y_pred"].values
@@ -172,9 +173,9 @@ class BaseEvaluationRunner(ABC):
                     self._generate_error_analysis(df, split_out_dir)
 
             # Overfitting indicators
-            if {"train", "test"}.issubset(model_predictions):
-                metrics = self.get_overfitting_metrics()
-                for metric in metrics:
+            if {"train", "test"}.issubset(set(model_predictions.keys())):
+                overfitting_metrics = self.get_overfitting_metrics()
+                for metric in overfitting_metrics:
                     train_val = model_results.get(f"train_{metric}")
                     test_val = model_results.get(f"test_{metric}")
                     if train_val is not None and test_val is not None:
@@ -187,7 +188,7 @@ class BaseEvaluationRunner(ABC):
 
         return results
 
-    def _extract_classes(self, test_df: pd.DataFrame) -> List[str]:
+    def _extract_classes(self, test_df: pd.DataFrame) -> list[str]:
         """Extract unique classes from test DataFrame.
 
         Args:
@@ -269,10 +270,10 @@ class BaseEvaluationRunner(ABC):
 
     def _generate_summary(
         self,
-        results: Dict[str, Dict[str, Any]],
-        predictions_dict: Dict[str, Dict[str, pd.DataFrame]],
+        results: dict[str, dict[str, Any]],
+        predictions_dict: dict[str, dict[str, pd.DataFrame]],
         output_dir: Path,
-        model_names: List[str],
+        model_names: list[str],
     ) -> None:
         """Generate summary tables and cross-model visualizations.
 

@@ -7,7 +7,7 @@ The factory uses the model registry to create instances dynamically based on cla
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from intent_classifier.rag import load_centroid, load_kmajority, load_llm
 from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
@@ -20,7 +20,7 @@ from intent_classifier.utils.model_registry import (
 logger = logging.getLogger(__name__)
 
 
-def create_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
+def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
     """Create a RAG model instance based on configuration parameters.
 
     Args:
@@ -78,7 +78,7 @@ def create_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
     raise ValueError(f"Unknown RAG method: {method}")
 
 
-def create_model_instance(class_name: str, params: Dict[str, Any], display_name: str) -> Any:
+def create_model_instance(class_name: str, params: dict[str, Any], display_name: str) -> Any:
     """Create a model instance from class name and parameters.
 
     Args:
@@ -112,10 +112,10 @@ def create_model_instance(class_name: str, params: Dict[str, Any], display_name:
 
 
 def create_models_from_config(
-    models_config: Dict[str, Any],
-    tuned_hyperparams: Dict[str, Dict[str, Any]],
-    model_id_to_hyperparam_key: Dict[str, str] | None = None,
-) -> Dict[str, Any]:
+    models_config: dict[str, Any],
+    tuned_hyperparams: dict[str, dict[str, Any]],
+    model_id_to_hyperparam_key: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Create model instances from loaded configuration.
 
     This function handles the instantiation logic after configuration has been loaded.

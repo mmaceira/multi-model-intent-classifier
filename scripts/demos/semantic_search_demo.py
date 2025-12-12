@@ -53,8 +53,8 @@ def substitute_vars(value: str, cfg: dict) -> str:
 
 
 # Resolve paths from config
-embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
-embeddings_path = project_root / embeddings_path
+embeddings_path_str = substitute_vars(config["paths"]["embeddings_dir"], config)
+embeddings_path = project_root / embeddings_path_str
 
 # Default paths
 DEFAULT_INDEX_PATH = str(embeddings_path / "sbert" / "index.faiss")
@@ -69,7 +69,7 @@ def load_index_and_meta(index_path: str, meta_path: str):
     try:
         index = faiss.read_index(index_path)
         meta = []
-        with open(meta_path, "r") as f:
+        with open(meta_path) as f:
             for line in f:
                 meta.append(json.loads(line))
         return index, meta
@@ -114,7 +114,7 @@ def search_similar_documents(
 
         return "\n\n".join(output)
     except Exception as e:
-        return f"Error during search: {str(e)}"
+        return f"Error during search: {e!s}"
 
 
 def create_demo():

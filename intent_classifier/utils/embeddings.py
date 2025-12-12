@@ -9,7 +9,7 @@ Classes:
 """
 
 import logging
-from typing import List
+from typing import Any
 
 import numpy as np
 from openai import OpenAI
@@ -79,7 +79,7 @@ class EmbeddingGenerator:
         self.max_retries = max_retries
 
     @with_retry(max_retries=3, initial_delay=1.0, max_delay=10.0, backoff_factor=2.0, logger=logger)
-    def _get_embeddings_batch(self, texts: List[str]) -> np.ndarray:
+    def _get_embeddings_batch(self, texts: list[str]) -> np.ndarray:
         """Get embeddings for a batch of texts.
 
         This method processes a single batch of texts through the OpenAI
@@ -129,11 +129,11 @@ class EmbeddingGenerator:
             response = self.client.embeddings.create(model=self.model, input=cleaned_texts)
             return np.array([data.embedding for data in response.data])
         except Exception as e:
-            logger.error(f"Error in _get_embeddings_batch: {str(e)}")
+            logger.error(f"Error in _get_embeddings_batch: {e!s}")
             logger.error(f"Input texts: {cleaned_texts}")
             raise
 
-    def generate_embeddings(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
+    def generate_embeddings(self, texts: list[str], show_progress: bool = True) -> np.ndarray:
         """Generate embeddings for a list of texts.
 
         This method processes a list of texts in batches, generating
@@ -182,12 +182,12 @@ class EmbeddingGenerator:
                     logger.info(f"Processed batch {current_batch}/{total_batches}")
 
             except Exception as e:
-                logger.error(f"Error processing batch: {str(e)}")
+                logger.error(f"Error processing batch: {e!s}")
                 raise
 
         return np.array(embeddings)
 
-    def encode(self, texts: List[str], **kwargs) -> np.ndarray:
+    def encode(self, texts: list[str], **kwargs: Any) -> np.ndarray:
         """Alias for generate_embeddings for compatibility with SentenceTransformer API.
 
         This method provides compatibility with code that expects a .encode() method

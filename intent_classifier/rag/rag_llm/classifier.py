@@ -12,8 +12,9 @@ import logging
 import os
 import re
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -94,13 +95,13 @@ class Retriever:
     def __init__(self, examples: Sequence[Example]):
         if not examples:
             raise ValueError("Retriever needs at least one training example.")
-        self.examples: List[Example] = list(examples)
+        self.examples: list[Example] = list(examples)
         self.vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=1)
         self.matrix = self.vectorizer.fit_transform([ex.text for ex in self.examples])
 
     def select_topk_with_min_labels(
         self, query: str, k: int, m: int
-    ) -> List[Tuple[Example, float]]:
+    ) -> list[tuple[Example, float]]:
         """Return top-k most similar examples but keep scanning until >= m labels."""
         if k <= 0:
             raise ValueError("k must be positive.")
@@ -111,7 +112,7 @@ class Retriever:
         scores = (self.matrix @ q_vec.T).toarray().ravel()
         order = np.argsort(-scores)
 
-        selected: List[Tuple[Example, float]] = []
+        selected: list[tuple[Example, float]] = []
         seen_labels: set[str] = set()
 
         for idx in order:
@@ -142,7 +143,7 @@ def _strip_code_fences(text: str) -> str:
     return stripped
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
+def _extract_json_object(text: str) -> dict[str, Any]:
     """Parse JSON object, falling back to first {...} fragment."""
     stripped = _strip_code_fences(text)
     try:
@@ -170,7 +171,7 @@ def _normalize_endpoint(endpoint: str) -> str:
     return endpoint
 
 
-def _call_llm(messages: List[Dict[str, str]], model: str) -> str:
+def _call_llm(messages: list[dict[str, str]], model: str) -> str:
     """Send chat completion request (temperature fixed at 0)."""
     # Only use response_format for models that support it (OpenAI, Anthropic, etc.)
     # Ollama and some other providers don't support this parameter
@@ -222,7 +223,7 @@ def _normalize_label(label: str) -> str:
     return normalized
 
 
-def _is_multilabel_mode(allowed_labels: List[str]) -> bool:
+def _is_multilabel_mode(allowed_labels: list[str]) -> bool:
     """Detect if we're in multilabel mode by checking if labels contain commas.
 
     Args:
@@ -234,7 +235,7 @@ def _is_multilabel_mode(allowed_labels: List[str]) -> bool:
     return any("," in label for label in allowed_labels)
 
 
-def _normalize_label_set(labels: List[str]) -> Dict[str, str]:
+def _normalize_label_set(labels: list[str]) -> dict[str, str]:
     """Create a mapping from normalized labels to original labels.
 
     Args:
@@ -271,20 +272,20 @@ def _load_prompt_template(prompt_style: str, prompt_type: str, is_multilabel: bo
 
     if not prompt_file.exists():
         raise FileNotFoundError(
-            f"Prompt template not found: {prompt_file}\n" f"Expected prompt files in: {prompts_dir}"
+            f"Prompt template not found: {prompt_file}\nExpected prompt files in: {prompts_dir}"
         )
 
     return prompt_file.read_text(encoding="utf-8").strip()
 
 
 def _build_prompts(
-    allowed_labels: List[str],
+    allowed_labels: list[str],
     defs_block: str,
     few_shots: str,
     query: str,
     is_multilabel: bool,
     prompt_style: str = "default",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Build system and user prompts based on style and multilabel mode.
 
     Loads prompts from template files and formats them with the provided values.
@@ -320,11 +321,11 @@ def classify_single(
     model: str,
     query: str,
     retriever: Retriever,
-    label_defs: Dict[str, str] | None = None,
+    label_defs: dict[str, str] | None = None,
     k: int = 10,
     m: int = 4,
     prompt_style: str = "default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Classify a single query via retrieval + constrained LLM JSON response.
 
     Supports both single-label and multi-label classification. Multi-label mode
@@ -385,8 +386,10 @@ def classify_single(
                 "You previously returned an invalid label.\n"
                 "Return ONLY a corrected JSON object with this schema:\n"
                 '{ "label": "<comma-separated labels>", "confidence": <number 0..1> }\n'
-                f"CRITICAL: The label MUST be EXACTLY one of these allowed labels: {allowed_labels}\n"
-                "Copy the label EXACTLY as it appears in the list above. Do not create new combinations.\n"
+                f"CRITICAL: The label MUST be EXACTLY one of these allowed labels: "
+                f"{allowed_labels}\n"
+                "Copy the label EXACTLY as it appears in the list above. "
+                "Do not create new combinations.\n"
                 "Use EXACT format: comma-separated, NO spaces (e.g., 'Alta,asseguranca').\n"
                 f"Bad output:\n{content}\n"
             )
@@ -406,9 +409,19 @@ def classify_single(
         parsed = _extract_json_object(repaired)
 
     label = parsed.get("label")
+    if label is None:
+        # Fallback to top retrieved label if parsing failed
+        top_label = retrieved[0][0].label
+        logger.warning("Failed to extract label from LLM response, using fallback")
+        return {
+            "label": top_label,
+            "confidence": 0.5,
+            "allowed_labels": allowed_labels,
+            "shots_used": len(retrieved),
+        }
 
     # Normalize the returned label for comparison
-    normalized_label = _normalize_label(label)
+    normalized_label = _normalize_label(str(label))
 
     # Check if normalized label matches any allowed label
     if normalized_label not in normalized_to_original:
@@ -419,7 +432,8 @@ def classify_single(
                 f"CRITICAL: The label MUST be EXACTLY one of these: {allowed_labels}\n"
                 "Return ONLY a corrected JSON object with this schema:\n"
                 '{ "label": "<exact label from allowed list>", "confidence": <number 0..1> }\n'
-                "Copy the label EXACTLY as it appears in the allowed list. Do not create new combinations.\n"
+                "Copy the label EXACTLY as it appears in the allowed list. "
+                "Do not create new combinations.\n"
             )
         else:
             repair_label_prompt = (
@@ -436,7 +450,9 @@ def classify_single(
             repaired_content = _call_llm(repair_label_messages, model=model)
             repaired_parsed = _extract_json_object(repaired_content)
             repaired_label = repaired_parsed.get("label")
-            repaired_normalized = _normalize_label(repaired_label)
+            if repaired_label is None:
+                raise ValueError("Repaired response missing label")
+            repaired_normalized = _normalize_label(str(repaired_label))
             if repaired_normalized in normalized_to_original:
                 # Repair succeeded
                 original_label = normalized_to_original[repaired_normalized]
@@ -447,7 +463,8 @@ def classify_single(
                 top_label = retrieved[0][0].label
                 logger.warning(
                     f"Invalid label '{label}' not in allowed set {allowed_labels}. "
-                    f"Repair attempt also failed. Using fallback label '{top_label}' from most similar retrieved example."
+                    f"Repair attempt also failed. Using fallback label '{top_label}' "
+                    f"from most similar retrieved example."
                 )
                 original_label = top_label
         except Exception as e:
@@ -455,7 +472,8 @@ def classify_single(
             top_label = retrieved[0][0].label
             logger.warning(
                 f"Invalid label '{label}' not in allowed set {allowed_labels}. "
-                f"Repair attempt failed: {e}. Using fallback label '{top_label}' from most similar retrieved example."
+                f"Repair attempt failed: {e}. Using fallback label '{top_label}' "
+                f"from most similar retrieved example."
             )
             original_label = top_label
     else:
@@ -480,7 +498,7 @@ def _load_examples(
     max_classes: int | None = None,
     dataset_name: str | None = None,
     use_oos: bool = False,
-) -> Tuple[List[Example], Dict[str, str]]:
+) -> tuple[list[Example], dict[str, str]]:
     """Load training data via existing dataset loader."""
     from intent_classifier.datasets.dataset import get_dataset
 
@@ -525,7 +543,7 @@ def _load_examples(
                 pass
 
     X_train, y_train, *_rest = get_dataset(
-        dataset_name=dataset_name,
+        dataset_name=dataset_name or "clinc150",
         use_oos=use_oos,
         max_train_samples=max_train_samples,
         max_classes=max_classes,
@@ -558,7 +576,7 @@ def _load_examples(
         for text, label in zip(X_train, y_train, strict=False)
     ]
 
-    label_defs: Dict[str, str] = {}
+    label_defs: dict[str, str] = {}
     for ex in examples:
         label_defs.setdefault(ex.label, ex.text[:160])
 
@@ -576,7 +594,7 @@ class RagLLM(RagClassifierBase):
         model: str = "ollama/llama3.1:8b",
         top_k: int = 10,
         min_labels: int = 4,
-        label_defs: Dict[str, str] | None = None,
+        label_defs: dict[str, str] | None = None,
         prompt_style: str = "default",
     ):
         super().__init__(labels)
@@ -598,7 +616,7 @@ class RagLLM(RagClassifierBase):
         min_labels: int = 4,
         prompt_style: str = "default",
         **kwargs: Any,
-    ) -> "RagLLM":
+    ) -> RagLLM:
         """Create a classifier with default configuration."""
         examples, label_defs = _load_examples()
         retriever = Retriever(examples)
@@ -614,11 +632,11 @@ class RagLLM(RagClassifierBase):
             prompt_style=prompt_style,
         )
 
-    @log_method
-    def predict(self, docs: Sequence[str], **kwargs: Any) -> List[str]:
+    @log_method()
+    def predict(self, docs: Sequence[str], **kwargs: Any) -> list[str]:
         """Classify multiple documents."""
         method_logger = get_method_logger()
-        results: List[str] = []
+        results: list[str] = []
 
         # Log model call start (only for batches)
         if len(docs) > 1:
@@ -676,7 +694,7 @@ class RagLLM(RagClassifierBase):
 
         return results
 
-    @log_method
+    @log_method()
     def predict_proba(self, docs: Sequence[str], **kwargs: Any) -> np.ndarray:
         """Generate probability estimates for each class using retrieved label counts."""
         sorted_labels = sorted(self.labels)
@@ -703,7 +721,7 @@ class RagLLM(RagClassifierBase):
                     doc, k=self.top_k, m=self.min_labels
                 )
 
-                label_counts: Dict[str, int] = {}
+                label_counts: dict[str, int] = {}
                 for ex, _ in retrieved:
                     label = ex.label
                     label_counts[label] = label_counts.get(label, 0) + 1

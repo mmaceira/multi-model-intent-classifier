@@ -49,8 +49,9 @@ import json
 import logging
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any
 
 import faiss
 import numpy as np
@@ -75,11 +76,16 @@ class VectorStore:
 
     Attributes:
         index (faiss.Index): FAISS index for vector storage
-        embedder (EmbeddingGenerator): Embedding generator instance
+        embedder (EmbeddingGenerator | None): Embedding generator instance
         vectors (Dict[str, np.ndarray]): Document embeddings cache
         metadata (Dict[str, Dict]): Document metadata cache
         _meta (List[Dict]): Legacy metadata format for backward compatibility
     """
+
+    embedder: EmbeddingGenerator | None
+    vectors: dict[str, np.ndarray]
+    metadata: dict[str, dict[str, Any]]
+    _meta: list[dict[str, Any]]
 
     def __init__(self, *args, **kwargs) -> None:
         """
@@ -111,7 +117,7 @@ class VectorStore:
 
             # Load metadata
             self._meta = []
-            with open(meta_path, "r") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 for line in f:
                     self._meta.append(json.loads(line))
 
@@ -123,7 +129,7 @@ class VectorStore:
                 # Initialize OpenAI embedder for search functionality
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                    raise OSError("OPENAI_API_KEY not set in environment")
                 self.embedder = EmbeddingGenerator(
                     api_key=api_key, model="text-embedding-3-small", batch_size=100, max_retries=3
                 )
@@ -144,7 +150,7 @@ class VectorStore:
             if not api_key:
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                    raise OSError("OPENAI_API_KEY not set in environment")
 
             self.embedder = EmbeddingGenerator(
                 api_key=api_key,
@@ -157,7 +163,7 @@ class VectorStore:
             self._meta = []
 
     @property
-    def meta(self) -> List[Dict[str, Any]]:
+    def meta(self) -> list[dict[str, Any]]:
         """
         Return metadata in the old format for backward compatibility.
 
@@ -176,7 +182,7 @@ class VectorStore:
         ]
 
     def add_documents(
-        self, documents: List[str], metadata: Optional[List[Dict[str, Any]]] = None
+        self, documents: list[str], metadata: list[dict[str, Any]] | None = None
     ) -> None:
         """
         Add documents to the vector store.
@@ -195,6 +201,8 @@ class VectorStore:
             >>> metadata = [{"label": "A"}, {"label": "B"}]
             >>> store.add_documents(documents, metadata)
         """
+        if self.embedder is None:
+            raise ValueError("Embedder not initialized. Cannot generate embeddings.")
         embeddings = self.embedder.generate_embeddings(documents)
 
         for i, (doc, embedding) in enumerate(zip(documents, embeddings, strict=False)):
@@ -202,7 +210,7 @@ class VectorStore:
             if metadata:
                 self.metadata[doc] = metadata[i]
 
-    def search(self, query: Union[str, np.ndarray], k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str | np.ndarray, k: int = 5) -> list[dict[str, Any]]:
         """
         Search for similar documents.
 
@@ -261,10 +269,10 @@ class VectorStore:
     @staticmethod
     def build(
         emb: np.ndarray,
-        meta: List[dict],
+        meta: list[dict],
         dim: int,
-        faiss_path: Union[str, Path],
-        meta_path: Union[str, Path],
+        faiss_path: str | Path,
+        meta_path: str | Path,
     ) -> None:
         """
         Build and save a FAISS index with metadata.
@@ -313,7 +321,7 @@ class VectorStore:
         logger.info(f"Writing metadata to {meta_path}...")
         meta_start = time.time()
         # Stream metadata to disk to reduce peak RAM (instead of joining all strings)
-        with open(meta_path, "w") as f:
+        with open(meta_path, "w", encoding="utf-8") as f:
             for m in meta:
                 f.write(json.dumps(m) + "\n")
         logger.info(f"Wrote metadata in {time.time() - meta_start:.2f} seconds")
@@ -324,8 +332,8 @@ class VectorStore:
     def embed(
         model_name: str,
         docs: Sequence[str],
-        embedder: Optional[Any] = None,
-        device: Optional[str] = None,
+        embedder: Any | None = None,
+        device: str | None = None,
         batch_size: int = 32,
         show_progress: bool = True,
     ) -> np.ndarray:

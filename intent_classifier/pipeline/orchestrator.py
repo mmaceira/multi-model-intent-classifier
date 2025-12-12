@@ -15,7 +15,7 @@ The scripts can still be run directly for backward compatibility.
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from intent_classifier.utils.paths import get_repo_root
 from intent_classifier.utils.seed import set_global_seed
@@ -25,7 +25,7 @@ from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
 class PipelineOrchestrator:
     """Orchestrates the execution of pipeline steps as Python functions."""
 
-    def __init__(self, repo_root: Optional[Path] = None):
+    def __init__(self, repo_root: Path | None = None):
         """Initialize the orchestrator.
 
         Args:
@@ -43,7 +43,7 @@ class PipelineOrchestrator:
         # Suppress verbose Pydantic warnings
         suppress_pydantic_warnings()
 
-    def _import_script_module(self, script_name: str):
+    def _import_script_module(self, script_name: str) -> Any:
         """Import a pipeline script as a module.
 
         Args:
@@ -115,9 +115,9 @@ class PipelineOrchestrator:
 
     def run_all(
         self,
-        steps: Optional[list[str]] = None,
+        steps: list[str] | None = None,
         skip_tuning: bool = False,
-        config: Optional[dict] = None,
+        config: dict[str, Any] | None = None,
     ) -> bool:
         """Run all pipeline steps in sequence.
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -181,8 +182,10 @@ class SingleLabelPredictionRunner(BasePredictionRunner):
                             sample_str = ", ".join(str(c) for c in sample_classes)
                             suffix = f" (and {num_classes - 5} more)" if num_classes > 5 else ""
                             print(
-                                f"Warning: Invalid class '{pred_str}' at index {i}, "
-                                f"not in {num_classes} dataset classes [{sample_str}{suffix}]. Using fallback.",
+                                f"Warning: Invalid class '{pred_str}' at "
+                                f"index {i}, not in {num_classes} dataset "
+                                f"classes [{sample_str}{suffix}]. "
+                                f"Using fallback.",
                                 flush=True,
                             )
                         fallback = self._get_fallback_prediction(i, classes, probabilities)
@@ -202,7 +205,7 @@ class SingleLabelPredictionRunner(BasePredictionRunner):
 
         # Return in same format as input
         if isinstance(predictions, np.ndarray):
-            return np.array(valid_predictions)
+            return np.array(valid_predictions)  # type: ignore[no-any-return]
         return valid_predictions
 
     def normalize_label_for_saving(self, label: Any) -> str:
@@ -287,8 +290,9 @@ class SingleLabelPredictionRunner(BasePredictionRunner):
         # Replace any "nan" strings (from numpy/pandas) with empty strings
         df = df.replace("nan", "", regex=False)
         df = df.replace("None", "", regex=False)
-        # Save with explicit handling to prevent pandas from converting empty strings to NaN
-        # Note: Since we ensure all predictions have at least one label, empty strings shouldn't occur
+        # Save with explicit handling to prevent pandas from converting empty
+        # strings to NaN. Note: Since we ensure all predictions have at least
+        # one label, empty strings shouldn't occur
         output_path = str(output_dir / f"{prefix}_predictions.csv")
         df.to_csv(
             output_path,

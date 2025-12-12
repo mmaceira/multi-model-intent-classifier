@@ -11,7 +11,7 @@ import json
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 from urllib.request import urlopen
 
 import yaml
@@ -32,7 +32,7 @@ def load_dataset_from_config(
     csv_path: str | Path | None = None,
     multilabel: bool | None = None,  # If None, read from config
     **kwargs,
-) -> Tuple[List[str], List[str], List[str], List[str], List[str], List[str], List[str]]:
+) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str]]:
     """
     Load a dataset using configuration from config/dataset/{dataset_name}/loader.yaml.
 
@@ -67,7 +67,7 @@ def load_dataset_from_config(
             f"Create config/dataset/{dataset_name}/loader.yaml to add this dataset."
         )
 
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     # Determine multilabel (config takes precedence unless explicitly overridden)
@@ -141,7 +141,7 @@ def load_dataset_from_config(
     return X_train, y_train, X_val, y_val, X_test, y_test, classes
 
 
-def _load_from_huggingface(source_config: Dict[str, Any]) -> Any:
+def _load_from_huggingface(source_config: dict[str, Any]) -> Any:
     """Load dataset from HuggingFace."""
     identifier = source_config["identifier"]
     config_name = source_config.get("config")
@@ -150,7 +150,7 @@ def _load_from_huggingface(source_config: Dict[str, Any]) -> Any:
     return load_dataset(identifier)
 
 
-def _load_from_github_json(source_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _load_from_github_json(source_config: dict[str, Any]) -> list[dict[str, Any]]:
     """Load JSON files from GitHub."""
     base_url = source_config["base_url"]
     domains = source_config.get("domains", [""])
@@ -175,7 +175,7 @@ def _load_from_github_json(source_config: Dict[str, Any]) -> List[Dict[str, Any]
     return all_data
 
 
-def _load_from_csv(csv_path: str | Path, source_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _load_from_csv(csv_path: str | Path, source_config: dict[str, Any]) -> list[dict[str, Any]]:
     """Load data from CSV file."""
     csv_path = Path(csv_path)
     if not csv_path.exists():
@@ -193,14 +193,14 @@ def _load_from_csv(csv_path: str | Path, source_config: Dict[str, Any]) -> List[
 
 
 def _load_from_local_json(
-    json_path: str | Path, source_config: Dict[str, Any]
-) -> List[Dict[str, Any]]:
+    json_path: str | Path, source_config: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Load data from local JSON file."""
     json_path = Path(json_path)
     if not json_path.exists():
         raise FileNotFoundError(f"JSON file not found: {json_path}")
 
-    with open(json_path) as f:
+    with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
 
     if isinstance(data, list):
@@ -213,10 +213,10 @@ def _load_from_local_json(
 
 def _extract_fields(
     raw_data: Any,
-    fields_config: Dict[str, Any],
+    fields_config: dict[str, Any],
     is_multilabel: bool,
-    config: Dict[str, Any],
-) -> Tuple[List[str], List[Any]]:
+    config: dict[str, Any],
+) -> tuple[list[str], list[Any]]:
     """Extract text and label fields from raw data."""
     text_field = fields_config["text"]
     label_field = fields_config["label"]
@@ -326,7 +326,8 @@ def _extract_fields(
         ]
         if label_processing.get("normalize_to_list"):
             labels = [
-                [str(l)] if not isinstance(l, list) else [str(item) for item in l] for l in labels
+                [str(label)] if not isinstance(label, list) else [str(item) for item in label]
+                for label in labels
             ]
         # Split comma-separated strings into separate labels
         if label_processing.get("split_comma_separated"):
@@ -345,7 +346,7 @@ def _extract_fields(
     return texts, labels
 
 
-def _get_field_value(row: Dict[str, Any] | Any, field_candidates: List[str]) -> Any:
+def _get_field_value(row: dict[str, Any] | Any, field_candidates: list[str]) -> Any:
     """Get field value trying multiple candidate field names."""
     if isinstance(row, dict):
         for field in field_candidates:
@@ -361,11 +362,11 @@ def _get_field_value(row: Dict[str, Any] | Any, field_candidates: List[str]) -> 
 
 
 def _filter_by_min_samples(
-    texts: List[str],
-    labels: List[Any],
+    texts: list[str],
+    labels: list[Any],
     min_samples: int,
     is_multilabel: bool,
-) -> Tuple[List[str], List[Any]]:
+) -> tuple[list[str], list[Any]]:
     """Filter out labels with fewer than min_samples samples."""
     if is_multilabel:
         # Count all labels
@@ -402,11 +403,11 @@ def _filter_by_min_samples(
 
 
 def _filter_oos(
-    texts: List[str],
-    labels: List[Any],
+    texts: list[str],
+    labels: list[Any],
     oos_label: str,
     is_multilabel: bool,
-) -> Tuple[List[str], List[Any]]:
+) -> tuple[list[str], list[Any]]:
     """Filter out out-of-scope examples."""
     if is_multilabel:
         filtered_texts = []
@@ -433,12 +434,12 @@ def _filter_oos(
 
 def _use_predefined_splits(
     raw_data: Any,
-    splits_config: Dict[str, Any],
-    fields_config: Dict[str, Any],
+    splits_config: dict[str, Any],
+    fields_config: dict[str, Any],
     is_multilabel: bool,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     use_oos: bool,
-) -> Tuple[List[str], List[Any], List[str], List[Any], List[str], List[Any]]:
+) -> tuple[list[str], list[Any], list[str], list[Any], list[str], list[Any]]:
     """Extract data from predefined splits (e.g., HuggingFace dataset)."""
     train_split_name = splits_config["train_split"]
     val_split_name = splits_config["val_split"]
@@ -504,12 +505,12 @@ def _use_predefined_splits(
 
 
 def _create_splits(
-    texts: List[str],
-    labels: List[Any],
-    splits_config: Dict[str, Any],
+    texts: list[str],
+    labels: list[Any],
+    splits_config: dict[str, Any],
     seed: int,
     is_multilabel: bool,
-) -> Tuple[List[str], List[Any], List[str], List[Any], List[str], List[Any]]:
+) -> tuple[list[str], list[Any], list[str], list[Any], list[str], list[Any]]:
     """Create train/val/test splits from combined data."""
     test_size = splits_config.get("test_size", 0.2)
     val_size = splits_config.get("val_size", 0.1)
@@ -538,19 +539,19 @@ def _create_splits(
 
 
 def _apply_limits(
-    X_train: List[str],
-    y_train: List[Any],
-    X_val: List[str],
-    y_val: List[Any],
-    X_test: List[str],
-    y_test: List[Any],
+    X_train: list[str],
+    y_train: list[Any],
+    X_val: list[str],
+    y_val: list[Any],
+    X_test: list[str],
+    y_test: list[Any],
     max_classes: int | None,
     max_train_samples: int | None,
     max_val_samples: int | None,
     max_test_samples: int | None,
     seed: int,
     is_multilabel: bool,
-) -> Tuple[List[str], List[Any], List[str], List[Any], List[str], List[Any], List[str]]:
+) -> tuple[list[str], list[Any], list[str], list[Any], list[str], list[Any], list[str]]:
     """Apply class and sample limits."""
     # Get all classes
     if is_multilabel:
@@ -576,7 +577,9 @@ def _apply_limits(
                 filtered_y = []
                 for text, label_list in zip(X, y, strict=False):
                     if isinstance(label_list, list):
-                        filtered_labels = [l for l in label_list if l in selected_classes]
+                        filtered_labels = [
+                            label for label in label_list if label in selected_classes
+                        ]
                         if filtered_labels:
                             filtered_X.append(text)
                             filtered_y.append(filtered_labels)
@@ -636,12 +639,12 @@ def _apply_limits(
 
 
 def _sample_data(
-    texts: List[str],
-    labels: List[Any],
+    texts: list[str],
+    labels: list[Any],
     max_samples: int,
     seed: int,
     is_multilabel: bool,
-) -> Tuple[List[str], List[Any]]:
+) -> tuple[list[str], list[Any]]:
     """Sample data (stratified for single-label, random for multilabel)."""
     if max_samples >= len(texts):
         return texts, labels
@@ -660,8 +663,8 @@ def _sample_data(
 
 
 def _stratified_sample_singlelabel(
-    texts: List[str], labels: List[str], max_samples: int, seed: int = 42
-) -> Tuple[List[str], List[str]]:
+    texts: list[str], labels: list[str], max_samples: int, seed: int = 42
+) -> tuple[list[str], list[str]]:
     """
     Perform stratified sampling to ensure all classes are represented.
 
@@ -724,6 +727,6 @@ def _stratified_sample_singlelabel(
     # Shuffle the final result to mix classes
     combined = list(zip(sampled_texts, sampled_labels, strict=False))
     random.shuffle(combined)
-    sampled_texts, sampled_labels = zip(*combined, strict=False)
+    sampled_texts, sampled_labels = map(list, zip(*combined, strict=False))
 
     return list(sampled_texts), list(sampled_labels)

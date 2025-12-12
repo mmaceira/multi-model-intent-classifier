@@ -22,7 +22,6 @@ from intent_classifier.utils.model_registry import register_model
 
 @register_model("NaiveBayesClassifier")
 class NaiveBayesClassifier(TextClassifier):
-    _expects_vectors = False
     """TF-IDF + Multinomial Naive Bayes classifier.
 
     This class implements a text classifier using TF-IDF features and
@@ -38,6 +37,8 @@ class NaiveBayesClassifier(TextClassifier):
         >>> clf.fit(X_train, y_train)
         >>> y_pred = clf.predict(X_test)
     """
+
+    _expects_vectors = False
 
     def __init__(self, max_features: int = 10000, alpha: float = 0.1):
         """Initialize the classifier.

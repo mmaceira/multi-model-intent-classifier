@@ -9,13 +9,12 @@ Functions:
 """
 
 import re
-from typing import Set
 
 # Regular expression for matching numeric values (integers or floats)
 _NUM_RE = re.compile(r"^\d+(?:\.\d+)?$")
 
 # Set of common financial terms and currency symbols
-_FINANCE_TOKENS: Set[str] = {
+_FINANCE_TOKENS: set[str] = {
     "usd",
     "eur",
     "gbp",

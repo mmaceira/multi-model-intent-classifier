@@ -4,7 +4,7 @@ This module provides utility functions for working with serialized models in dif
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 # Standard model file names to check
 ALLOWED_MODEL_FILENAMES = [
@@ -17,7 +17,7 @@ ALLOWED_MODEL_FILENAMES = [
 ]
 
 
-def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[str]:
+def find_model_file(model_dir: str | Path, model_name: str) -> str | None:
     """Find a model file in the specified directory under the model name subdirectory.
 
     This function checks for various common model file formats (pkl, joblib) and
@@ -47,7 +47,7 @@ def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[st
     return None
 
 
-def scan_model_directory(model_dir: Union[str, Path]) -> List[str]:
+def scan_model_directory(model_dir: str | Path) -> list[str]:
     """Scan a directory for model subdirectories containing model files.
 
     Args:
@@ -72,7 +72,7 @@ def scan_model_directory(model_dir: Union[str, Path]) -> List[str]:
     return model_names
 
 
-def load_model_paths(models: Dict[str, Any], model_dir: Union[str, Path]) -> Dict[str, str]:
+def load_model_paths(models: dict[str, Any], model_dir: str | Path) -> dict[str, str]:
     """Load model paths from model directory for all models in the provided dictionary.
 
     This function takes a dictionary of models (as returned by load_models_from_config)
@@ -92,7 +92,7 @@ def load_model_paths(models: Dict[str, Any], model_dir: Union[str, Path]) -> Dic
         >>> # Result can be used with run_prediction
     """
     model_paths = {}
-    for name in models.keys():
+    for name in models:
         path = find_model_file(model_dir, name)
         if path:
             model_paths[name] = path

@@ -14,7 +14,8 @@ Functions:
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -150,7 +151,7 @@ def to_singlelabel_format(y: Sequence[Sequence[str]], strategy: str = "first") -
         # Count all labels
         from collections import Counter
 
-        all_labels = []
+        all_labels: list[str] = []
         for labels in y:
             all_labels.extend(labels)
         if not all_labels:

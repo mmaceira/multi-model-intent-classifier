@@ -56,7 +56,8 @@ def validate_predictions(
 
                 if len(pred) == 0:
                     errors.append(
-                        f"{algorithm_name} {split_name}[{i}]: Empty prediction (should have at least one label)"
+                        f"{algorithm_name} {split_name}[{i}]: Empty prediction "
+                        f"(should have at least one label)"
                     )
                     is_valid = False
                     continue
@@ -64,7 +65,8 @@ def validate_predictions(
                 for j, label in enumerate(pred):
                     if not isinstance(label, str):
                         errors.append(
-                            f"{algorithm_name} {split_name}[{i}][{j}]: Expected string, got {type(label)}"
+                            f"{algorithm_name} {split_name}[{i}][{j}]: Expected string, "
+                            f"got {type(label)}"
                         )
                         is_valid = False
                     elif label not in valid_classes:
@@ -117,9 +119,9 @@ def debug_algorithm(
     Returns:
         True if all predictions are valid, False otherwise
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Testing {algorithm_name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Try to get dataset name from config file if available
     dataset_name = None
@@ -134,7 +136,7 @@ def debug_algorithm(
 
             config_path = get_config_path(config_file)
             if config_path.exists():
-                with open(config_path) as f:
+                with open(config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f)
                     dataset_name = cfg.get("dataset", {}).get("name")
         except Exception:

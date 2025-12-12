@@ -79,7 +79,8 @@ Example Usage:
 """
 
 from collections import defaultdict
-from typing import List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
@@ -139,8 +140,8 @@ class RagKMajority(RagClassifierBase):
         cls,
         top_k: int = 5,
         use_openai: bool = False,
-        embedding_model: str = None,
-        config: dict = None,
+        embedding_model: str | None = None,
+        config: dict[Any, Any] | None = None,
         multilabel_threshold: float = 0.5,
     ) -> "RagKMajority":
         """
@@ -187,7 +188,7 @@ class RagKMajority(RagClassifierBase):
         labels = {str(m["label"]) for m in retriever.store.meta}
         return cls(retriever, sorted(labels), top_k, embedding_model, multilabel_threshold)
 
-    def predict(self, docs: Sequence[str], **_) -> List[str] | List[List[str]]:
+    def predict(self, docs: Sequence[str], **_) -> list[str] | list[list[str]]:  # type: ignore[override]
         """
         Predict labels for a sequence of documents using similarity-weighted voting.
 
@@ -225,7 +226,7 @@ class RagKMajority(RagClassifierBase):
             # ========================================================================
             # STEP 1: Compute similarity-weighted scores for each label
             # ========================================================================
-            scores = defaultdict(float)
+            scores: defaultdict[str, float] = defaultdict(float)
             total_score = 0.0
             for n in neighbors:
                 label = n["label"]
@@ -254,7 +255,8 @@ class RagKMajority(RagClassifierBase):
                 )
             else:
                 # SINGLE-LABEL PATH: Return label with highest weighted score
-                preds.append(max(scores.items(), key=lambda kv: kv[1])[0])
+                best_label = max(scores.items(), key=lambda kv: kv[1])[0]
+                preds.append(best_label)  # type: ignore[arg-type]
 
         return preds
 
@@ -297,7 +299,7 @@ class RagKMajority(RagClassifierBase):
             neighbors = self.retriever.top_k(query_emb, self.top_k)
 
             # Compute weighted scores for each label
-            label_scores = defaultdict(float)
+            label_scores: defaultdict[str, float] = defaultdict(float)
             total_score = 0.0
             for n in neighbors:
                 label = n["label"]

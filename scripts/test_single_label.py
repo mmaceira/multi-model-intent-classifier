@@ -14,17 +14,18 @@ Run with: uv run python scripts/test_single_label.py
 import sys
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root
 repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
-from sklearn.metrics import accuracy_score
+# These imports must come after sys.path manipulation
+from sklearn.metrics import accuracy_score  # noqa: E402
 
-from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier
-from intent_classifier.datasets.dataset import get_dataset
-from intent_classifier.utils.label_utils import is_multilabel
+from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.utils.label_utils import is_multilabel  # noqa: E402
 
 
 def main():
@@ -106,7 +107,7 @@ def main():
 
         # Calculate accuracy
         accuracy = accuracy_score(y_test, y_pred)
-        print(f"\n📊 Test Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+        print(f"\n📊 Test Accuracy: {accuracy:.4f} ({accuracy * 100:.2f}%)")
 
         print("\n✅ Single-label classification test completed successfully!")
         return 0

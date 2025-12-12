@@ -6,8 +6,9 @@ prediction workflows, with a common base class for shared functionality.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -18,17 +19,17 @@ from intent_classifier.utils.label_utils import is_multilabel
 
 
 def run_prediction(
-    models_or_paths: Dict[str, Union[str, Path, Any]],
+    models_or_paths: dict[str, str | Path | Any],
     *,
-    X_train: Optional[Sequence[str]] = None,
-    y_train: Optional[Sequence[Any]] = None,
-    X_test: Optional[Sequence[str]] = None,
-    y_test: Optional[Sequence[Any]] = None,
-    output_dir: Union[str, Path] = "prediction_artefacts",
+    X_train: Sequence[str] | None = None,
+    y_train: Sequence[Any] | None = None,
+    X_test: Sequence[str] | None = None,
+    y_test: Sequence[Any] | None = None,
+    output_dir: str | Path = "prediction_artefacts",
     save_train_predictions: bool = True,
     save_test_predictions: bool = True,
     verbose: bool = True,
-) -> Dict[str, Dict[str, np.ndarray]]:
+) -> dict[str, dict[str, np.ndarray]]:
     """Load models and generate predictions for training and test data.
 
     This is the main prediction pipeline that handles model loading, prediction
@@ -49,7 +50,7 @@ def run_prediction(
         verbose: Whether to print progress and warning messages
 
     Returns:
-        Dict[str, Dict[str, np.ndarray]]: Dictionary mapping model names to their
+        dict[str, dict[str, np.ndarray]]: Dictionary mapping model names to their
             predictions for both train and test sets
 
     Raises:
@@ -83,7 +84,8 @@ def run_prediction(
         # This is a fallback - ideally we should have ground truth
         if models_or_paths:
             first_model_path = next(iter(models_or_paths.values()))
-            temp_runner = BasePredictionRunner(verbose=False)
+            # Use SingleLabelPredictionRunner as a concrete instance for detection
+            temp_runner = SingleLabelPredictionRunner(verbose=False)
             try:
                 if isinstance(first_model_path, (str, Path)):
                     estimator = temp_runner.load_model(first_model_path)
@@ -100,6 +102,7 @@ def run_prediction(
                 is_multilabel_task = False
 
     # Select appropriate runner based on label type
+    runner: BasePredictionRunner
     if is_multilabel_task:
         runner = MultiLabelPredictionRunner(verbose=verbose)
     else:

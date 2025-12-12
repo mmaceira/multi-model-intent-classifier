@@ -28,8 +28,9 @@ sys.path.insert(0, str(project_root))
 os.environ.setdefault("LITELLM_LOG", "ERROR")
 os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")
 
-from dotenv import load_dotenv
-from litellm import completion
+# These imports must come after environment setup
+from dotenv import load_dotenv  # noqa: E402
+from litellm import completion  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -39,8 +40,8 @@ try:
     from intent_classifier.utils.config_loader import discover_config_file, load_config
 except ImportError:
     # Fallback if config loader not available
-    load_config = None
-    discover_config_file = None
+    load_config = None  # type: ignore[assignment]
+    discover_config_file = None  # type: ignore[assignment]
 
 
 def normalize_endpoint(endpoint: str) -> str:
@@ -130,7 +131,7 @@ def test_openai(model: str = "gpt-4o-mini") -> tuple[bool, str]:
     """
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None, "⚠️  OPENAI_API_KEY not found - skipping OpenAI test"
+        return False, "⚠️  OPENAI_API_KEY not found - skipping OpenAI test"
 
     print(f"Testing OpenAI connection ({model})...")
     try:
@@ -222,7 +223,8 @@ Configuration Priority (highest to lowest):
                     # Try model.llm_model first (for backward compatibility), then check LLM config
                     ollama_model_from_config = config["model"].get("llm_model")
                 if args.ollama_endpoint is None:
-                    # Try model.ollama_endpoint first (for backward compatibility), then check LLM config
+                    # Try model.ollama_endpoint first (for backward
+                    # compatibility), then check LLM config
                     ollama_endpoint_from_config = config["model"].get("ollama_endpoint")
         except Exception:
             # Silently fall back to defaults if config loading fails

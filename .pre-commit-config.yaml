@@ -1,18 +1,15 @@
 repos:
+    # Ruff: Fast Python linter and formatter (replaces Black + Flake8)
     - repo: https://github.com/astral-sh/ruff-pre-commit
-      rev: v0.7.3
+      rev: v0.14.9
       hooks:
           - id: ruff
             args: ["--fix"]
           - id: ruff-format
 
-    - repo: https://github.com/psf/black-pre-commit-mirror
-      rev: 24.10.0
-      hooks:
-          - id: black
-
+    # Standard pre-commit hooks for common file issues
     - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v5.0.0
+      rev: v6.0.0
       hooks:
           - id: end-of-file-fixer
           - id: trailing-whitespace
@@ -20,39 +17,37 @@ repos:
           - id: check-merge-conflict
           - id: check-yaml
           - id: check-toml
+          - id: check-json
+          - id: check-added-large-files
 
+    # Commitizen: commit message validation (keep; remove noisy branch gate)
     - repo: https://github.com/commitizen-tools/commitizen
-      rev: v3.30.0
+      rev: v4.10.0
       hooks:
           - id: commitizen
             stages: [commit-msg]
-          - id: commitizen-branch
-            args: ["--rev-range", "origin/main..HEAD"]
-            stages: [pre-push]
+      # Remove/disable this to avoid failures when upstream isn't set
+      # - id: commitizen-branch
+      #   args: ["--rev-range", "origin/main..HEAD"]
+      #   stages: [pre-push]
 
-    - repo: https://github.com/pycqa/pylint
-      rev: v3.2.7
-      hooks:
-          - id: pylint
-            name: pylint (intent_classifier)
-            args: ["-E", "intent_classifier"]
-            additional_dependencies:
-                - typer
-                - python-dotenv
-                - loguru
-
+    # Mypy: only the package (strict), not scripts/tests (lenient via pyproject overrides)
     - repo: https://github.com/pre-commit/mirrors-mypy
-      rev: v1.13.0
+      rev: v1.19.0
       hooks:
           - id: mypy
-            args: ["--explicit-package-bases"]
+            args:
+              - "--explicit-package-bases"
             files: ^intent_classifier/.*\.py$
-            additional_dependencies:
-                - typer
-                - rich
-                - loguru
-                - python-dotenv
+            additional_dependencies: []
+            # If you truly use these in type context, add them back explicitly:
+            # additional_dependencies:
+            #   - typer
+            #   - rich
+            #   - loguru
+            #   - python-dotenv
 
+    # Project-specific hooks
     - repo: local
       hooks:
           - id: check-env-file
@@ -60,3 +55,4 @@ repos:
             entry: python scripts/check_env_file.py
             language: system
             stages: [pre-commit]
+            files: ^\.env

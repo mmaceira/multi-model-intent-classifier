@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -22,7 +21,7 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
     where each sample can have multiple labels.
     """
 
-    def parse_labels_from_csv(self, labels: pd.Series) -> List[List[str]]:
+    def parse_labels_from_csv(self, labels: pd.Series) -> list[list[str]]:
         """Parse multi-label from CSV format (comma-separated strings).
 
         Args:
@@ -31,7 +30,7 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
         Returns:
             List of lists of label strings
         """
-        result = []
+        result: list[list[str]] = []
         for label in labels:
             if pd.isna(label) or label == "":
                 result.append([])
@@ -42,11 +41,11 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
 
     def compute_metrics(
         self,
-        y_true: List[List[str]],
-        y_pred: List[List[str]],
+        y_true: list[list[str]],
+        y_pred: list[list[str]],
         split_name: str,
         output_dir: Path,
-    ) -> Optional[Dict[str, float]]:
+    ) -> dict[str, float] | None:
         """Compute multi-label metrics for a split.
 
         Args:
@@ -66,7 +65,7 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
             logger=self.logger,
         )
 
-    def get_overfitting_metrics(self) -> List[str]:
+    def get_overfitting_metrics(self) -> list[str]:
         """Get list of metrics to use for overfitting analysis in multi-label tasks.
 
         Returns:
@@ -74,7 +73,7 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
         """
         return get_multilabel_overfitting_metrics()
 
-    def get_summary_metrics(self) -> List[str]:
+    def get_summary_metrics(self) -> list[str]:
         """Get list of metrics to include in summary tables for multi-label tasks.
 
         Returns:
@@ -90,7 +89,7 @@ class MultiLabelEvaluationRunner(BaseEvaluationRunner):
         """
         return False
 
-    def _extract_classes(self, test_df: pd.DataFrame) -> List[str]:
+    def _extract_classes(self, test_df: pd.DataFrame) -> list[str]:
         """Extract unique classes from test DataFrame (multi-label).
 
         Args:

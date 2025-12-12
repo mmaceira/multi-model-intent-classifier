@@ -5,16 +5,19 @@ Integration tests for the standalone rag_llm module.
 Tests the full pipeline from data loading through retrieval to classification.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import subprocess
 import sys
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Add project root to path
 project_root = get_repo_root()
@@ -31,20 +34,20 @@ from intent_classifier.rag.rag_llm import (  # noqa: E402
 class TestDataLoading:
     """Test data loading functionality."""
 
-    def test_load_examples_with_defaults(self):
+    def test_load_examples_with_defaults(self) -> None:
         """Test loading examples with default parameters."""
         examples, label_defs = _load_examples()
         assert len(examples) > 0, "Should load at least some examples"
-        assert all(
-            isinstance(ex, Example) for ex in examples
-        ), "All items should be Example instances"
-        assert all(
-            ex.text and ex.label for ex in examples
-        ), "All examples should have text and label"
+        assert all(isinstance(ex, Example) for ex in examples), (
+            "All items should be Example instances"
+        )
+        assert all(ex.text and ex.label for ex in examples), (
+            "All examples should have text and label"
+        )
         assert isinstance(label_defs, dict), "Label definitions should be a dict"
         assert len(label_defs) > 0, "Should have at least some label definitions"
 
-    def test_load_examples_with_limits(self):
+    def test_load_examples_with_limits(self) -> None:
         """Test loading examples with sample and class limits."""
         examples, label_defs = _load_examples(
             max_train_samples=50,
@@ -54,7 +57,7 @@ class TestDataLoading:
         unique_labels = {ex.label for ex in examples}
         assert len(unique_labels) <= 5, "Should respect max_classes"
 
-    def test_load_examples_label_defs_structure(self):
+    def test_load_examples_label_defs_structure(self) -> None:
         """Test that label definitions have reasonable structure."""
         examples, label_defs = _load_examples(max_train_samples=100)
         for ex in examples[:10]:  # Check first 10
@@ -66,7 +69,7 @@ class TestRetriever:
     """Test the Retriever class with real data."""
 
     @pytest.fixture
-    def sample_examples(self):
+    def sample_examples(self) -> list[Example]:
         """Create sample examples for testing."""
         return [
             Example(text="What's the weather today?", label="weather_query"),
@@ -82,66 +85,66 @@ class TestRetriever:
         ]
 
     @pytest.fixture
-    def retriever(self, sample_examples):
+    def retriever(self, sample_examples: list[Example]) -> Retriever:
         """Create a retriever with sample examples."""
         return Retriever(sample_examples)
 
-    def test_retriever_initialization(self, sample_examples):
+    def test_retriever_initialization(self, sample_examples: list[Example]) -> None:
         """Test retriever can be initialized with examples."""
         retriever = Retriever(sample_examples)
         assert retriever.examples == sample_examples
         assert retriever.matrix.shape[0] == len(sample_examples)
 
-    def test_retriever_empty_examples_raises(self):
+    def test_retriever_empty_examples_raises(self) -> None:
         """Test that empty examples list raises an error."""
         with pytest.raises(ValueError, match="at least one"):
             Retriever([])
 
-    def test_select_topk_basic(self, retriever):
+    def test_select_topk_basic(self, retriever: Retriever) -> None:
         """Test basic top-k retrieval."""
         results = retriever.select_topk_with_min_labels("What's the weather?", k=3, m=1)
         assert len(results) <= 3, "Should return at most k results"
         assert len(results) > 0, "Should return at least one result"
-        assert all(
-            isinstance(item, tuple) and len(item) == 2 for item in results
-        ), "Results should be (Example, score) tuples"
+        assert all(isinstance(item, tuple) and len(item) == 2 for item in results), (
+            "Results should be (Example, score) tuples"
+        )
         assert all(isinstance(ex, Example) for ex, _ in results), "First element should be Example"
-        assert all(
-            isinstance(score, float) for _, score in results
-        ), "Second element should be float"
+        assert all(isinstance(score, float) for _, score in results), (
+            "Second element should be float"
+        )
 
-    def test_select_topk_enforces_min_labels(self, retriever):
+    def test_select_topk_enforces_min_labels(self, retriever: Retriever) -> None:
         """Test that retrieval enforces minimum distinct labels."""
         # Query that matches weather examples
         results = retriever.select_topk_with_min_labels("weather forecast today", k=5, m=3)
         distinct_labels = {ex.label for ex, _ in results}
-        assert (
-            len(distinct_labels) >= 3
-        ), f"Should have at least 3 distinct labels, got {len(distinct_labels)}"
+        assert len(distinct_labels) >= 3, (
+            f"Should have at least 3 distinct labels, got {len(distinct_labels)}"
+        )
 
-    def test_select_topk_similarity_order(self, retriever):
+    def test_select_topk_similarity_order(self, retriever: Retriever) -> None:
         """Test that results are in descending similarity order."""
         results = retriever.select_topk_with_min_labels("weather", k=5, m=1)
         scores = [score for _, score in results]
         assert scores == sorted(scores, reverse=True), "Scores should be in descending order"
 
-    def test_select_topk_with_real_data(self):
+    def test_select_topk_with_real_data(self) -> None:
         """Test retrieval with real dataset examples."""
         examples, _ = _load_examples(max_train_samples=100, max_classes=10)
         retriever = Retriever(examples)
         query = "What's the weather like?"
         results = retriever.select_topk_with_min_labels(query, k=10, m=4)
         assert len(results) > 0, "Should retrieve some results"
-        assert all(
-            ex.label in {e.label for e in examples} for ex, _ in results
-        ), "All labels should be from training set"
+        assert all(ex.label in {e.label for e in examples} for ex, _ in results), (
+            "All labels should be from training set"
+        )
 
-    def test_select_topk_invalid_k_raises(self, retriever):
+    def test_select_topk_invalid_k_raises(self, retriever: Retriever) -> None:
         """Test that invalid k values raise errors."""
         with pytest.raises(ValueError, match="k must be positive"):
             retriever.select_topk_with_min_labels("test", k=0, m=1)
 
-    def test_select_topk_invalid_m_raises(self, retriever):
+    def test_select_topk_invalid_m_raises(self, retriever: Retriever) -> None:
         """Test that invalid m values raise errors."""
         with pytest.raises(ValueError, match="m must be positive"):
             retriever.select_topk_with_min_labels("test", k=5, m=0)
@@ -151,7 +154,7 @@ class TestClassifySingle:
     """Test the classify_single function."""
 
     @pytest.fixture
-    def sample_examples(self):
+    def sample_examples(self) -> list[Example]:
         """Create sample examples for testing."""
         return [
             Example(text="What's the weather today?", label="weather_query"),
@@ -165,12 +168,12 @@ class TestClassifySingle:
         ]
 
     @pytest.fixture
-    def retriever(self, sample_examples):
+    def retriever(self, sample_examples: list[Example]) -> Retriever:
         """Create a retriever with sample examples."""
         return Retriever(sample_examples)
 
     @pytest.fixture
-    def label_defs(self):
+    def label_defs(self) -> dict[str, str]:
         """Create sample label definitions."""
         return {
             "weather_query": "Questions about weather conditions",
@@ -180,7 +183,9 @@ class TestClassifySingle:
         }
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_success(self, mock_llm, retriever, label_defs):
+    def test_classify_single_success(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test successful classification with mocked LLM."""
         # Mock LLM response
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.95}'
@@ -199,7 +204,9 @@ class TestClassifySingle:
         assert result["label"] == "weather_query"
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_repairs_invalid_json(self, mock_llm, retriever, label_defs):
+    def test_classify_single_repairs_invalid_json(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that invalid JSON triggers repair."""
         # First call returns invalid JSON, second returns valid
         mock_llm.side_effect = [
@@ -218,7 +225,9 @@ class TestClassifySingle:
         assert result["label"] in result["allowed_labels"]
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_strips_code_fences(self, mock_llm, retriever, label_defs):
+    def test_classify_single_strips_code_fences(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that code fences are stripped from LLM response."""
         mock_llm.return_value = '```json\n{"label": "weather_query", "confidence": 0.9}\n```'
         result = classify_single(
@@ -232,7 +241,9 @@ class TestClassifySingle:
         assert result["label"] == "weather_query"
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_clamps_confidence(self, mock_llm, retriever, label_defs):
+    def test_classify_single_clamps_confidence(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that confidence is clamped to [0, 1]."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 1.5}'
         result = classify_single(
@@ -257,7 +268,9 @@ class TestClassifySingle:
         assert result["confidence"] == 0.0
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_invalid_label_raises(self, mock_llm, retriever, label_defs):
+    def test_classify_single_invalid_label_raises(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that invalid labels raise an error."""
         mock_llm.return_value = '{"label": "invalid_label", "confidence": 0.8}'
         with pytest.raises(ValueError, match="Invalid label"):
@@ -271,7 +284,9 @@ class TestClassifySingle:
             )
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_includes_metadata(self, mock_llm, retriever, label_defs):
+    def test_classify_single_includes_metadata(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that result includes metadata like allowed_labels and shots_used."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'
         result = classify_single(
@@ -292,7 +307,7 @@ class TestClassifySingle:
 class TestCLI:
     """Test the RAG CLI interface (`scripts/rag_cli.py`)."""
 
-    def test_cli_help(self):
+    def test_cli_help(self) -> None:
         """Test that CLI shows help message."""
         result = subprocess.run(
             [sys.executable, "scripts/rag_cli.py", "--help"],
@@ -306,7 +321,7 @@ class TestCLI:
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     @patch("intent_classifier.rag.rag_llm.classifier._load_examples")
-    def test_cli_basic_execution(self, mock_load, mock_llm, tmp_path):
+    def test_cli_basic_execution(self, mock_load: Any, mock_llm: Any, tmp_path: Any) -> None:
         """Test basic CLI execution with mocked dependencies."""
         from scripts.rag_cli import build_arg_parser, main
 
@@ -372,7 +387,7 @@ class TestCLI:
         assert "confidence" in output
         assert output["label"] == "weather"
 
-    def test_cli_missing_required_args(self):
+    def test_cli_missing_required_args(self) -> None:
         """Test that missing required arguments cause error."""
         result = subprocess.run(
             [sys.executable, "scripts/rag_cli.py", "--text", "test"],
@@ -388,7 +403,7 @@ class TestEndToEnd:
     """End-to-end integration tests."""
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_full_pipeline_with_real_data(self, mock_llm):
+    def test_full_pipeline_with_real_data(self, mock_llm: Any) -> None:
         """Test the full pipeline from data loading to classification."""
         # Load real data
         examples, label_defs = _load_examples(max_train_samples=50, max_classes=5)
@@ -417,7 +432,7 @@ class TestEndToEnd:
         assert result["label"] in {ex.label for ex in examples}
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_retrieval_affects_classification(self, mock_llm):
+    def test_retrieval_affects_classification(self, mock_llm: Any) -> None:
         """Test that different queries retrieve different examples."""
         examples = [
             Example(text="weather forecast", label="weather"),
@@ -459,7 +474,7 @@ class TestProviderIntegration:
     """Test integration with different LLM providers (Ollama and OpenAI)."""
 
     @pytest.fixture
-    def sample_examples(self):
+    def sample_examples(self) -> list[Example]:
         """Create sample examples for testing."""
         return [
             Example(text="What's the weather today?", label="weather_query"),
@@ -473,12 +488,12 @@ class TestProviderIntegration:
         ]
 
     @pytest.fixture
-    def retriever(self, sample_examples):
+    def retriever(self, sample_examples: list[Example]) -> Retriever:
         """Create a retriever with sample examples."""
         return Retriever(sample_examples)
 
     @pytest.fixture
-    def label_defs(self):
+    def label_defs(self) -> dict[str, str]:
         """Create sample label definitions."""
         return {
             "weather_query": "Questions about weather conditions",
@@ -488,7 +503,9 @@ class TestProviderIntegration:
         }
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_ollama_model_name_passed_correctly(self, mock_llm, retriever, label_defs):
+    def test_ollama_model_name_passed_correctly(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that Ollama model names are passed correctly to LiteLLM."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'
 
@@ -509,7 +526,9 @@ class TestProviderIntegration:
         assert result["label"] in result["allowed_labels"]
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_openai_model_name_passed_correctly(self, mock_llm, retriever, label_defs):
+    def test_openai_model_name_passed_correctly(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that OpenAI model names are passed correctly to LiteLLM."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.9}'
 
@@ -530,7 +549,9 @@ class TestProviderIntegration:
         assert result["label"] in result["allowed_labels"]
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_ollama_vs_openai_same_behavior(self, mock_llm, retriever, label_defs):
+    def test_ollama_vs_openai_same_behavior(
+        self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test that both Ollama and OpenAI models produce same structure."""
         mock_llm.return_value = '{"label": "weather_query", "confidence": 0.85}'
 
@@ -565,7 +586,9 @@ class TestProviderIntegration:
         os.getenv("TEST_REAL_APIS", "").lower() not in ("1", "true", "yes"),
         reason="Set TEST_REAL_APIS=1 to run real API tests",
     )
-    def test_real_ollama_if_available(self, retriever, label_defs):
+    def test_real_ollama_if_available(
+        self, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test with real Ollama API if available (requires TEST_REAL_APIS=1 env var)."""
         # Check if Ollama is available (basic check)
         try:
@@ -587,7 +610,9 @@ class TestProviderIntegration:
         os.getenv("TEST_REAL_APIS", "").lower() not in ("1", "true", "yes"),
         reason="Set TEST_REAL_APIS=1 to run real API tests",
     )
-    def test_real_openai_if_available(self, retriever, label_defs):
+    def test_real_openai_if_available(
+        self, retriever: Retriever, label_defs: dict[str, str]
+    ) -> None:
         """Test with real OpenAI API if available (requires TEST_REAL_APIS=1 env var)."""
         # Load .env file to get API key if it's there
         from dotenv import load_dotenv

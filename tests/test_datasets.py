@@ -78,40 +78,6 @@ def test_nlu_plus_multilabel(tiny_dataset_config):
     assert all(isinstance(c, str) for c in classes)
 
 
-def test_nlu_plus_multilabel(tiny_dataset_config):
-    """Test NLU++ dataset loading (multi-label)."""
-    try:
-        X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-            dataset_name="nlu_plus",
-            multilabel=True,
-            **tiny_dataset_config,
-        )
-
-        # Basic sanity checks
-        assert len(X_train) > 0
-        assert len(X_test) > 0
-        assert len(y_train) == len(X_train)
-        assert len(y_test) == len(X_test)
-
-        # Check format: multi-label (list of lists)
-        assert isinstance(y_train[0], list)
-        assert isinstance(y_test[0], list)
-
-        # Verify multi-label format
-        assert is_multilabel(y_train)
-        assert is_multilabel(y_test)
-
-        # Check that each sample has at least one label
-        assert all(len(labels) > 0 for labels in y_train if labels)
-        assert all(len(labels) > 0 for labels in y_test if labels)
-
-        # Check classes
-        assert len(classes) > 0
-        assert all(isinstance(c, str) for c in classes)
-    except ImportError:
-        pytest.skip("datasets library not installed; skipping NLU++ tests")
-
-
 def test_dataset_splits_are_separate(tiny_dataset_config):
     """Test that train/val/test splits are kept separate."""
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(

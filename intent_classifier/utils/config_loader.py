@@ -22,7 +22,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, TypedDict
+from typing import Any, Literal, TypedDict
 
 import yaml
 
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 class ConfigMetadata(TypedDict):
     """Metadata returned with loaded configuration."""
 
-    config: Dict[str, Any]
+    config: dict[str, Any]
     dataset_name: str
     config_name: str
     label_type: Literal["singlelabel", "multilabel"]
@@ -45,10 +45,10 @@ class ConfigMetadata(TypedDict):
 
 
 # Cache for loaded configs to avoid re-reading files
-_CONFIG_CACHE: Dict[str, Dict[str, Any]] = {}
+_CONFIG_CACHE: dict[str, dict[str, Any]] = {}
 
 
-def substitute_vars(value: Any, config: Dict[str, Any]) -> Any:
+def substitute_vars(value: Any, config: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config.
 
     Supports ${section.var} syntax for variable substitution.
@@ -76,7 +76,7 @@ def substitute_vars(value: Any, config: Dict[str, Any]) -> Any:
     return value
 
 
-def process_config_vars(config_value: Any, main_config: Dict[str, Any]) -> Any:
+def process_config_vars(config_value: Any, main_config: dict[str, Any]) -> Any:
     """Recursively process a configuration value to substitute variables.
 
     Args:
@@ -121,12 +121,13 @@ def path_to_config_file_str(config_path: Path) -> str:
             # Verify it starts with "config/" (it should, since get_config_path enforces this)
             if not config_file_str.startswith("config/"):
                 raise ValueError(
-                    f"Config path relative to repo root should start with 'config/', got: {config_file_str}. "
-                    f"Absolute path was: {config_path}"
+                    f"Config path relative to repo root should start with 'config/', "
+                    f"got: {config_file_str}. Absolute path was: {config_path}"
                 )
             return config_file_str
         except ValueError as e:
-            # If can't make relative (shouldn't happen for valid config paths), fall back to absolute
+            # If can't make relative (shouldn't happen for valid config paths),
+            # fall back to absolute
             logger.warning(
                 f"Could not convert absolute config path to relative: {e}. Using absolute path."
             )
@@ -206,19 +207,26 @@ def parse_config_path(config_file: str) -> tuple[str, str]:
 
         # If we get here, the path doesn't match expected structure
         raise ValueError(
-            f"Config file must be in structure: config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
+            f"Config file must be in structure: "
+            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
             f"Got: {config_file}"
         )
     except ValueError as e:
         if "Config file must be" in str(e):
             raise
+        rel_path = (
+            config_path.relative_to(repo_root / "config")
+            if config_path.is_relative_to(repo_root / "config")
+            else config_path
+        )
         raise ValueError(
-            f"Config file must be in structure: config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
-            f"Got: {config_path.relative_to(repo_root / 'config') if config_path.is_relative_to(repo_root / 'config') else config_path}"
+            f"Config file must be in structure: "
+            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
+            f"Got: {rel_path}"
         ) from e
 
 
-def _load_llm_config() -> Optional[Dict[str, Any]]:
+def _load_llm_config() -> dict[str, Any] | None:
     """Load the centralized LLM configuration file.
 
     Returns:
@@ -228,7 +236,7 @@ def _load_llm_config() -> Optional[Dict[str, Any]]:
         repo_root = get_repo_root()
         llm_config_path = repo_root / "config" / "llm_config.yaml"
         if llm_config_path.exists():
-            with open(llm_config_path) as f:
+            with open(llm_config_path, encoding="utf-8") as f:
                 llm_config = yaml.safe_load(f)
             if isinstance(llm_config, dict):
                 logger.debug(f"Loaded LLM config from: {llm_config_path}")
@@ -239,7 +247,7 @@ def _load_llm_config() -> Optional[Dict[str, Any]]:
 
 
 def detect_label_type(
-    config: Dict[str, Any], dataset_name: Optional[str] = None
+    config: dict[str, Any], dataset_name: str | None = None
 ) -> Literal["singlelabel", "multilabel"]:
     """Detect label type (singlelabel or multilabel) from config.
 
@@ -259,15 +267,16 @@ def detect_label_type(
 
 
 def load_config(
-    config_file: Optional[str] = None,
+    config_file: str | None = None,
     apply_variable_substitution: bool = True,
     use_cache: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Load and process a YAML configuration file.
 
     Args:
-        config_file: Config file path starting with "config/" (e.g., "config/dataset/clinc150/tiny.yaml").
-                    If None, uses discover_config_file() to find default.
+        config_file: Config file path starting with "config/" (e.g.,
+                    "config/dataset/clinc150/tiny.yaml"). If None, uses
+                    discover_config_file() to find default.
         apply_variable_substitution: If True, applies variable substitution to config values
         use_cache: If True, caches loaded configs to avoid re-reading files
 
@@ -292,12 +301,13 @@ def load_config(
     if not config_path.exists():
         raise FileNotFoundError(
             f"Config file not found: {config_path}\n"
-            f"Config files must be in structure: config/dataset/{{dataset_name}}/{{config_name}}.yaml"
+            f"Config files must be in structure: "
+            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml"
         )
 
     # Load YAML file
     logger.debug(f"Loading config from: {config_path}")
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if not isinstance(config, dict):
@@ -342,18 +352,19 @@ def load_config(
     if use_cache:
         _CONFIG_CACHE[cache_key] = config
 
-    return config
+    return config  # type: ignore[no-any-return]
 
 
 def load_config_with_metadata(
-    config_file: Optional[str] = None,
+    config_file: str | None = None,
     apply_variable_substitution: bool = True,
 ) -> ConfigMetadata:
     """Load config and return it with metadata (dataset_name, config_name, label_type).
 
     Args:
-        config_file: Config file path starting with "config/" (e.g., "config/dataset/clinc150/tiny.yaml").
-                    If None, uses discover_config_file() to find default.
+        config_file: Config file path starting with "config/" (e.g.,
+                    "config/dataset/clinc150/tiny.yaml"). If None, uses
+                    discover_config_file() to find default.
         apply_variable_substitution: If True, applies variable substitution to config values
 
     Returns:
@@ -398,7 +409,7 @@ def load_config_with_metadata(
     }
 
 
-def get_first_available_dataset() -> Optional[str]:
+def get_first_available_dataset() -> str | None:
     """Get the name of the first available dataset from config/dataset directory.
 
     Returns:
@@ -428,7 +439,7 @@ def get_config_file_or_discover() -> str:
     return discover_config_file()
 
 
-def get_run_name_from_config(config_file: Optional[str] = None) -> Optional[str]:
+def get_run_name_from_config(config_file: str | None = None) -> str | None:
     """Extract run_name from a config file.
 
     Args:
@@ -441,7 +452,7 @@ def get_run_name_from_config(config_file: Optional[str] = None) -> Optional[str]
         if config_file is None:
             config_file = discover_config_file()
         config = load_config(config_file, apply_variable_substitution=False)
-        return config.get("general", {}).get("run_name")
+        return config.get("general", {}).get("run_name")  # type: ignore[no-any-return]
     except Exception:
         return None
 

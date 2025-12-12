@@ -13,7 +13,7 @@ the required methods to be used, regardless of its class hierarchy.
 """
 
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -82,7 +82,7 @@ class ClassifierProtocol(Protocol):
         """
         ...
 
-    def get_params(self, deep: bool = True) -> dict:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator (scikit-learn compatibility).
 
         Args:
@@ -93,7 +93,7 @@ class ClassifierProtocol(Protocol):
         """
         ...
 
-    def set_params(self, **params) -> "ClassifierProtocol":
+    def set_params(self, **params: Any) -> "ClassifierProtocol":
         """Set parameters for this estimator (scikit-learn compatibility).
 
         Args:

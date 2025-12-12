@@ -9,7 +9,7 @@ comprehensive evaluation metrics and visualizations.
 import sys
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -109,8 +109,8 @@ def main():
         "Embedding + LogReg",
         "RAG-CentroidNN",
         "RAG-kMajority",
-        "RAG-LLM (local-embeddings, default prompt)",  # RAG-LLM with local SBERT embeddings and default prompt
-        "RAG-LLM (local-embeddings, short prompt)",  # RAG-LLM with local SBERT embeddings and short prompt
+        "RAG-LLM (local-embeddings, default prompt)",  # RAG-LLM with local SBERT
+        "RAG-LLM (local-embeddings, short prompt)",  # RAG-LLM with local SBERT
         "RAG-LLM (OpenAI-embeddings)",  # RAG-LLM with OpenAI embeddings
     ]
 

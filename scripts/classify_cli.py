@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Add project root to path
 repo_root = get_repo_root()
@@ -136,7 +136,7 @@ def main():
         if not batch_path.exists():
             print(f"❌ Error: Batch file not found: {batch_path}", file=sys.stderr)
             sys.exit(1)
-        with open(batch_path) as f:
+        with open(batch_path, encoding="utf-8") as f:
             texts = [line.strip() for line in f if line.strip()]
     else:
         texts = [args.text]

@@ -27,7 +27,7 @@ import json
 import os
 import pickle
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import faiss
 import gradio as gr
@@ -50,7 +50,7 @@ with open(config_path) as f:
     config = yaml.safe_load(f)
 
 
-def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+def substitute_vars(value: Any, cfg: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config."""
     if isinstance(value, str) and "${" in value:
         import re
@@ -89,7 +89,7 @@ MODELS_INFO = {
     "linear_svm": {
         "name": "Linear SVM",
         "description": (
-            "Support Vector Machine with linear kernel. " "Good balance of accuracy and speed."
+            "Support Vector Machine with linear kernel. Good balance of accuracy and speed."
         ),
         "dir": "Linear SVM",
         "type": "classifier",
@@ -115,7 +115,7 @@ MODELS_INFO = {
     "rag_centroid": {
         "name": "RAG CentroidNN",
         "description": (
-            "Retrieval Augmented Generation using centroid-based " "nearest neighbors search."
+            "Retrieval Augmented Generation using centroid-based nearest neighbors search."
         ),
         "dir": "RAG-CentroidNN",
         "type": "rag",
@@ -153,7 +153,7 @@ class DictModelWrapper:
     training code that persisted ``{'vectorizer': v, 'classifier': clf}``
     instead of an actual ``Pipeline`` object."""
 
-    def __init__(self, obj: Dict[str, Any]):
+    def __init__(self, obj: dict[str, Any]):
         # Heuristically locate components
         vec = obj.get("vectorizer") or obj.get("tfidf") or obj.get("vect")
         clf = obj.get("classifier") or obj.get("model") or obj.get("clf")
@@ -161,7 +161,7 @@ class DictModelWrapper:
         if vec is None or clf is None:
             raise ValueError(
                 "Cannot wrap dictionary model – expected keys like "
-                "`vectorizer` + `classifier`, got: %s" % list(obj.keys())
+                f"`vectorizer` + `classifier`, got: {list(obj.keys())}"
             )
         self._vectorizer = vec
         self._classifier = clf
@@ -169,11 +169,11 @@ class DictModelWrapper:
         self.classes_ = getattr(clf, "classes_", None)
 
     # --- scikit‑learn‑style API ------------------------------------------- #
-    def predict(self, texts: List[str]):
+    def predict(self, texts: list[str]):
         X = self._vectorizer.transform(texts)
         return self._classifier.predict(X)
 
-    def predict_proba(self, texts: List[str]):
+    def predict_proba(self, texts: list[str]):
         if hasattr(self._classifier, "predict_proba"):
             X = self._vectorizer.transform(texts)
             return self._classifier.predict_proba(X)
@@ -184,7 +184,7 @@ class DictModelWrapper:
         return getattr(self._classifier, item)
 
 
-def _resolve_model_file(model_dir: Path) -> Optional[Path]:
+def _resolve_model_file(model_dir: Path) -> Path | None:
     """Return the first existing model file in *model_dir*."""
     for fname in ALLOWED_MODEL_FILENAMES:
         f = model_dir / fname
@@ -194,13 +194,13 @@ def _resolve_model_file(model_dir: Path) -> Optional[Path]:
 
 
 # Simple cache so we don't re‑load models all the time
-_CACHE: Dict[str, Any] = {}
+_CACHE: dict[str, Any] = {}
 
 
-def scan_models_directory(models_path: str | os.PathLike) -> Dict[str, Dict[str, Any]]:
+def scan_models_directory(models_path: str | os.PathLike) -> dict[str, dict[str, Any]]:
     """Return a mapping *model_id → info dict* for every model that is actually
     available on disk (accepts both *.joblib* and *.pkl*)."""
-    models: Dict[str, Dict[str, Any]] = {}
+    models: dict[str, dict[str, Any]] = {}
     root = Path(models_path).expanduser().resolve()
     if not root.exists():
         print(f"[scan_models_directory] models_path does not exist: {root}")
@@ -268,7 +268,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
         # Load passages from meta.jsonl
         passages = []
         if meta_path.exists():
-            with open(meta_path, "r") as f:
+            with open(meta_path) as f:
                 for line in f:
                     try:
                         meta = json.loads(line)
@@ -319,7 +319,8 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                             api_key = os.getenv("OPENAI_API_KEY")
                             if not api_key:
                                 raise ValueError(
-                                    "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+                                    "OPENAI_API_KEY environment variable must be set "
+                                    "for OpenAI embeddings"
                                 )
                             embedder = EmbeddingGenerator(
                                 api_key=api_key, model="text-embedding-3-small", batch_size=50
@@ -336,7 +337,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         else:
                             # For local embeddings, use the same model that was used
                             # to create the index
-                            def embedder(texts):
+                            def local_embedder(texts):
                                 return VectorStore.embed(
                                     config.get("model", {}).get(
                                         "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
@@ -349,7 +350,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                                 model=config.get("model", {}).get(
                                     "llm_model", "ollama/llama3.1:8b"
                                 ),
-                                embedder=embedder,
+                                embedder=local_embedder,
                                 use_openai=False,
                                 artifacts_dir=embeddings_path,
                             )
@@ -373,7 +374,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
     except Exception as err_joblib:
         print("[load_model] joblib load failed – falling back to pickle:", err_joblib)
         with model_path.open("rb") as f:
-            obj = pickle.load(f)
+            obj = pickle.load(f)  # type: ignore[arg-type]
 
     obj = _wrap_loaded(obj)
     _CACHE[cache_key] = obj
@@ -418,7 +419,7 @@ def predict(
     if m_type == "rag":
         # -------- Retrieval‑Augmented Generation ---------------------------- #
         model["index"]
-        passages: List[str] = model["passages"]
+        passages: list[str] = model["passages"]
         clf = model["model"]  # optional
 
         # Get classification if available
@@ -524,9 +525,9 @@ to **retrieve similar training utterances**.
                     choices=[
                         (
                             (
-                                f'📊 {info["name"]}'
+                                f"📊 {info['name']}"
                                 if info["type"] == "classifier"
-                                else f'🔍 {info["name"]}'
+                                else f"🔍 {info['name']}"
                             ),
                             mid,
                         )
@@ -546,12 +547,12 @@ to **retrieve similar training utterances**.
                     default_path = available_models.get("naive_bayes", {}).get("path", "Not found")
 
                     initial_description = f"""
-                    ## {default_info['name']}
+                    ## {default_info["name"]}
 
                     **Type:** {default_type}
 
                     **Description:**
-                    {default_info['description']}
+                    {default_info["description"]}
 
                     **Model File:** `{os.path.basename(default_path)}`
                     """
@@ -595,12 +596,12 @@ to **retrieve similar training utterances**.
                 model_path = available_models.get(model_id, {}).get("path", "Not found")
 
                 description = f"""
-                ## {info['name']}
+                ## {info["name"]}
 
                 **Type:** {type_text}
 
                 **Description:**
-                {info['description']}
+                {info["description"]}
 
                 **Model File:** `{os.path.basename(model_path)}`
                 """

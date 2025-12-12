@@ -265,7 +265,7 @@ def test_pipeline_multilabel_deploy_workflow():
 
         # Train
         models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
-        trained = run_training(
+        run_training(
             models=models,
             X_train=X_train,
             y_train=y_train,

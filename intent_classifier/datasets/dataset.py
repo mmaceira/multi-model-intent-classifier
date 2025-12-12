@@ -15,22 +15,23 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
-from intent_classifier.utils.paths import get_repo_root
+# These imports come after logger setup for consistency with module structure
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
 
 # Import generic loader
-from .generic_loader import load_dataset_from_config
+from .generic_loader import load_dataset_from_config  # noqa: E402
 
 # Map dataset names to loader functions (for custom loaders)
-_CUSTOM_LOADERS: Dict[str, Callable] = {}
+_CUSTOM_LOADERS: dict[str, Callable] = {}
 
 
-def _discover_datasets() -> Dict[str, Callable]:
+def _discover_datasets() -> dict[str, Callable]:
     """Discover datasets from config/dataset/ directories.
 
     Returns:
@@ -50,7 +51,8 @@ def _discover_datasets() -> Dict[str, Callable]:
                 dataset_name = dataset_dir.name
 
                 # Create a closure that captures the dataset_name correctly
-                # The loader function needs to accept the same parameters as load_dataset_from_config
+                # The loader function needs to accept the same parameters as
+                # load_dataset_from_config
                 # so that get_dataset() can detect and pass them through
                 def make_loader(name: str):
                     def loader(
@@ -85,10 +87,10 @@ def _discover_datasets() -> Dict[str, Callable]:
 
 
 # Cache discovered datasets
-_DISCOVERED_DATASETS: Dict[str, Callable] | None = None
+_DISCOVERED_DATASETS: dict[str, Callable] | None = None
 
 
-def _get_all_loaders() -> Dict[str, Callable]:
+def _get_all_loaders() -> dict[str, Callable]:
     """Get all available dataset loaders (discovered + custom)."""
     global _DISCOVERED_DATASETS
     if _DISCOVERED_DATASETS is None:
@@ -117,15 +119,15 @@ def register_dataset_loader(
 def get_dataset(
     dataset_name: str,
     use_oos: bool = False,
-    max_train_samples: int = None,
-    max_test_samples: int = None,
-    max_val_samples: int = None,
-    max_classes: int = None,
+    max_train_samples: int | None = None,
+    max_test_samples: int | None = None,
+    max_val_samples: int | None = None,
+    max_classes: int | None = None,
     seed: int = 42,
     csv_path: str | Path | None = None,
     multilabel: bool = False,
     **kwargs,
-) -> Tuple[List[str], List[str], List[str], List[str], List[str], List[str], List[str]]:
+) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str]]:
     """
     Main entry point for loading intent classification datasets.
 

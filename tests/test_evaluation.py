@@ -31,7 +31,7 @@ def single_label_predictions(tmp_path):
     # Train model
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
     model_dir = tmp_path / "models"
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -76,7 +76,7 @@ def multilabel_predictions(tmp_path):
     # Train model
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
     model_dir = tmp_path / "models"
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -216,7 +216,7 @@ def test_evaluation_summary_table(single_label_predictions):
     pred_dir, models = single_label_predictions
 
     with tempfile.TemporaryDirectory() as results_dir:
-        results = run_evaluations(
+        run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
             output_dir=results_dir,

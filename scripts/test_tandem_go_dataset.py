@@ -11,13 +11,14 @@ Run with: uv run python scripts/test_tandem_go_dataset.py
 import sys
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root
 repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
-from intent_classifier.datasets.dataset import get_dataset
+# This import must come after sys.path manipulation
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 
 
 def main():

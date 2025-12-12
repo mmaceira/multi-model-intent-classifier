@@ -209,10 +209,10 @@ def test_training_multiple_models(single_label_data):
 
         # All models should be trained
         assert len(trained) == 2
-        assert all(name in trained for name in models.keys())
+        assert all(name in trained for name in models)
 
         # All model files should exist
-        for name in models.keys():
+        for name in models:
             assert (Path(tmpdir) / name / "model.pkl").exists()
 
 

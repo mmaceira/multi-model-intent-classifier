@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -88,7 +88,7 @@ def main():
     is_multilabel_data = is_multilabel(y_train)
     num_examples = min(5, len(X_train))
     for i in range(num_examples):
-        print(f"\nExample {i+1}:")
+        print(f"\nExample {i + 1}:")
         print(f"  X: {X_train[i][:200]}{'...' if len(X_train[i]) > 200 else ''}")
         if is_multilabel_data:
             print(f"  y: {y_train[i]}")

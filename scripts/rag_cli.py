@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Add project root to path so `rag_llm` can be imported when installed or run from source.
 repo_root = get_repo_root()
@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None):
         sys.exit(1)
 
     try:
-        with open(labels_path) as f:
+        with open(labels_path, encoding="utf-8") as f:
             label_defs = json.load(f)
         if not isinstance(label_defs, dict):
             print(

@@ -20,8 +20,9 @@ from intent_classifier.utils.paths import get_repo_root
 repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
-from intent_classifier.datasets.dataset import get_dataset
-from intent_classifier.utils.label_utils import is_multilabel
+# These imports must come after sys.path manipulation
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.utils.label_utils import is_multilabel  # noqa: E402
 
 
 def test_dataset(dataset_name: str, is_multilabel_dataset: bool, use_oos: bool = False):
@@ -57,9 +58,9 @@ def test_dataset(dataset_name: str, is_multilabel_dataset: bool, use_oos: bool =
         is_multi = is_multilabel(y_train)
         print(f"   - Is multi-label? {is_multi}")
         if is_multi != is_multilabel_dataset:
-            print(
-                f"   ❌ ERROR: Expected {'multi' if is_multilabel_dataset else 'single'}-label, but got {'multi' if is_multi else 'single'}-label!"
-            )
+            expected = "multi" if is_multilabel_dataset else "single"
+            got = "multi" if is_multi else "single"
+            print(f"   ❌ ERROR: Expected {expected}-label, but got {got}-label!")
             return False
         print("   ✅ Labels are in correct format")
 

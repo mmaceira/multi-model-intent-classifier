@@ -9,10 +9,9 @@ Functions:
 """
 
 from pathlib import Path
-from typing import Union
 
 
-def ensure_dir(path: Union[str, Path]) -> Path:
+def ensure_dir(path: str | Path) -> Path:
     """Create directory path (including parents) if it does not exist and return a Path object.
 
     This is a centralized implementation to avoid subtle inconsistencies and

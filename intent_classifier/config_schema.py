@@ -11,7 +11,7 @@ Usage:
 """
 
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -30,10 +30,10 @@ class DatasetCfg(BaseModel):
     name: str = Field(..., description="Dataset name (must match a dataset in config/dataset/)")
     use_oos: bool = Field(default=False, description="Include out-of-scope examples")
     multilabel: bool = Field(default=False, description="Enable multi-label mode")
-    max_classes: Optional[int] = Field(None, ge=1, description="Limit number of classes")
-    max_train_samples: Optional[int] = Field(None, ge=1, description="Limit training samples")
-    max_test_samples: Optional[int] = Field(None, ge=1, description="Limit test samples")
-    min_samples_per_label: Optional[int] = Field(
+    max_classes: int | None = Field(None, ge=1, description="Limit number of classes")
+    max_train_samples: int | None = Field(None, ge=1, description="Limit training samples")
+    max_test_samples: int | None = Field(None, ge=1, description="Limit test samples")
+    min_samples_per_label: int | None = Field(
         None, ge=1, description="Minimum samples per label (filters rare labels)"
     )
 
@@ -68,7 +68,7 @@ class ModelCfg(BaseModel):
     llm_model: str = Field(
         default="ollama/llama3.1:8b", description="LLM model for RAG-LLM classification"
     )
-    ollama_endpoint: Optional[str] = Field(
+    ollama_endpoint: str | None = Field(
         default=None,
         description="Ollama API endpoint URL (e.g., http://localhost:11434). "
         "If not set, uses OLLAMA_API_BASE env var or default http://localhost:11434",
@@ -79,11 +79,11 @@ class TrainingCfg(BaseModel):
     """Training configuration settings."""
 
     # Allow flexible training config (can be extended)
-    model_config: Optional[str] = Field(None, description="Path to models config file")
+    model_config: str | None = Field(None, description="Path to models config file")
 
     # Add other training-specific fields as needed
     # For now, we'll allow arbitrary fields
-    class Config:
+    class Config:  # pylint: disable=missing-class-docstring
         extra = "allow"
 
 
@@ -92,7 +92,7 @@ class EvaluationCfg(BaseModel):
 
     # Allow flexible evaluation config (can be extended)
     # For now, we'll allow arbitrary fields
-    class Config:
+    class Config:  # pylint: disable=missing-class-docstring
         extra = "allow"
 
 
@@ -103,16 +103,16 @@ class Config(BaseModel):
     dataset: DatasetCfg
     paths: PathsCfg
     model: ModelCfg
-    training: Optional[Dict[str, Any]] = Field(default_factory=dict)
-    evaluation: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    training: dict[str, Any] | None = Field(default_factory=dict)
+    evaluation: dict[str, Any] | None = Field(default_factory=dict)
 
     @field_validator("training", "evaluation", mode="before")
     @classmethod
-    def validate_optional_sections(cls, v):
+    def validate_optional_sections(cls, v: Any) -> dict[str, Any]:
         """Allow training and evaluation to be optional."""
         return v if v is not None else {}
 
-    class Config:
+    class Config:  # pylint: disable=missing-class-docstring
         extra = "forbid"  # Reject unknown top-level keys
 
 
@@ -134,7 +134,7 @@ def load_and_validate_config(config_path: str | Path) -> Config:
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         raw_config = yaml.safe_load(f)
 
     if raw_config is None:
@@ -146,10 +146,10 @@ def load_and_validate_config(config_path: str | Path) -> Config:
     except Exception as e:
         raise ValueError(f"Configuration validation failed for {config_path}: {e}") from e
 
-    return config
+    return config  # type: ignore[no-any-return]
 
 
-def load_config_dict(config_path: str | Path) -> Dict[str, Any]:
+def load_config_dict(config_path: str | Path) -> dict[str, Any]:
     """Load config as dict (for backward compatibility).
 
     This function loads and validates the config, then returns it as a dict.
@@ -162,4 +162,4 @@ def load_config_dict(config_path: str | Path) -> Dict[str, Any]:
         Validated configuration as a dictionary
     """
     config = load_and_validate_config(config_path)
-    return config.model_dump()
+    return config.model_dump()  # type: ignore[no-any-return]  # type: ignore[no-any-return]

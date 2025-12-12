@@ -20,7 +20,7 @@ def check_commit_message():
         return 1
 
     # Read commit message
-    commit_msg = commit_msg_file.read_text().strip()
+    commit_msg = commit_msg_file.read_text(encoding="utf-8").strip()
 
     if not commit_msg:
         print("Error: Commit message is empty")

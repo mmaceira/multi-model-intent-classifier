@@ -23,9 +23,10 @@ from intent_classifier.utils.paths import get_repo_root
 repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
-from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier
-from intent_classifier.datasets.dataset import get_dataset
-from intent_classifier.utils.label_utils import is_multilabel
+# These imports must come after sys.path manipulation
+from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.utils.label_utils import is_multilabel  # noqa: E402
 
 
 def main():
@@ -128,7 +129,8 @@ def main():
         subset_accuracy = accuracy_score(y_test_binary, y_pred_binary)
         print("\n📊 Evaluation Metrics:")
         print(
-            f"   - Subset Accuracy (exact match): {subset_accuracy:.4f} ({subset_accuracy*100:.2f}%)"
+            f"   - Subset Accuracy (exact match): {subset_accuracy:.4f} "
+            f"({subset_accuracy * 100:.2f}%)"
         )
 
         # Hamming loss (lower is better)

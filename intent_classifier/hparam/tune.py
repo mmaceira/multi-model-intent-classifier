@@ -3,12 +3,12 @@
 import json
 import subprocess
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import yaml
 
 
-def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
+def run_tuning(config: dict[str, Any]) -> dict[str, Any]:
     """Run hyperparameter tuning and return best parameters.
 
     This function runs the hyperparameter tuning script and returns the best
@@ -78,7 +78,7 @@ def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
     if hyperparams_dir.exists():
         for file_path in hyperparams_dir.glob("best_*.yaml"):
             model_name = file_path.stem.replace("best_", "")
-            with open(file_path) as f:
+            with open(file_path, encoding="utf-8") as f:
                 params = yaml.safe_load(f)
                 best_params[model_name] = params
 
@@ -87,7 +87,7 @@ def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
     artifacts_dir.mkdir(exist_ok=True)
     best_params_json = artifacts_dir / "best_params.json"
 
-    with open(best_params_json, "w") as f:
+    with open(best_params_json, "w", encoding="utf-8") as f:
         json.dump(best_params, f, indent=2)
 
     print(f"\n✅ Best hyperparameters saved to {best_params_json}")

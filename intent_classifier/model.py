@@ -60,7 +60,7 @@ Example Usage:
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any, Dict, Union
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator
@@ -134,13 +134,14 @@ class TextClassifier(ABC, BaseEstimator):
     """
 
     def __init__(
-        self, vectorizer: Union[VectorizerProtocol, Callable[[Sequence[str]], np.ndarray]]
+        self, vectorizer: VectorizerProtocol | Callable[[Sequence[str]], np.ndarray]
     ) -> None:
         """Initialize the text classifier.
 
         Args:
-            vectorizer: Text vectorization component that converts raw text to feature vectors.
-                       Must implement either a transform() method (VectorizerProtocol) or be callable.
+            vectorizer: Text vectorization component that converts raw text to
+                       feature vectors. Must implement either a transform()
+                       method (VectorizerProtocol) or be callable.
 
         Notes:
             For BaseEstimator compatibility, parameters should be stored as attributes with
@@ -159,7 +160,7 @@ class TextClassifier(ABC, BaseEstimator):
         )
 
     @property
-    def vectorizer(self) -> Union[VectorizerProtocol, Callable[[Sequence[str]], np.ndarray]]:
+    def vectorizer(self) -> VectorizerProtocol | Callable[[Sequence[str]], np.ndarray]:
         """Get the vectorizer instance.
 
         Returns:
@@ -171,7 +172,7 @@ class TextClassifier(ABC, BaseEstimator):
         """
         return self._vectorizer
 
-    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         This method is required by scikit-learn's BaseEstimator interface and
@@ -189,7 +190,7 @@ class TextClassifier(ABC, BaseEstimator):
         # Get parameters from constructor (__init__ method)
         import inspect
 
-        init_signature = inspect.signature(self.__init__)
+        init_signature = inspect.signature(type(self).__init__)
 
         for parameter_name in init_signature.parameters:
             if parameter_name != "self" and hasattr(self, parameter_name):
@@ -276,7 +277,10 @@ class TextClassifier(ABC, BaseEstimator):
             # 2. Convert to binary matrix for sklearn (n_samples x n_classes, 0/1 values)
             y_binary, self._label_binarizer = binarize_labels(y_multilabel)
             # 3. Store classes from binarizer
-            self._classes = self._label_binarizer.classes_
+            if self._label_binarizer is not None:
+                self._classes = self._label_binarizer.classes_
+            else:
+                raise RuntimeError("Label binarizer not created")
             # 4. Pass binary matrix to model training
             y_for_training = y_binary
         else:
@@ -363,7 +367,8 @@ class TextClassifier(ABC, BaseEstimator):
                     # If it's integer indices, we can't convert without classes
                     if self._classes is None or len(self._classes) == 0:
                         raise ValueError(
-                            "Model._classes is not initialized. Cannot convert 1D predictions to multilabel format."
+                            "Model._classes is not initialized. Cannot convert "
+                            "1D predictions to multilabel format."
                         )
                     # Convert 1D array to 2D binary matrix (assuming indices)
                     # This is a fallback - shouldn't normally happen
@@ -380,7 +385,8 @@ class TextClassifier(ABC, BaseEstimator):
                     if isinstance(predictions_raw, np.ndarray) and predictions_raw.ndim == 1:
                         if self._classes is None or len(self._classes) == 0:
                             raise ValueError(
-                                "Model._classes is not initialized. Cannot convert 1D predictions to multilabel format."
+                                "Model._classes is not initialized. Cannot "
+                                "convert 1D predictions to multilabel format."
                             )
                         # Convert 1D array of indices to 2D binary matrix
                         n_samples = len(predictions_raw)
@@ -404,7 +410,7 @@ class TextClassifier(ABC, BaseEstimator):
 
             return predictions
         except Exception as e:
-            raise RuntimeError(f"Prediction failed: {str(e)}") from e
+            raise RuntimeError(f"Prediction failed: {e!s}") from e
 
     def vectorize(self, texts: Sequence[str]) -> np.ndarray:
         """Convert raw text to feature vectors.
@@ -488,4 +494,4 @@ class TextClassifier(ABC, BaseEstimator):
             - Format conversion (binary matrix <-> list of lists) is handled by base class
             - Check self._is_multilabel to determine which format to return
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass

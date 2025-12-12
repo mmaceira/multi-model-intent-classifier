@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -158,9 +159,9 @@ FINANCIAL_TERMS = {
 def class_frequency(
     labels: np.ndarray,
     plot: bool = True,
-    save_path: Optional[str] = None,
-    top_n: Optional[int] = None,
-) -> Dict[str, Any]:
+    save_path: str | None = None,
+    top_n: int | None = None,
+) -> dict[str, Any]:
     """Analyze and visualize class distribution.
 
     Args:
@@ -220,11 +221,11 @@ def class_frequency(
 
 
 def length_distribution(
-    texts: List[str],
-    save_path: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    percentiles: List[int] = None,
-) -> Dict[str, Any]:
+    texts: list[str],
+    save_path: str | None = None,
+    output_dir: str | None = None,
+    percentiles: list[int] | None = None,
+) -> dict[str, Any]:
     """Analyze text length distribution.
 
     Args:
@@ -273,8 +274,8 @@ def length_distribution(
     plt.ylabel("Count")
 
     # Add vertical lines for mean and median
-    plt.axvline(stats["mean"], color="r", linestyle="--", label=f'Mean: {stats["mean"]:.1f}')
-    plt.axvline(stats["median"], color="g", linestyle="--", label=f'Median: {stats["median"]:.1f}')
+    plt.axvline(stats["mean"], color="r", linestyle="--", label=f"Mean: {stats['mean']:.1f}")
+    plt.axvline(stats["median"], color="g", linestyle="--", label=f"Median: {stats['median']:.1f}")
     plt.legend()
 
     if save_path:
@@ -325,15 +326,15 @@ def _is_numeric_or_financial(word: str) -> bool:
 
 
 def vocabulary_analysis(
-    texts: List[str],
+    texts: list[str],
     remove_stopwords: bool = True,
     remove_numbers: bool = True,
     remove_financial_terms: bool = False,
     min_word_length: int = 1,
     n_most_common: int = 30,
     plot: bool = True,
-    figsize: Tuple[int, int] = (12, 8),
-) -> Dict:
+    figsize: tuple[int, int] = (12, 8),
+) -> dict:
     """Analyze vocabulary distribution.
 
     Args:
@@ -413,7 +414,7 @@ def vocabulary_drift(
     test_texts: Sequence[str],
     top_k: int = 2000,
     min_freq: int = 10,
-    output_path: Optional[str] = None,
+    output_path: str | None = None,
 ) -> pd.DataFrame:
     """Analyze vocabulary differences between train and test sets.
 
@@ -471,15 +472,15 @@ def vocabulary_drift(
 
 
 def comprehensive_analysis(
-    texts: List[str],
-    labels: Optional[List[str]] = None,
-    label_names: Optional[List[str]] = None,
+    texts: list[str],
+    labels: list[str] | None = None,
+    label_names: list[str] | None = None,
     output_dir: str = ".",
     min_word_length: int = 3,
     top_n: int = 30,
     create_visualizations: bool = True,
     create_csv: bool = True,
-) -> Dict:
+) -> dict:
     """Perform comprehensive text analysis.
 
     Args:
@@ -628,7 +629,7 @@ def comprehensive_analysis(
             results["advanced_class"] = pd.DataFrame()
 
         if create_csv:
-            results["advanced_class"].to_csv(
+            results["advanced_class"].to_csv(  # type: ignore[attr-defined]
                 os.path.join(output_dir, "advanced_class_words.csv"), index=False
             )
 

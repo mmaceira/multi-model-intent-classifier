@@ -44,7 +44,7 @@ import yaml
 from ray import tune
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root and add to path for imports
 repo_root = get_repo_root()
@@ -205,9 +205,9 @@ def main():
 
     # Tune each algorithm
     for algo in algorithms:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Tuning {algo.upper()}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             if algo == "nb":

@@ -9,7 +9,7 @@ all heavy-lifting to the unified `intent_classifier.training.run_training` helpe
 import sys
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -83,7 +83,8 @@ def main():
         models = load_models_from_config()
         if not models:
             print(
-                "⚠️  Warning: No models were loaded. Check your config/algorithm/models_config.yaml file."
+                "⚠️  Warning: No models were loaded. "
+                "Check your config/algorithm/models_config.yaml file."
             )
             return
         print(f"✅ Successfully loaded {len(models)} model(s) for training")

@@ -12,7 +12,7 @@ import sys
 import warnings
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -60,10 +60,7 @@ def main():
     X_train_merged = X_train + X_val
     y_train_merged = y_train + y_val
 
-    print(
-        f"Loaded {len(X_train)} training, {len(X_val)} validation, "
-        f"{len(X_test)} test utterances"
-    )
+    print(f"Loaded {len(X_train)} training, {len(X_val)} validation, {len(X_test)} test utterances")
     print(
         f"Total training (train+val merged for analysis): "
         f"{len(X_train_merged)} utterances with {len(classes)} intent classes"

@@ -6,7 +6,7 @@ This module provides helper functions used across the evaluation package.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ def setup_logging(verbose: bool = True) -> logging.Logger:
     return logger
 
 
-def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str, pd.DataFrame]]:
+def load_all_prediction_files(experiment_dir: str | Path) -> dict[str, dict[str, pd.DataFrame]]:
     """Load every CSV prediction file from model directories into a dict.
 
     Parameters
@@ -44,7 +44,7 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
         Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
     """
     exp = Path(experiment_dir)
-    dfs: Dict[str, Dict[str, pd.DataFrame]] = {}
+    dfs: dict[str, dict[str, pd.DataFrame]] = {}
 
     # Find all model directories
     model_dirs = [d for d in exp.glob("*") if d.is_dir()]
@@ -82,7 +82,7 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
     return dfs
 
 
-def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
+def analyse_error_patterns(pred_dfs: dict[str, dict[str, pd.DataFrame]]) -> pd.DataFrame:
     """Return dataframe with a row per distinct (true -> pred) error."""
     frames = []
     for name, splits in pred_dfs.items():
@@ -104,7 +104,7 @@ def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.D
     )
 
 
-def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min_models: int = 2):
+def consistently_misclassified(pred_dfs: dict[str, dict[str, pd.DataFrame]], min_models: int = 2):
     """Docs misclassified by >= min_models models in exactly the same way.
 
     Parameters
@@ -128,7 +128,10 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
             df = splits["test"]
             wrong = df[df["y_true"] != df["y_pred"]][["id", "text", "y_true", "y_pred"]].copy()
             wrong[name] = True
-            combined = wrong if combined is None else combined.merge(wrong, how="outer")
+            if combined is None:
+                combined = wrong
+            else:
+                combined = combined.merge(wrong, how="outer")
 
     if combined is None:
         return pd.DataFrame()
@@ -143,7 +146,7 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
     return combined[mask]
 
 
-def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path]) -> None:
+def export_analysis_results(results: dict[str, Any], output_dir: str | Path) -> None:
     """Export analysis results to files.
 
     Parameters

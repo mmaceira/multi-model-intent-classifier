@@ -26,7 +26,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import faiss
 import gradio as gr
@@ -51,7 +51,7 @@ with open(config_path) as f:
     config = yaml.safe_load(f)
 
 
-def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+def substitute_vars(value: Any, cfg: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config."""
     if isinstance(value, str) and "${" in value:
         import re
@@ -88,7 +88,7 @@ DEFAULT_CONFIG = {
 
 
 class IntentTrendAnalyzer:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or DEFAULT_CONFIG
         self._initialize_resources()
 
@@ -113,13 +113,13 @@ class IntentTrendAnalyzer:
         except Exception as e:
             raise Exception(f"Error loading index or metadata: {e}") from e
 
-    def _embed_and_normalize(self, texts: List[str]) -> np.ndarray:
+    def _embed_and_normalize(self, texts: list[str]) -> np.ndarray:
         """Embed texts and normalize vectors."""
         emb = self.model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
         faiss.normalize_L2(emb)
         return emb
 
-    def _classify_relevance(self, query: str, doc: str) -> Tuple[str, str]:
+    def _classify_relevance(self, query: str, doc: str) -> tuple[str, str]:
         """Classify relevance of a document to the query using LLM."""
         system = (
             "You are an expert assistant. Label how relevant this previous user "
@@ -172,7 +172,7 @@ class IntentTrendAnalyzer:
                 relevance = "low"
             return relevance, cleaned.replace("\n", " ")
 
-    def analyze_intent_trend(self, utterance: str, k: int = None) -> str:
+    def analyze_intent_trend(self, utterance: str, k: int | None = None) -> str:
         """Analyze intent trends for a given utterance."""
         k = k or self.config["top_k"]
 

@@ -33,7 +33,7 @@ def single_label_trained_model(tmp_path):
 
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -62,7 +62,7 @@ def multilabel_trained_model(tmp_path):
 
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -104,9 +104,9 @@ def test_single_label_predictions_only_valid_classes(single_label_trained_model)
 
         for pred in test_preds:
             assert isinstance(pred, str)
-            assert (
-                pred in valid_classes
-            ), f"Prediction '{pred}' not in valid classes {valid_classes}"
+            assert pred in valid_classes, (
+                f"Prediction '{pred}' not in valid classes {valid_classes}"
+            )
 
 
 def test_multilabel_predictions_only_valid_classes(multilabel_trained_model):
@@ -142,8 +142,7 @@ def test_multilabel_predictions_only_valid_classes(multilabel_trained_model):
             for label in pred:
                 assert isinstance(label, str)
                 assert label in valid_classes, (
-                    f"Label '{label}' not in valid classes {valid_classes}. "
-                    f"Full prediction: {pred}"
+                    f"Label '{label}' not in valid classes {valid_classes}. Full prediction: {pred}"
                 )
 
 
@@ -227,7 +226,7 @@ def test_all_algorithms_single_label_valid_classes(algorithm_class, algorithm_kw
     valid_classes = set(classes)
     models = {"test_model": algorithm_class(**algorithm_kwargs)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -257,9 +256,9 @@ def test_all_algorithms_single_label_valid_classes(algorithm_class, algorithm_kw
         assert len(test_preds) > 0, f"{algorithm_class.__name__} produced no predictions"
 
         for i, pred in enumerate(test_preds):
-            assert isinstance(
-                pred, str
-            ), f"{algorithm_class.__name__}: Prediction {i} is not a string: {type(pred)}"
+            assert isinstance(pred, str), (
+                f"{algorithm_class.__name__}: Prediction {i} is not a string: {type(pred)}"
+            )
             assert pred in valid_classes, (
                 f"{algorithm_class.__name__}: Prediction '{pred}' at index {i} "
                 f"not in valid classes {sorted(valid_classes)}"
@@ -290,7 +289,7 @@ def test_all_algorithms_multilabel_valid_classes(algorithm_class, algorithm_kwar
     valid_classes = set(classes)
     models = {"test_model": algorithm_class(**algorithm_kwargs)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -320,9 +319,9 @@ def test_all_algorithms_multilabel_valid_classes(algorithm_class, algorithm_kwar
         assert len(test_preds) > 0, f"{algorithm_class.__name__} produced no predictions"
 
         for i, pred in enumerate(test_preds):
-            assert isinstance(
-                pred, list
-            ), f"{algorithm_class.__name__}: Prediction {i} is not a list: {type(pred)}"
+            assert isinstance(pred, list), (
+                f"{algorithm_class.__name__}: Prediction {i} is not a list: {type(pred)}"
+            )
             assert len(pred) > 0, (
                 f"{algorithm_class.__name__}: Prediction {i} is empty. "
                 "Each prediction should have at least one label."
@@ -393,9 +392,9 @@ def test_multilabel_predictions_format_consistency(multilabel_trained_model):
         train_preds = predictions["linear_svm"]["train"]
         assert len(train_preds) == 10
         assert all(isinstance(p, list) for p in train_preds)
-        assert all(
-            len(p) > 0 for p in train_preds
-        ), "All predictions should have at least one label"
+        assert all(len(p) > 0 for p in train_preds), (
+            "All predictions should have at least one label"
+        )
         assert all(isinstance(label, str) for pred in train_preds for label in pred)
 
         # Check test predictions

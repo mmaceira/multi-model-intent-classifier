@@ -20,7 +20,7 @@ Functions:
 """
 
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from ray import tune
@@ -38,7 +38,7 @@ from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
 from intent_classifier.rag.vector_store import VectorStore
 
 
-def train_nb(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_nb(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train Naive Bayes with hyperparameter tuning.
 
     Args:
@@ -70,7 +70,7 @@ def train_nb(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
     tune.report({"f1": f1})
 
 
-def train_svm(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_svm(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train Linear SVM with hyperparameter tuning.
 
     Args:
@@ -102,7 +102,7 @@ def train_svm(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
     tune.report({"f1": f1})
 
 
-def train_svm_bigrams(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_svm_bigrams(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train Linear SVM with bigrams and hyperparameter tuning.
 
     Args:
@@ -174,9 +174,9 @@ def ensure_embeddings_built(
             meta_path.unlink()
 
     # Build embeddings if they don't exist
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Building Embeddings for RAG Models")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     if force_rebuild:
         print("Force rebuild requested - building embeddings from provided data...")
     else:
@@ -227,7 +227,7 @@ def ensure_embeddings_built(
         return False
 
 
-def train_rag_kmajority(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_rag_kmajority(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train RAG KMajority with hyperparameter tuning (top_k).
 
     Follows same approach as other models: build index using ONLY training set,
@@ -280,7 +280,7 @@ def train_rag_kmajority(config: Dict[str, Any], data: Optional[Tuple] = None) ->
         tune.report({"f1": 0.0})
 
 
-def train_rag_centroid(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_rag_centroid(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train RAG Centroid with hyperparameter tuning (top_k).
 
     Follows same approach as other models: build index using ONLY training set,
@@ -331,7 +331,7 @@ def train_rag_centroid(config: Dict[str, Any], data: Optional[Tuple] = None) -> 
         tune.report({"f1": 0.0})
 
 
-def train_transformer_logreg(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_transformer_logreg(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train Transformer LogReg with hyperparameter tuning (C).
 
     Args:
@@ -374,7 +374,7 @@ def train_transformer_logreg(config: Dict[str, Any], data: Optional[Tuple] = Non
     tune.report({"f1": f1})
 
 
-def train_embedding_logreg(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_embedding_logreg(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train Embedding LogReg with hyperparameter tuning (C).
 
     Supports both OpenAI embeddings (requires OPENAI_API_KEY) and SBERT embeddings
@@ -433,7 +433,7 @@ def train_embedding_logreg(config: Dict[str, Any], data: Optional[Tuple] = None)
     tune.report({"f1": f1})
 
 
-def train_rag_llm(config: Dict[str, Any], data: Optional[Tuple] = None) -> None:
+def train_rag_llm(config: dict[str, Any], data: tuple | None = None) -> None:
     """Train RAG LLM with hyperparameter tuning (top_k).
 
     Follows same approach as other models: build index using ONLY training set,

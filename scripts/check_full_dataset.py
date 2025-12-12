@@ -8,7 +8,7 @@ This script loads the dataset with no limits to see what the full dataset contai
 from collections import Counter
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root
 repo_root = get_repo_root()
@@ -85,12 +85,12 @@ def main():
     print("\n📊 Text Length Statistics:")
     print(
         f"  - Train - Mean: {sum(train_lengths) / len(train_lengths):.1f}, "
-        f"Median: {sorted(train_lengths)[len(train_lengths)//2]}, "
+        f"Median: {sorted(train_lengths)[len(train_lengths) // 2]}, "
         f"Min: {min(train_lengths)}, Max: {max(train_lengths)}"
     )
     print(
         f"  - Test - Mean: {sum(test_lengths) / len(test_lengths):.1f}, "
-        f"Median: {sorted(test_lengths)[len(test_lengths)//2]}, "
+        f"Median: {sorted(test_lengths)[len(test_lengths) // 2]}, "
         f"Min: {min(test_lengths)}, Max: {max(test_lengths)}"
     )
 

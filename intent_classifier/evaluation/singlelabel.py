@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -22,7 +21,7 @@ class SingleLabelEvaluationRunner(BaseEvaluationRunner):
     where each sample has exactly one label.
     """
 
-    def parse_labels_from_csv(self, labels: pd.Series) -> List[str]:
+    def parse_labels_from_csv(self, labels: pd.Series) -> list[str]:
         """Parse single-label from CSV format.
 
         Args:
@@ -35,11 +34,11 @@ class SingleLabelEvaluationRunner(BaseEvaluationRunner):
 
     def compute_metrics(
         self,
-        y_true: List[str],
-        y_pred: List[str],
+        y_true: list[str],
+        y_pred: list[str],
         split_name: str,
         output_dir: Path,
-    ) -> Optional[Dict[str, float]]:
+    ) -> dict[str, float] | None:
         """Compute single-label metrics for a split.
 
         Args:
@@ -59,7 +58,7 @@ class SingleLabelEvaluationRunner(BaseEvaluationRunner):
             logger=self.logger,
         )
 
-    def get_overfitting_metrics(self) -> List[str]:
+    def get_overfitting_metrics(self) -> list[str]:
         """Get list of metrics to use for overfitting analysis in single-label tasks.
 
         Returns:
@@ -67,7 +66,7 @@ class SingleLabelEvaluationRunner(BaseEvaluationRunner):
         """
         return get_singlelabel_overfitting_metrics()
 
-    def get_summary_metrics(self) -> List[str]:
+    def get_summary_metrics(self) -> list[str]:
         """Get list of metrics to include in summary tables for single-label tasks.
 
         Returns:
@@ -83,7 +82,7 @@ class SingleLabelEvaluationRunner(BaseEvaluationRunner):
         """
         return True
 
-    def _extract_classes(self, test_df: pd.DataFrame) -> List[str]:
+    def _extract_classes(self, test_df: pd.DataFrame) -> list[str]:
         """Extract unique classes from test DataFrame (single-label).
 
         Args:

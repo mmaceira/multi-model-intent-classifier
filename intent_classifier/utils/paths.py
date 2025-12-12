@@ -13,7 +13,6 @@ Example:
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def get_repo_root() -> Path:
@@ -62,7 +61,7 @@ def get_repo_root() -> Path:
 
 
 # Cache the repo root
-_REPO_ROOT: Optional[Path] = None
+_REPO_ROOT: Path | None = None
 
 
 def _get_repo_root_cached() -> Path:
@@ -136,7 +135,7 @@ def get_output_dir(experiment_name: str = "default") -> Path:
     return _get_repo_root_cached() / "output" / experiment_name
 
 
-def get_models_dir(experiment_name: Optional[str] = None) -> Path:
+def get_models_dir(experiment_name: str | None = None) -> Path:
     """Get the models directory path.
 
     Args:
@@ -152,7 +151,7 @@ def get_models_dir(experiment_name: Optional[str] = None) -> Path:
     return _get_repo_root_cached() / "models"
 
 
-def get_embeddings_dir(experiment_name: Optional[str] = None) -> Path:
+def get_embeddings_dir(experiment_name: str | None = None) -> Path:
     """Get the embeddings directory path.
 
     Args:
@@ -177,7 +176,7 @@ def get_data_dir() -> Path:
     return _get_repo_root_cached() / "data"
 
 
-def resolve_path(path: str | Path, base: Optional[Path] = None) -> Path:
+def resolve_path(path: str | Path, base: Path | None = None) -> Path:
     """Resolve a path relative to a base directory.
 
     If path is absolute, returns it as-is.

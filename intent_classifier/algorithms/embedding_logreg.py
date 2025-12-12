@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Dict, List, Sequence
+from typing import Any
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -129,25 +130,31 @@ class EmbeddingLogReg(TextClassifier):
                         "use_openai=True requires OPENAI_API_KEY environment variable "
                         "or api_key parameter"
                     )
-            self.embedder = EmbeddingGenerator(
+            embedder: Any = EmbeddingGenerator(
                 api_key=api_key, model=model or "text-embedding-3-small", batch_size=batch_size
             )
         else:
             # Use SBERT embeddings (local, no API key needed)
             from sentence_transformers import SentenceTransformer
 
-            self.embedder = SentenceTransformer(model)
-        super().__init__(self.embedder)
+            embedder = SentenceTransformer(model)
+
+        self.embedder = embedder
+
+        # Wrap embedder to match TextClassifier's expected type
+        # Both EmbeddingGenerator and SentenceTransformer have encode() method
+        # that matches Callable[[Sequence[str]], np.ndarray]
+        # We create a closure that captures the embedder
+        def embedder_callable(texts: Sequence[str]) -> np.ndarray:
+            # normalize to list for some embedders
+            return embedder.encode(list(texts))
+
+        super().__init__(embedder_callable)
 
         # ------------------------------------------------------------------
         # Pipeline: scaler → logistic regression, then GridSearch
         # ------------------------------------------------------------------
-        base_clf = LogisticRegression(
-            max_iter=max_iter,
-            solver="lbfgs",
-            n_jobs=n_jobs,
-        )
-        pipe = make_pipeline(StandardScaler(with_mean=True), base_clf)
+        # Base classifier will be created in _fit_model with proper CV strategy
 
         # Store cv parameter for dynamic adjustment during fit
         self._cv_param = cv
@@ -161,7 +168,7 @@ class EmbeddingLogReg(TextClassifier):
     # ------------------------------------------------------------------
     # scikit‑learn plumbing
     # ------------------------------------------------------------------
-    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         params = {
             "use_openai": self.use_openai,
             "model": self.model,
@@ -180,14 +187,14 @@ class EmbeddingLogReg(TextClassifier):
     # ------------------------------------------------------------------
     # Vectorisation helper
     # ------------------------------------------------------------------
-    def vectorize(self, texts: List[str]):
-        vectors = self.embedder.encode(texts)
+    def vectorize(self, texts: Sequence[str]) -> np.ndarray:
+        vectors = self.embedder.encode(list(texts))
         return np.array(vectors)  # Ensure we return a numpy array
 
     # ------------------------------------------------------------------
     # Fit / predict API
     # ------------------------------------------------------------------
-    def _fit_model(self, X_vec: np.ndarray, y):
+    def _fit_model(self, X_vec: np.ndarray, y: np.ndarray) -> None:
         """Train the EmbeddingLogReg classifier.
 
         Args:
@@ -241,6 +248,8 @@ class EmbeddingLogReg(TextClassifier):
         # ========================================================================
         # STEP 3: Train the classifier
         # ========================================================================
+        if self.clf is None:
+            raise RuntimeError("Classifier not initialized")
         self.clf.fit(X_vec, y)
         self._is_fitted = True
 
@@ -248,24 +257,36 @@ class EmbeddingLogReg(TextClassifier):
         # STEP 4: Log training results
         # ========================================================================
         if self._is_multilabel:
+            best_score = (
+                self._base_clf.best_score_
+                if self._base_clf is not None and hasattr(self._base_clf, "best_score_")
+                else 0.0
+            )
             logger.info(
                 "[EmbeddingLogReg-%s] Multi-label mode | CV‑score = %.4f",
                 backend_name,
-                self._base_clf.best_score_ if hasattr(self._base_clf, "best_score_") else 0.0,
+                best_score,
             )
         else:
-            logger.info(
-                "[EmbeddingLogReg-%s] Best C = %.3f | CV‑score = %.4f",
-                backend_name,
-                self.clf.best_params_["logisticregression__C"],
-                self.clf.best_score_,
-            )
+            if (
+                self.clf is not None
+                and hasattr(self.clf, "best_params_")
+                and hasattr(self.clf, "best_score_")
+            ):
+                logger.info(
+                    "[EmbeddingLogReg-%s] Best C = %.3f | CV‑score = %.4f",
+                    backend_name,
+                    self.clf.best_params_["logisticregression__C"],
+                    self.clf.best_score_,
+                )
 
-    def _predict_model(self, X_vec):
+    def _predict_model(self, X_vec: np.ndarray) -> np.ndarray:
         """Hook expected by the TextClassifier base class."""
+        if self.clf is None:
+            raise RuntimeError("Classifier not fitted")
         return self.clf.predict(X_vec)
 
-    def fit(self, X: List[str], y):
+    def fit(self, X: Sequence[str], y: np.ndarray) -> EmbeddingLogReg:
         # Handle label format detection and conversion (same as TransformerLogReg)
         import numpy as np
 
@@ -275,14 +296,16 @@ class EmbeddingLogReg(TextClassifier):
             to_multilabel_format,
         )
 
-        # Detect label format
-        self._is_multilabel = is_multilabel(y)
+        # Detect label format - convert to list if numpy array for is_multilabel
+        y_for_check = y.tolist() if isinstance(y, np.ndarray) else y
+        self._is_multilabel = is_multilabel(y_for_check)
 
         # Convert labels to format expected by sklearn models
         if self._is_multilabel:
-            y_multilabel = to_multilabel_format(y)
+            y_multilabel = to_multilabel_format(y_for_check)
             y_binary, self._label_binarizer = binarize_labels(y_multilabel)
-            self._classes = self._label_binarizer.classes_
+            if self._label_binarizer is not None:
+                self._classes = self._label_binarizer.classes_
             y_for_training = y_binary
         else:
             y_for_training = np.asarray(y)
@@ -296,16 +319,16 @@ class EmbeddingLogReg(TextClassifier):
         self._is_fitted = True
         return self
 
-    def predict(self, X: List[str]):
+    def predict(self, X: Sequence[str]) -> np.ndarray:
         # Use parent class predict() to handle label format conversion
         # This ensures proper conversion from binary matrix to list of lists for multi-label
         return super().predict(X)
 
     # Optional convenience
-    def transform(self, X: List[str]):
+    def transform(self, X: Sequence[str]) -> np.ndarray:
         return self.vectorize(X)
 
-    def predict_proba(self, X: List[str]):
+    def predict_proba(self, X: Sequence[str]) -> np.ndarray:
         """Generate probability estimates for each class.
 
         Args:
@@ -323,15 +346,20 @@ class EmbeddingLogReg(TextClassifier):
         # Both single-label and multi-label use predict_proba, but access differs:
         # - Single-label: access best_estimator_ from GridSearchCV
         # - Multi-label: MultiOutputClassifier wraps GridSearchCV and handles it automatically
+        if self.clf is None:
+            raise RuntimeError("Classifier not fitted")
         if self._is_multilabel:
             return self.clf.predict_proba(X_vec)
         else:
-            return self.clf.best_estimator_.predict_proba(X_vec)
+            if hasattr(self.clf, "best_estimator_"):
+                return self.clf.best_estimator_.predict_proba(X_vec)
+            else:
+                raise RuntimeError("Classifier not properly fitted")
 
     # ------------------------------------------------------------------
     # Pickling support
     # ------------------------------------------------------------------
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         """
         Build a picklable representation by *excluding* any object that
         contains thread locks or live network handles.  We only store:
@@ -343,7 +371,7 @@ class EmbeddingLogReg(TextClassifier):
         """
         if not self._is_fitted:
             raise RuntimeError(
-                "Serialising an unfitted model makes little sense – " "call .fit(...) first"
+                "Serialising an unfitted model makes little sense – call .fit(...) first"
             )
 
         # ----------------------------------------------------------------
@@ -353,6 +381,8 @@ class EmbeddingLogReg(TextClassifier):
             # Multi-label: self.clf is MultiOutputClassifier wrapping GridSearchCV objects
             # Extract from ALL estimators (one per label)
             # Note: MultiOutputClassifier.estimators_ contains the fitted GridSearchCV objects
+            if self.clf is None:
+                raise RuntimeError("Classifier not fitted")
             if not hasattr(self.clf, "estimators_") or len(self.clf.estimators_) == 0:
                 raise RuntimeError("Multi-label model not properly fitted")
 
@@ -389,20 +419,22 @@ class EmbeddingLogReg(TextClassifier):
             best_score = first_params["best_score"]
         else:
             # Single-label: self.clf is GridSearchCV directly
-            pipe: Pipeline = self.clf.best_estimator_
-            scaler: StandardScaler = pipe.named_steps["standardscaler"]
-            logreg: LogisticRegression = pipe.named_steps["logisticregression"]
+            if self.clf is None:
+                raise RuntimeError("Classifier not fitted")
+            single_pipe: Pipeline = self.clf.best_estimator_
+            single_scaler: StandardScaler = single_pipe.named_steps["standardscaler"]
+            single_logreg: LogisticRegression = single_pipe.named_steps["logisticregression"]
 
             scaler_params = {
-                "mean_": deepcopy(scaler.mean_),
-                "scale_": deepcopy(scaler.scale_),
-                "n_features_in_": scaler.n_features_in_,
+                "mean_": deepcopy(single_scaler.mean_),
+                "scale_": deepcopy(single_scaler.scale_),
+                "n_features_in_": single_scaler.n_features_in_,
             }
             logreg_params = {
-                "coef_": deepcopy(logreg.coef_),
-                "intercept_": deepcopy(logreg.intercept_),
-                "classes_": deepcopy(logreg.classes_),
-                "n_features_in_": logreg.n_features_in_,
+                "coef_": deepcopy(single_logreg.coef_),
+                "intercept_": deepcopy(single_logreg.intercept_),
+                "classes_": deepcopy(single_logreg.classes_),
+                "n_features_in_": single_logreg.n_features_in_,
             }
             best_C = self.clf.best_params_["logisticregression__C"]
             best_score = self.clf.best_score_
@@ -440,7 +472,7 @@ class EmbeddingLogReg(TextClassifier):
 
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any]) -> None:
         """
         Rebuild everything from the lightweight state persisted by
         __getstate__.  No network handles – you can unpickle safely even
@@ -475,7 +507,7 @@ class EmbeddingLogReg(TextClassifier):
                     "use_openai=True requires OPENAI_API_KEY environment variable "
                     "or api_key parameter"
                 )
-            self.embedder = EmbeddingGenerator(
+            embedder: Any = EmbeddingGenerator(
                 api_key=api_key,
                 model=self.model or "text-embedding-3-small",
                 batch_size=self.batch_size,
@@ -483,7 +515,9 @@ class EmbeddingLogReg(TextClassifier):
         else:
             from sentence_transformers import SentenceTransformer
 
-            self.embedder = SentenceTransformer(self.model)
+            embedder = SentenceTransformer(self.model)
+
+        self.embedder = embedder
 
         # ------------- rebuild the scaler + classifier ------------------
         from sklearn.pipeline import Pipeline
@@ -537,10 +571,11 @@ class EmbeddingLogReg(TextClassifier):
             self.clf = MultiOutputClassifier(
                 estimators[0] if estimators else Pipeline([]), n_jobs=1
             )
-            self.clf.estimators_ = estimators
-            self.clf.n_outputs_ = len(estimators)
+            # Set attributes that MultiOutputClassifier expects
+            self.clf.estimators_ = estimators  # type: ignore[attr-defined]
+            self.clf.n_outputs_ = len(estimators)  # type: ignore[attr-defined]
             # Mark as fitted (since estimators are already fitted)
-            self.clf._fitted = True
+            self.clf._fitted = True  # type: ignore[attr-defined]
         else:
             # Single-label: reconstruct single pipeline
             scaler = StandardScaler(with_mean=True)

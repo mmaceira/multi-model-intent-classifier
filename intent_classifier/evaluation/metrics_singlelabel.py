@@ -8,7 +8,7 @@ recall, and F1 scores.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,12 +23,12 @@ _printed_descriptions: set[str] = set()
 
 
 def compute_singlelabel_metrics(
-    y_true: Union[np.ndarray, List[str]],
-    y_pred: Union[np.ndarray, List[str]],
+    y_true: np.ndarray | list[str],
+    y_pred: np.ndarray | list[str],
     split_name: str,
     output_dir: Path,
     logger: Any,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute single-label classification metrics.
 
     Parameters
@@ -127,7 +127,7 @@ def get_singlelabel_summary_metrics() -> list[str]:
     ]
 
 
-def _get_singlelabel_metric_descriptions() -> Dict[str, str]:
+def _get_singlelabel_metric_descriptions() -> dict[str, str]:
     """Get descriptions for single-label classification metrics.
 
     Returns
@@ -136,14 +136,29 @@ def _get_singlelabel_metric_descriptions() -> Dict[str, str]:
         Dictionary mapping metric names to their descriptions.
     """
     return {
-        "accuracy": "Accuracy: Proportion of correctly classified samples. Number of correct predictions divided by total samples. Simple metric but can be misleading with imbalanced classes.",
-        "macro_f1": "F1-Score (macro): Unweighted harmonic mean of precision and recall per class. Calculates F1 for each class and takes the arithmetic mean. Treats all classes equally, regardless of frequency. Better for evaluating performance on minority classes.",
-        "weighted_f1": "F1-Score (weighted): Weighted harmonic mean of precision and recall per class. Each class has a weight proportional to the number of samples. More frequent classes have more influence on the final result. Useful when classes are imbalanced and you want to give more importance to major classes.",
+        "accuracy": (
+            "Accuracy: Proportion of correctly classified samples. Number of "
+            "correct predictions divided by total samples. Simple metric but "
+            "can be misleading with imbalanced classes."
+        ),
+        "macro_f1": (
+            "F1-Score (macro): Unweighted harmonic mean of precision and "
+            "recall per class. Calculates F1 for each class and takes the "
+            "arithmetic mean. Treats all classes equally, regardless of "
+            "frequency. Better for evaluating performance on minority classes."
+        ),
+        "weighted_f1": (
+            "F1-Score (weighted): Weighted harmonic mean of precision and "
+            "recall per class. Each class has a weight proportional to the "
+            "number of samples. More frequent classes have more influence on "
+            "the final result. Useful when classes are imbalanced and you "
+            "want to give more importance to major classes."
+        ),
     }
 
 
 def _save_and_print_metric_descriptions(
-    descriptions: Dict[str, str],
+    descriptions: dict[str, str],
     split_name: str,
     output_dir: Path,
     logger: Any,

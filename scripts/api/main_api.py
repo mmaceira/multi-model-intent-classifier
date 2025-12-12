@@ -3,7 +3,7 @@ import os
 import uuid
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
-from typing import Any, List, Optional
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -102,7 +102,7 @@ except ImportError:
 
 
 # Request/Response models
-class PredictRequest(BaseModel):
+class PredictRequest(BaseModel):  # pylint: disable=missing-class-docstring
     model_id: str = Field(..., description="Model identifier")
     text: str = Field(..., min_length=1, max_length=10000, description="Text to classify")
 
@@ -115,43 +115,43 @@ class PredictRequest(BaseModel):
         return v.strip()
 
 
-class PredictResponse(BaseModel):
+class PredictResponse(BaseModel):  # pylint: disable=missing-class-docstring
     label: str = Field(
         ..., description="Predicted class label (or '__ABSTAIN__' if confidence too low)"
     )
-    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Prediction confidence")
-    probabilities: Optional[dict[str, float]] = Field(
+    confidence: float | None = Field(None, ge=0.0, le=1.0, description="Prediction confidence")
+    probabilities: dict[str, float] | None = Field(
         None, description="All class probabilities (if available)"
     )
     abstained: bool = Field(
         default=False, description="Whether the model abstained from prediction"
     )
-    request_id: Optional[str] = Field(None, description="Request ID for tracing")
+    request_id: str | None = Field(None, description="Request ID for tracing")
 
 
-class ModelInfo(BaseModel):
+class ModelInfo(BaseModel):  # pylint: disable=missing-class-docstring
     name: str
     type: str
     path: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
-class ModelDetailResponse(BaseModel):
+class ModelDetailResponse(BaseModel):  # pylint: disable=missing-class-docstring
     model_id: str
     name: str
     type: str
-    embedding_backend: Optional[str] = None
-    training_timestamp: Optional[str] = None
-    vectorizer_id: Optional[str] = None
+    embedding_backend: str | None = None
+    training_timestamp: str | None = None
+    vectorizer_id: str | None = None
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(BaseModel):  # pylint: disable=missing-class-docstring
     status: str
     version: str
     timestamp: str
 
 
-class ReadyResponse(BaseModel):
+class ReadyResponse(BaseModel):  # pylint: disable=missing-class-docstring
     ready: bool
     models_loaded: int
 
@@ -163,7 +163,7 @@ _model_cache: OrderedDict[str, Any] = OrderedDict()
 
 
 # Determine experiment name from config or environment variable
-def _get_experiment_name() -> Optional[str]:
+def _get_experiment_name() -> str | None:
     """Get experiment name from CONFIG_FILE or EXPERIMENT_NAME env var."""
     experiment_name = os.getenv("EXPERIMENT_NAME")
     if experiment_name:
@@ -265,7 +265,7 @@ async def ready():
     return ReadyResponse(ready=True, models_loaded=models_loaded)
 
 
-@app.get("/v1/models", response_model=List[ModelInfo])
+@app.get("/v1/models", response_model=list[ModelInfo])
 def list_models():
     """List all available models."""
     models = []
@@ -446,7 +446,7 @@ async def predict(req: PredictRequest, request: Request):
         logger.error(f"Prediction failed for {model_identifier}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}",
+            detail=f"Prediction failed: {e!s}",
         ) from e
 
 

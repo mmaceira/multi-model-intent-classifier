@@ -40,6 +40,7 @@ Example Usage:
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -52,16 +53,18 @@ logger = logging.getLogger(__name__)
 
 @register_model("RagSklearnAdapter")
 class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
-    def __init__(self, rag_clf, **_):
+    """Adapter to make RAG classifiers compatible with sklearn interface."""
+
+    def __init__(self, rag_clf: Any, **_: Any) -> None:
         self.rag = rag_clf
         self.rag_clf = rag_clf  # Add this for compatibility with clone()
 
-    @log_method
-    def fit(self, X, y=None):
+    @log_method()
+    def fit(self, X: Any, y: Any = None) -> "RagSklearnAdapter":
         return self
 
-    @log_method
-    def predict(self, X):
+    @log_method()
+    def predict(self, X: Any) -> Any:
         if isinstance(X, list):
             return self.rag.predict(X)
         elif isinstance(X, np.ndarray):
@@ -69,8 +72,8 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         else:
             raise ValueError(f"Input must be a list or numpy array, got {type(X)}")
 
-    @log_method
-    def predict_proba(self, X):
+    @log_method()
+    def predict_proba(self, X: Any) -> np.ndarray:
         """Generate probability estimates for each class.
 
         This method delegates to the underlying RAG model's predict_proba method
@@ -110,7 +113,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         else:
             raise AttributeError("The underlying RAG model does not implement predict_proba")
 
-    def get_params(self, deep=True):
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         This is required for proper cloning.
@@ -206,7 +209,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                                 if config_path.exists():
                                     break
                 if config_path.exists():
-                    with open(config_path, "r") as f:
+                    with open(config_path, encoding="utf-8") as f:
                         return yaml.safe_load(f)
 
             return {}
@@ -251,7 +254,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         self.rag_clf = None
 
         # Only attempt reinitialization if we have a rag_type
-        if "rag_type" in state and state["rag_type"]:
+        if state.get("rag_type"):
             # Import here to avoid circular imports
             from intent_classifier.rag import load_centroid, load_kmajority, load_llm
 

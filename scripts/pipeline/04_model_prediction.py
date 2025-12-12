@@ -18,27 +18,28 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 # Suppress verbose warnings before other imports
-from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings  # noqa: E402
 
 suppress_pydantic_warnings()
 
 # Import config setup
 # Import from prediction.py file (not prediction/ directory)
-from config.notebook_setup import (
+# These imports must come after sys.path manipulation
+from config.notebook_setup import (  # noqa: E402
     MODELS_DIR,
     PREDICTIONS_DIR,
     config_vars,
 )
 
 # Import dataset and prediction modules
-from intent_classifier.datasets.dataset import get_dataset
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 
 prediction_module_path = Path(__file__).parent.parent.parent / "intent_classifier" / "prediction.py"
 if str(prediction_module_path.parent) not in sys.path:
     sys.path.insert(0, str(prediction_module_path.parent))
-from intent_classifier.prediction import run_prediction
-from intent_classifier.utils.model_loader import load_models_from_config
-from intent_classifier.utils.model_utils import load_model_paths
+from intent_classifier.prediction import run_prediction  # noqa: E402
+from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
+from intent_classifier.utils.model_utils import load_model_paths  # noqa: E402
 
 
 def main():

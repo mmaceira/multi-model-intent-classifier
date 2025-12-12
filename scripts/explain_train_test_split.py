@@ -6,7 +6,7 @@ This shows that the splits come pre-defined from HuggingFace.
 """
 
 # Import path utilities
-from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+from intent_classifier.utils.paths import get_repo_root
 
 # Get repo root
 repo_root = get_repo_root()

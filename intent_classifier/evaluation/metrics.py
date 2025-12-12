@@ -7,7 +7,7 @@ for text classification models.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,11 +26,11 @@ from sklearn.metrics import (
 
 def compute_metrics(
     model_dir: Path,
-    split: Dict[str, Any],
+    split: dict[str, Any],
     classes: np.ndarray,
     is_multiclass: bool,
     logger: logging.Logger,
-) -> Optional[Tuple[np.ndarray, Optional[np.ndarray], Dict[str, float]]]:
+) -> tuple[np.ndarray, np.ndarray | None, dict[str, float]] | None:
     """Compute metrics for a given model and data split.
 
     Parameters
@@ -129,7 +129,7 @@ def compute_metrics(
     return y_pred, y_prob, metrics
 
 
-def analyze_text_features(predictions_dict: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
+def analyze_text_features(predictions_dict: dict[str, dict[str, pd.DataFrame]]) -> pd.DataFrame:
     """Analyze text features that might contribute to classification errors.
 
     Returns a dataframe with text statistics for correct and incorrect predictions.

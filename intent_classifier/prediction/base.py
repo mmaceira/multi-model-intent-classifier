@@ -5,8 +5,9 @@ from __future__ import annotations
 import time
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Protocol, runtime_checkable
 
 import cloudpickle
 import numpy as np
@@ -15,8 +16,21 @@ from sklearn.base import BaseEstimator
 from intent_classifier.model import TextClassifier
 from intent_classifier.utils.file_ops import ensure_dir
 
+
+# Protocol for anything with predict() method
+@runtime_checkable
+class _Predictor(Protocol):
+    """Minimal protocol for anything with predict() and optional _is_multilabel flag."""
+
+    def predict(self, X: Any) -> Any: ...
+
+    # Optional attribute; guarded at runtime where used
+    # mypy will accept attribute checks via hasattr(...)
+    # _is_multilabel: bool
+
+
 # Type alias for any classifier/estimator
-EstimatorType = Union[TextClassifier, BaseEstimator, Any]
+type EstimatorType = TextClassifier | BaseEstimator | _Predictor
 
 # Suppress Pydantic serialization warnings - these are not serious, just verbose
 warnings.filterwarnings(
@@ -66,7 +80,7 @@ class BasePredictionRunner(ABC):
         Returns:
             Validated predictions in appropriate format (always at least one label)
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
     def normalize_label_for_saving(self, label: Any) -> str:
@@ -78,7 +92,7 @@ class BasePredictionRunner(ABC):
         Returns:
             String representation suitable for CSV
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
     def persist_predictions(
@@ -102,9 +116,9 @@ class BasePredictionRunner(ABC):
             prefix: Prefix for output files (e.g., 'train' or 'test')
             model_name: Name of the model being used
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
-    def load_model(self, model_or_path: Union[str, Path, EstimatorType]) -> EstimatorType:
+    def load_model(self, model_or_path: str | Path | EstimatorType) -> EstimatorType:
         """Load a model from a path or return the model object if already loaded.
 
         Args:
@@ -128,7 +142,7 @@ class BasePredictionRunner(ABC):
             return model_or_path
 
     def detect_model_type(
-        self, estimator: EstimatorType, X_sample: Optional[Sequence[str]] = None
+        self, estimator: EstimatorType, X_sample: Sequence[str] | None = None
     ) -> bool:
         """Detect if model is multi-label.
 
@@ -142,8 +156,9 @@ class BasePredictionRunner(ABC):
         from intent_classifier.utils.label_utils import is_multilabel as check_is_multilabel
 
         # Check attribute first (fastest)
+        # Guard optional attribute; keeps mypy happy and avoids AttributeError.
         if hasattr(estimator, "_is_multilabel"):
-            return estimator._is_multilabel
+            return bool(getattr(estimator, "_is_multilabel", False))
 
         # Try to detect from a sample prediction
         if hasattr(estimator, "predict") and X_sample is not None and len(X_sample) > 0:
@@ -159,16 +174,16 @@ class BasePredictionRunner(ABC):
 
     def run_prediction(
         self,
-        models_or_paths: Dict[str, Union[str, Path, EstimatorType]],
+        models_or_paths: dict[str, str | Path | EstimatorType],
         *,
-        X_train: Optional[Sequence[str]] = None,
-        y_train: Optional[Sequence[Any]] = None,
-        X_test: Optional[Sequence[str]] = None,
-        y_test: Optional[Sequence[Any]] = None,
-        output_dir: Union[str, Path] = "prediction_artefacts",
+        X_train: Sequence[str] | None = None,
+        y_train: Sequence[Any] | None = None,
+        X_test: Sequence[str] | None = None,
+        y_test: Sequence[Any] | None = None,
+        output_dir: str | Path = "prediction_artefacts",
         save_train_predictions: bool = True,
         save_test_predictions: bool = True,
-    ) -> Dict[str, Dict[str, np.ndarray]]:
+    ) -> dict[str, dict[str, np.ndarray]]:
         """Load models and generate predictions for training and test data.
 
         This is the main prediction pipeline that handles model loading, prediction
@@ -188,7 +203,7 @@ class BasePredictionRunner(ABC):
             save_test_predictions: Whether to save test set predictions
 
         Returns:
-            Dict[str, Dict[str, np.ndarray]]: Dictionary mapping model names to their
+            dict[str, dict[str, np.ndarray]]: Dictionary mapping model names to their
                 predictions for both train and test sets
 
         Raises:
@@ -206,8 +221,8 @@ class BasePredictionRunner(ABC):
             raise ValueError("At least one of X_train or X_test must be provided")
 
         output_dir = ensure_dir(output_dir)
-        predictions: Dict[str, Dict[str, np.ndarray]] = {}
-        prediction_times: Dict[str, float] = {}
+        predictions: dict[str, dict[str, np.ndarray]] = {}
+        prediction_times: dict[str, float] = {}
         total_models = len(models_or_paths)
 
         for idx, (name, model_or_path) in enumerate(models_or_paths.items(), 1):
@@ -258,7 +273,8 @@ class BasePredictionRunner(ABC):
                 if self.verbose:
                     print(f"\n✅ Algorithm '{name}' predictions completed successfully")
                     print(
-                        f"   Time taken: {execution_time:.2f} seconds ({execution_time/60:.2f} minutes)"
+                        f"   Time taken: {execution_time:.2f} seconds "
+                        f"({execution_time / 60:.2f} minutes)"
                     )
                     if idx < total_models:
                         print(f"   Progress: {idx}/{total_models} algorithms completed\n")
@@ -266,7 +282,7 @@ class BasePredictionRunner(ABC):
                 model_dir = ensure_dir(output_dir / name)
 
                 # Save individual execution time
-                with open(model_dir / f"{name}_prediction_time.txt", "w") as f:
+                with open(model_dir / f"{name}_prediction_time.txt", "w", encoding="utf-8") as f:
                     f.write(f"Prediction time: {execution_time:.2f} seconds")
 
                 # Persist predictions
@@ -288,7 +304,7 @@ class BasePredictionRunner(ABC):
                 ]
 
                 for prefix, X, y, y_pred, should_save in datasets:
-                    if should_save:
+                    if should_save and X is not None and y is not None and y_pred is not None:
                         self.persist_predictions(
                             estimator=estimator,
                             X=X,
@@ -306,7 +322,7 @@ class BasePredictionRunner(ABC):
                         "   Skipping this model and continuing with remaining models...", flush=True
                     )
                     print(
-                        f"   Progress: {idx-1}/{total_models} algorithms completed before error\n"
+                        f"   Progress: {idx - 1}/{total_models} algorithms completed before error\n"
                     )
                 # Log the error but continue with other models
                 import logging
@@ -319,7 +335,7 @@ class BasePredictionRunner(ABC):
                 continue
 
         # Save all prediction times to a single file
-        with open(output_dir / "prediction_times.txt", "w") as f:
+        with open(output_dir / "prediction_times.txt", "w", encoding="utf-8") as f:
             for model_name, time_taken in prediction_times.items():
                 f.write(f"{model_name}: {time_taken:.2f} seconds\n")
 
@@ -329,12 +345,14 @@ class BasePredictionRunner(ABC):
             print("=" * 60)
             print(f"Total algorithms processed: {len(predictions)}/{total_models}")
             total_time = sum(prediction_times.values())
-            print(f"Total prediction time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+            print(
+                f"Total prediction time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)"
+            )
             print("\nPer-algorithm prediction times:")
             for name, time_taken in sorted(
                 prediction_times.items(), key=lambda x: x[1], reverse=True
             ):
-                print(f"  - {name}: {time_taken:.2f}s ({time_taken/60:.2f}min)")
+                print(f"  - {name}: {time_taken:.2f}s ({time_taken / 60:.2f}min)")
             print(f"\nResults saved to: {output_dir}")
             print("=" * 60)
 

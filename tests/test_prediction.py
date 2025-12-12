@@ -29,7 +29,7 @@ def single_label_trained_model(tmp_path):
 
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -58,7 +58,7 @@ def multilabel_trained_model(tmp_path):
 
     models = {"linear_svm": LinearSVMClassifier(max_features=100, C=0.1, calibrate=False)}
 
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,
@@ -148,9 +148,9 @@ def test_prediction_multilabel(multilabel_trained_model):
         assert all(isinstance(p, list) for p in test_preds)
 
         # Verify multi-label format: each prediction is a list with at least one string label
-        assert all(
-            len(p) > 0 for p in train_preds
-        ), "All predictions should have at least one label"
+        assert all(len(p) > 0 for p in train_preds), (
+            "All predictions should have at least one label"
+        )
         assert all(len(p) > 0 for p in test_preds), "All predictions should have at least one label"
         assert all(isinstance(label, str) for pred in train_preds for label in pred)
         assert all(isinstance(label, str) for pred in test_preds for label in pred)
@@ -234,7 +234,7 @@ def test_prediction_multiple_models(single_label_trained_model):
 
     # Train another model
     models = {"naive_bayes": NaiveBayesClassifier(max_features=100, alpha=0.5)}
-    trained = run_training(
+    run_training(
         models=models,
         X_train=X_train,
         y_train=y_train,

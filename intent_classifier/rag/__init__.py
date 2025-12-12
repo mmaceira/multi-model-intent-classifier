@@ -49,6 +49,21 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional, Union
 
+# Module-level path attributes (initialized by _apply_paths)
+# Initialize with placeholder values that will be overwritten
+_EMBEDDINGS_DIR: Path = Path()
+_ARTIFACTS_DIR: Path = Path()
+_OPENAI_DIR: Path = Path()
+_SBERT_DIR: Path = Path()
+_OPENAI_INDEX: Path = Path()
+_SBERT_INDEX: Path = Path()
+_OPENAI_META: Path = Path()
+_SBERT_META: Path = Path()
+_DEFAULT_INDEX: Path = Path()
+_DEFAULT_META: Path = Path()
+OPENAI_ARTIFACTS: Path = Path()
+SBERT_ARTIFACTS: Path = Path()
+
 
 def _resolve_repo_root() -> Path:
     """Best-effort repository root discovery."""
@@ -65,7 +80,7 @@ def _resolve_default_embeddings_dir() -> Path:
     return _resolve_repo_root() / "embeddings"
 
 
-def _apply_paths(base_embeddings: Path, base_artifacts: Optional[Path] = None) -> None:
+def _apply_paths(base_embeddings: Path, base_artifacts: Path | None = None) -> None:
     """Update module-level path references."""
     global _EMBEDDINGS_DIR, _ARTIFACTS_DIR
     global _SBERT_DIR, _OPENAI_DIR, OPENAI_ARTIFACTS, SBERT_ARTIFACTS
@@ -92,9 +107,7 @@ def _apply_paths(base_embeddings: Path, base_artifacts: Optional[Path] = None) -
 _apply_paths(_resolve_default_embeddings_dir())
 
 
-def set_artifacts_dir(
-    artifacts_dir: Union[str, Path], embeddings_dir: Optional[Union[str, Path]] = None
-) -> None:
+def set_artifacts_dir(artifacts_dir: str | Path, embeddings_dir: str | Path | None = None) -> None:
     """Set the artifacts/embeddings directory path and update derived paths."""
     base_artifacts = Path(artifacts_dir)
     base_embeddings = Path(embeddings_dir) if embeddings_dir is not None else base_artifacts
@@ -103,8 +116,8 @@ def set_artifacts_dir(
 
 @contextmanager
 def _temporary_dirs(
-    artifacts_dir: Optional[Union[str, Path]] = None,
-    embeddings_dir: Optional[Union[str, Path]] = None,
+    artifacts_dir: str | Path | None = None,
+    embeddings_dir: str | Path | None = None,
 ):
     """Temporarily override the active directories."""
     if artifacts_dir is None and embeddings_dir is None:
@@ -121,8 +134,8 @@ def _temporary_dirs(
 
 def get_index_paths(
     use_openai: bool = False,
-    artifacts_dir: Optional[Union[str, Path]] = None,
-    embeddings_dir: Optional[Union[str, Path]] = None,
+    artifacts_dir: str | Path | None = None,
+    embeddings_dir: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Get the appropriate index and meta paths based on embedder type.
 
@@ -173,9 +186,7 @@ def _lazy_load(mod: str, cls: str, **kwargs: Any):
     return getattr(module, cls).load_default(**kwargs)
 
 
-def load_kmajority(
-    use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
-):
+def load_kmajority(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load K-Majority RAG model
 
     Args:
@@ -191,9 +202,7 @@ def load_kmajority(
         return _lazy_load("rag_kmajority", "RagKMajority", **cfg)
 
 
-def load_centroid(
-    use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
-):
+def load_centroid(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load Centroid NN model
 
     Args:
@@ -209,7 +218,7 @@ def load_centroid(
         return _lazy_load("centroid_nn", "CentroidNN", **cfg)
 
 
-def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
+def load_llm(use_openai: bool | None = None, artifacts_dir: str | Path | None = None, **cfg):
     """Load RAG LLM model
 
     Args:
@@ -246,7 +255,7 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
 
 
 def load_optimized_llm(
-    use_openai_embeddings: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
+    use_openai_embeddings: bool = False, artifacts_dir: str | Path | None = None, **cfg
 ):
     """Load an optimized LLM model with optional OpenAI embeddings."""
     with _temporary_dirs(artifacts_dir):
@@ -254,7 +263,7 @@ def load_optimized_llm(
         return _lazy_load("rag_llm", "RagLLM", **cfg)
 
 
-def load_hybrid(use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
+def load_hybrid(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load Hybrid RAG model
 
     Args:

@@ -59,7 +59,7 @@ Example Usage:
     >>> probabilities = classifier.predict_proba(documents)
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from scipy.special import softmax
@@ -70,8 +70,10 @@ from .vector_store import VectorStore
 
 
 class CentroidNN(RagClassifierBase):
+    """RAG classifier using centroid-based nearest neighbor search."""
+
     def __init__(self, centroids: dict[str, np.ndarray]):
-        super().__init__(centroids.keys())
+        super().__init__(list(centroids.keys()))
         self.centroids = {k: v / np.linalg.norm(v) for k, v in centroids.items()}
 
     @classmethod

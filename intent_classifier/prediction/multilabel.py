@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -58,10 +59,11 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
             # For multilabel RAG models: labels may be string representations of lists
             # (e.g., "['Alta', 'circuit']") but predictions are individual tags
             # Extract individual tags from string representations of lists
-            all_tags = set()
+            all_tags: set[str] = set()
             for c in classes:
                 c_str = str(c)
-                # Check if it's a string representation of a list (starts with '[' and contains quotes)
+                # Check if it's a string representation of a list (starts with
+                # '[' and contains quotes)
                 if c_str.startswith("[") and ("'" in c_str or '"' in c_str):
                     try:
                         # Try to parse as a list (using ast.literal_eval for safety)
@@ -248,8 +250,10 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
                             sample_str = ", ".join(str(c) for c in sample_classes)
                             suffix = f" (and {num_classes - 3} more)" if num_classes > 3 else ""
                             print(
-                                f"Warning: All labels invalid at index {i} (predicted: {pred_list}), "
-                                f"not in {num_classes} dataset classes [{sample_str}{suffix}]. Using fallback.",
+                                f"Warning: All labels invalid at index {i} "
+                                f"(predicted: {pred_list}), not in {num_classes} "
+                                f"dataset classes [{sample_str}{suffix}]. "
+                                f"Using fallback.",
                                 flush=True,
                             )
                         fallback = self._get_fallback_prediction(i, classes, probabilities)
@@ -305,18 +309,19 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
             if len(label) == 0:
                 return ""
             return ",".join(
-                str(l)
-                for l in label
-                if l is not None and not (isinstance(l, float) and np.isnan(l))
+                str(item)
+                for item in label
+                if item is not None and not (isinstance(item, float) and np.isnan(item))
             )
 
         # Handle numpy arrays
         if isinstance(label, np.ndarray):
             if label.size == 0:
                 return ""
-            # If it's a binary array (multilabel format), we need classes to convert it
-            # But at this point we don't have access to classes, so this shouldn't happen
-            # If we receive a binary array here, it's likely a bug - convert indices to strings as fallback
+            # If it's a binary array (multilabel format), we need classes to
+            # convert it. But at this point we don't have access to classes, so
+            # this shouldn't happen. If we receive a binary array here, it's
+            # likely a bug - convert indices to strings as fallback
             if label.ndim == 1:
                 # 1D array: treat as indices or binary vector
                 if label.dtype in (np.int_, np.int64, np.int32):
@@ -373,8 +378,9 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
         df = df.replace("nan", "", regex=False)
         df = df.replace("None", "", regex=False)
 
-        # Save with explicit handling to prevent pandas from converting empty strings to NaN
-        # Note: Since we ensure all predictions have at least one label, empty strings shouldn't occur
+        # Save with explicit handling to prevent pandas from converting empty
+        # strings to NaN. Note: Since we ensure all predictions have at least
+        # one label, empty strings shouldn't occur
         output_path = str(output_dir / f"{prefix}_predictions.csv")
         df.to_csv(
             output_path,

@@ -45,7 +45,6 @@ Example Usage:
 import logging
 import os
 import time
-from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -81,7 +80,7 @@ class Retriever:
         """
         self.store = store
 
-    def top_k(self, q_emb: np.ndarray, k: int) -> List[Dict]:
+    def top_k(self, q_emb: np.ndarray, k: int) -> list[dict]:
         """
         Retrieve the k most similar documents for a given query embedding.
 
@@ -110,9 +109,7 @@ class Retriever:
         return results
 
     @classmethod
-    def from_default(
-        cls, use_openai: bool = False, embed_model: Optional[str] = None
-    ) -> "Retriever":
+    def from_default(cls, use_openai: bool = False, embed_model: str | None = None) -> "Retriever":
         """
         Create a retriever with the default index and meta files.
 

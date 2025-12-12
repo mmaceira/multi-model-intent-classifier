@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 # Add the parent directory to Python path to ensure imports work correctly
 
@@ -61,7 +62,7 @@ Example Usage:
 import argparse  # noqa: E402
 import csv  # noqa: E402
 import json  # noqa: E402
-from typing import List  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -78,7 +79,7 @@ def _load_precomputed_embeddings(meta_path):
         )
     vectors = []
     meta = []
-    with open(meta_path) as fh:
+    with open(meta_path, encoding="utf-8") as fh:
         for line in fh:
             rec = json.loads(line)
             vectors.append(rec["vector"])
@@ -120,9 +121,9 @@ DEFAULT_FAISS_PATH = DEFAULT_SBERT_FAISS_PATH
 DEFAULT_META_PATH = DEFAULT_SBERT_META_PATH
 
 
-def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
+def _load_csv(csv_path: str) -> tuple[list[str], list[str], list[int]]:
     texts, labels, years = [], [], []
-    with open(csv_path) as f:
+    with open(csv_path, encoding="utf-8") as f:
         for row in csv.DictReader(f):
             texts.append(row["text"])
             labels.append(row["label"])
@@ -155,7 +156,7 @@ def _load_dataset(dataset_name: str) -> tuple[list, list, list]:
     return X_train, y_train, [0] * len(X_train)
 
 
-def main():
+def main() -> None:
     # Discover available datasets for choices
     available_datasets = []
     try:
@@ -213,7 +214,7 @@ def main():
         print(f"Embedding {len(texts)} documents with {args.emb_model}…")
         emb = VectorStore.embed(args.emb_model, texts)
 
-        meta: List[dict] = []
+        meta: list[dict] = []
         for i, (t, label_val, y, v) in enumerate(zip(texts, labels, years, emb, strict=False)):
             meta.append({"id": i, "label": label_val, "year": y, "text": t, "vector": v.tolist()})
 
@@ -224,8 +225,12 @@ def main():
 
 
 def build_openai_index(
-    texts, labels, years, faiss_path=DEFAULT_OPENAI_FAISS_PATH, meta_path=DEFAULT_OPENAI_META_PATH
-):
+    texts: list[str],
+    labels: list[str],
+    years: list[int],
+    faiss_path: Path = DEFAULT_OPENAI_FAISS_PATH,
+    meta_path: Path = DEFAULT_OPENAI_META_PATH,
+) -> None:
     """Build a FAISS index using OpenAI embeddings.
 
     Args:
@@ -256,7 +261,7 @@ def build_openai_index(
     print(f"Generated {len(emb)} OpenAI embeddings with dimension {emb.shape[1]}")
 
     # Create metadata
-    meta: List[dict] = []
+    meta: list[dict] = []
     for i, (t, label_val, y, v) in enumerate(zip(texts, labels, years, emb, strict=False)):
         meta.append({"id": i, "label": label_val, "year": y, "text": t, "vector": v.tolist()})
 
@@ -269,7 +274,9 @@ if __name__ == "__main__":
     main()
 
 
-def load_embedder(model_name: str = None, use_openai: bool = False, batch_size: int = 100):
+def load_embedder(
+    model_name: str | None = None, use_openai: bool = False, batch_size: int = 100
+) -> Any:
     """
     Load either a local SBERT model (CPU) or OpenAI remote embedder.
 

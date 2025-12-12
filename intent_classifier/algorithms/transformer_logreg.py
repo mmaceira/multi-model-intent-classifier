@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from sentence_transformers import SentenceTransformer
 from sklearn.linear_model import LogisticRegression
@@ -55,12 +56,7 @@ class TransformerLogReg(TextClassifier):
         # Pipeline: StandardScaler → LogisticRegression, wrapped in GridSearch
         # Will be wrapped with MultiOutputClassifier if multi-label detected
         # ------------------------------------------------------------------
-        base_clf = LogisticRegression(
-            max_iter=max_iter,
-            solver="lbfgs",
-            n_jobs=n_jobs,
-        )
-        pipe = make_pipeline(StandardScaler(with_mean=True), base_clf)
+        # Base classifier will be created in _fit_model with proper CV strategy
 
         # Store cv parameter for dynamic adjustment during fit
         self._cv_param = cv
@@ -71,7 +67,7 @@ class TransformerLogReg(TextClassifier):
     # ------------------------------------------------------------------
     # scikit‑learn plumbing
     # ------------------------------------------------------------------
-    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         params = {
             "model_name": self.model_name,
             "Cs": self.Cs,

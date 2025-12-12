@@ -18,6 +18,7 @@ Example:
 
 import os
 import random
+from typing import Any
 
 import numpy as np
 
@@ -71,7 +72,7 @@ def set_global_seed(seed: int = 42) -> None:
     # in their environment or shell before running scripts.
 
 
-def get_seed_from_config(config: dict, default: int = 42) -> int:
+def get_seed_from_config(config: dict[str, Any], default: int = 42) -> int:
     """Extract seed from configuration dictionary.
 
     Args:
@@ -81,4 +82,5 @@ def get_seed_from_config(config: dict, default: int = 42) -> int:
     Returns:
         Seed value from config or default
     """
-    return config.get("seed", config.get("GENERAL_SEED", default))
+    result = config.get("seed", config.get("GENERAL_SEED", default))
+    return int(result) if result is not None else default

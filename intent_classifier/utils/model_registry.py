@@ -17,7 +17,7 @@ Example:
     >>> ModelClass = get_model_class("MyModel")
 """
 
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, TypeVar
 
 from intent_classifier.model import TextClassifier
 
@@ -25,7 +25,7 @@ from intent_classifier.model import TextClassifier
 T = TypeVar("T", bound=TextClassifier)
 
 # Registry mapping model class names to their actual classes
-_MODEL_REGISTRY: Dict[str, Type[TextClassifier]] = {}
+_MODEL_REGISTRY: dict[str, type[TextClassifier]] = {}
 
 
 def register_model(class_name: str) -> Any:
@@ -43,7 +43,7 @@ def register_model(class_name: str) -> Any:
         ...     pass
     """
 
-    def decorator(cls: Type[T]) -> Type[T]:
+    def decorator(cls: type[T]) -> type[T]:
         """Register the class in the model registry.
 
         Args:
@@ -67,7 +67,7 @@ def register_model(class_name: str) -> Any:
     return decorator
 
 
-def get_model_class(class_name: str) -> Optional[Type[TextClassifier]]:
+def get_model_class(class_name: str) -> type[TextClassifier] | None:
     """Get a model class from the registry by name.
 
     Args:
@@ -80,7 +80,7 @@ def get_model_class(class_name: str) -> Optional[Type[TextClassifier]]:
     return _MODEL_REGISTRY.get(class_name)
 
 
-def get_all_registered_models() -> Dict[str, Type[TextClassifier]]:
+def get_all_registered_models() -> dict[str, type[TextClassifier]]:
     """Get all registered model classes.
 
     Returns:

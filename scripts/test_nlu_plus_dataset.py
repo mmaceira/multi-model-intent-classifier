@@ -18,8 +18,9 @@ from intent_classifier.utils.paths import get_repo_root
 repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
-from intent_classifier.datasets.dataset import get_dataset
-from intent_classifier.utils.label_utils import is_multilabel
+# These imports must come after sys.path manipulation
+from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
+from intent_classifier.utils.label_utils import is_multilabel  # noqa: E402
 
 
 def main():
