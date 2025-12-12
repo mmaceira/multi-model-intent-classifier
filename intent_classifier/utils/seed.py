@@ -18,7 +18,6 @@ Example:
 
 import os
 import random
-from typing import Any
 
 import numpy as np
 
@@ -70,17 +69,3 @@ def set_global_seed(seed: int = 42) -> None:
     # Note: If PYTHONHASHSEED was not set before Python started, this won't take effect
     # until the next Python process. For maximum reproducibility, users should set it
     # in their environment or shell before running scripts.
-
-
-def get_seed_from_config(config: dict[str, Any], default: int = 42) -> int:
-    """Extract seed from configuration dictionary.
-
-    Args:
-        config: Configuration dictionary that may contain a 'seed' or 'GENERAL_SEED' key
-        default: Default seed value if not found in config
-
-    Returns:
-        Seed value from config or default
-    """
-    result = config.get("seed", config.get("GENERAL_SEED", default))
-    return int(result) if result is not None else default

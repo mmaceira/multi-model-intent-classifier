@@ -14,7 +14,6 @@ intent_classifier/
 ├── prediction/      # Prediction utilities (single-label and multi-label)
 ├── rag/            # RAG implementation and utilities
 ├── utils/          # Utility functions and helpers
-├── config_schema.py # Configuration schema definitions
 ├── exploration.py   # Data exploration and visualization
 ├── model.py         # Core model interfaces and implementations
 └── training.py     # Training utilities and pipeline
@@ -123,7 +122,6 @@ Dataset handling using a generic loader system:
 Datasets are automatically discovered from `config/dataset/{dataset_name}/loader.yaml` files. Supported datasets include:
 - `clinc150`: Single-label intent classification (from HuggingFace)
 - `nlu_plus`: Multi-label intent classification (from GitHub)
-- `tandem_go`: Multi-label classification (from local CSV)
 
 ### utils/embeddings.py
 

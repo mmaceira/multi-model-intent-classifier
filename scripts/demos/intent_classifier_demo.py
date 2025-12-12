@@ -35,7 +35,7 @@ import joblib
 import numpy as np
 import yaml
 
-from intent_classifier.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_model_file
+from intent_classifier.utils.model_utils import find_model_file
 
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
@@ -182,15 +182,6 @@ class DictModelWrapper:
     # Anything we don't explicitly implement → delegate
     def __getattr__(self, item):
         return getattr(self._classifier, item)
-
-
-def _resolve_model_file(model_dir: Path) -> Path | None:
-    """Return the first existing model file in *model_dir*."""
-    for fname in ALLOWED_MODEL_FILENAMES:
-        f = model_dir / fname
-        if f.exists():
-            return f
-    return None
 
 
 # Simple cache so we don't re‑load models all the time

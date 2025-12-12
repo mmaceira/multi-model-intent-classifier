@@ -111,18 +111,6 @@ def get_config_path(config_file: str | Path) -> Path:
     return _get_repo_root_cached() / config_file_str
 
 
-def get_hyperparameters_dir(config_name: str) -> Path:
-    """Get the hyperparameters directory for a given config.
-
-    Args:
-        config_name: Name of the config (without .yaml extension)
-
-    Returns:
-        Path to hyperparameters directory
-    """
-    return get_config_dir() / "algorithm" / "hyperparameters" / config_name
-
-
 def get_output_dir(experiment_name: str = "default") -> Path:
     """Get the output directory for an experiment.
 
@@ -165,38 +153,3 @@ def get_embeddings_dir(experiment_name: str | None = None) -> Path:
     if experiment_name:
         return get_output_dir(experiment_name) / "embeddings"
     return _get_repo_root_cached() / "embeddings"
-
-
-def get_data_dir() -> Path:
-    """Get the data directory path.
-
-    Returns:
-        Path to data directory
-    """
-    return _get_repo_root_cached() / "data"
-
-
-def resolve_path(path: str | Path, base: Path | None = None) -> Path:
-    """Resolve a path relative to a base directory.
-
-    If path is absolute, returns it as-is.
-    If path is relative and base is provided, resolves relative to base.
-    If path is relative and base is None, resolves relative to repo root.
-
-    Args:
-        path: Path to resolve (can be string or Path)
-        base: Base directory for relative paths. If None, uses repo root.
-
-    Returns:
-        Resolved absolute Path
-    """
-    path = Path(path)
-    if path.is_absolute():
-        return path.resolve()
-
-    if base is None:
-        base = _get_repo_root_cached()
-    else:
-        base = Path(base).resolve()
-
-    return (base / path).resolve()

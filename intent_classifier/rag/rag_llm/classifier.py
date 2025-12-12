@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import re
-import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -34,41 +33,9 @@ os.environ.setdefault("LITELLM_SUPPRESS_LOGGING", "true")
 # Suppress Pydantic serialization warnings BEFORE importing litellm
 # These warnings come from litellm/openai when deserializing API responses
 # They're not serious - the code works correctly, just verbose warnings
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings  # noqa: E402
 
-# Store original warning handler
-_original_showwarning = warnings.showwarning
-
-
-def _filtered_showwarning(message, category, filename, lineno, file=None, line=None):
-    """Custom warning handler that filters out Pydantic serialization warnings."""
-    # Check if this is a Pydantic warning we want to suppress
-    if issubclass(category, UserWarning):
-        msg_str = str(message)
-        filename_str = str(filename) if filename else ""
-
-        # Suppress if it's from pydantic or contains our target messages
-        if (
-            "pydantic" in filename_str.lower()
-            or "PydanticSerializationUnexpectedValue" in msg_str
-            or "Expected `Usage`" in msg_str
-            or "serialized value may not be as expected" in msg_str
-        ):
-            return  # Suppress this warning
-
-    # For all other warnings, use the original handler
-    _original_showwarning(message, category, filename, lineno, file, line)
-
-
-# Install our custom warning handler
-warnings.showwarning = _filtered_showwarning
-
-# Also set up filterwarnings as backup
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic.main")
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal")
-warnings.filterwarnings("ignore", message=".*PydanticSerializationUnexpectedValue.*")
-warnings.filterwarnings("ignore", message=".*Expected `Usage`.*")
-warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
+suppress_pydantic_warnings()
 
 # Now import litellm after warnings are configured
 from litellm import completion  # noqa: E402

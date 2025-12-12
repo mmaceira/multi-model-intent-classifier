@@ -26,8 +26,6 @@ CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py
 # Multi-label example (NLU++)
 CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml python scripts/pipeline/run_all.py
 
-# Multi-label example (Tandem GO - requires CSV file in data/ directory)
-CONFIG_FILE=config/dataset/tandem_go/tiny.yaml python scripts/pipeline/run_all.py
 ```
 
 That's it! The pipeline will automatically download the dataset, tune hyperparameters, train models, and generate predictions and evaluations. The system automatically detects whether you're using single-label or multi-label data and uses the appropriate evaluation metrics.
@@ -55,7 +53,7 @@ This project implements a comprehensive NLP pipeline for:
 - Business insights generation
 - Real-time document similarity matching
 
-Built on multiple datasets (CLINC150, NLU++, Tandem GO), it provides a production-ready solution for intent classification and information retrieval. The system supports both **single-label classification** (one intent per utterance) and **multi-label classification** (multiple intents per utterance), combining traditional machine learning approaches with modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques.
+Built on multiple datasets (CLINC150, NLU++), it provides a production-ready solution for intent classification and information retrieval. The system supports both **single-label classification** (one intent per utterance) and **multi-label classification** (multiple intents per utterance), combining traditional machine learning approaches with modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques.
 
 ### Use Cases
 
@@ -147,8 +145,6 @@ intent-classify --model-path output/experiment_tiny_dataset/models/Linear\ SVM/ 
 CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml intent-train
 intent-classify --model-path output/experiment_nlu_plus/models/Linear\ SVM/ --text "check my account balance and transfer money"
 
-# Multi-label example (Tandem GO)
-CONFIG_FILE=config/dataset/tandem_go/tiny.yaml intent-train
 intent-classify --model-path output/tiny/models/Linear\ SVM/ --text "your text here"
 ```
 
@@ -255,8 +251,6 @@ CONFIG_FILE=config/dataset/clinc150/tiny.yaml intent-train
 # Multi-label config (NLU++)
 CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml intent-train
 
-# Multi-label config (Tandem GO)
-CONFIG_FILE=config/dataset/tandem_go/tiny.yaml intent-train
 
 # Or use the script directly:
 CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from pathlib import Path
@@ -15,6 +14,10 @@ from sklearn.base import BaseEstimator
 
 from intent_classifier.model import TextClassifier
 from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
+
+# Suppress Pydantic warnings before any imports that might trigger them
+suppress_pydantic_warnings()
 
 
 # Protocol for anything with predict() method
@@ -31,18 +34,6 @@ class _Predictor(Protocol):
 
 # Type alias for any classifier/estimator
 type EstimatorType = TextClassifier | BaseEstimator | _Predictor
-
-# Suppress Pydantic serialization warnings - these are not serious, just verbose
-warnings.filterwarnings(
-    "ignore",
-    message=".*PydanticSerializationUnexpectedValue.*",
-    category=UserWarning,
-)
-warnings.filterwarnings(
-    "ignore",
-    message=".*Expected `Usage`.*",
-    category=UserWarning,
-)
 
 
 class BasePredictionRunner(ABC):

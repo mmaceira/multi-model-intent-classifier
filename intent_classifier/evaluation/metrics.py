@@ -12,7 +12,6 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -170,51 +169,6 @@ def analyze_text_features(predictions_dict: dict[str, dict[str, pd.DataFrame]]) 
                     )
 
     return pd.DataFrame(all_rows)
-
-
-def analyze_text_characteristics(misclassified_df: pd.DataFrame) -> None:
-    """Analyze text characteristics of misclassified examples.
-
-    Parameters
-    ----------
-    misclassified_df : pd.DataFrame
-        DataFrame containing columns: 'text', 'true_label', 'pred_label'
-    """
-    # Calculate text length and word count
-    misclassified_df["text_length"] = misclassified_df["text"].apply(lambda x: len(str(x)))
-    misclassified_df["word_count"] = misclassified_df["text"].apply(lambda x: len(str(x).split()))
-
-    # Group by true label and compute statistics
-    (
-        misclassified_df.groupby("true_label")
-        .agg({"text_length": ["count", "mean", "std"], "word_count": ["mean", "std"]})
-        .round(2)
-    )
-
-    # Create visualizations
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-
-    # Text length distribution
-    sns.histplot(data=misclassified_df, x="text_length", hue="true_label", ax=ax1)
-    ax1.set_title("Distribution of Text Length by True Label")
-    ax1.set_xlabel("Text Length")
-
-    # Word count distribution
-    sns.histplot(data=misclassified_df, x="word_count", hue="true_label", ax=ax2)
-    ax2.set_title("Distribution of Word Count by True Label")
-    ax2.set_xlabel("Word Count")
-
-    plt.tight_layout()
-    plt.close()  # Close figure instead of showing to prevent pop-ups
-
-    # Calculate correlation between text length and word count
-    corr = misclassified_df[["text_length", "word_count"]].corr()
-
-    # Plot correlation heatmap
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(corr, annot=True, cmap="Blues", center=0, vmin=-1, vmax=1, square=True)
-    plt.title("Correlation between Text Length and Word Count")
-    plt.close()  # Close figure instead of showing to prevent pop-ups
 
 
 def compute_ece(

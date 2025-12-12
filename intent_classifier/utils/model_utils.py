@@ -47,31 +47,6 @@ def find_model_file(model_dir: str | Path, model_name: str) -> str | None:
     return None
 
 
-def scan_model_directory(model_dir: str | Path) -> list[str]:
-    """Scan a directory for model subdirectories containing model files.
-
-    Args:
-        model_dir: Base directory to scan
-
-    Returns:
-        List of model names (subdirectory names) that contain valid model files
-    """
-    base_dir = Path(model_dir)
-    if not base_dir.exists():
-        return []
-
-    model_names = []
-
-    for item in base_dir.iterdir():
-        if item.is_dir():
-            for filename in ALLOWED_MODEL_FILENAMES:
-                if (item / filename).exists():
-                    model_names.append(item.name)
-                    break
-
-    return model_names
-
-
 def load_model_paths(models: dict[str, Any], model_dir: str | Path) -> dict[str, str]:
     """Load model paths from model directory for all models in the provided dictionary.
 

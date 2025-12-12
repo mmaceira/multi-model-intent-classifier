@@ -22,8 +22,6 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 
-from .utils import load_all_prediction_files
-
 # Configure matplotlib style
 plt.style.use("default")
 plt.rcParams.update(
@@ -701,86 +699,6 @@ def generate_detailed_error_report(
             output_dir / f"detailed_error_report_{split_name}.html", "w", encoding="utf-8"
         ) as f:
             f.write("\n".join(html))
-
-
-def plot_confusion_matrices(
-    experiment_dir: str | Path, figsize: tuple[int, int] = (15, 15)
-) -> None:
-    """Plot confusion matrices for all models in the experiment.
-
-    Parameters
-    ----------
-    experiment_dir : str or Path
-        Directory containing the experiment results
-    figsize : tuple
-        Figure size for the confusion matrices
-    """
-    predictions = load_all_prediction_files(experiment_dir)
-
-    model_names = list(predictions.keys())
-    n_models = len(model_names)
-
-    # Calculate dimensions for subplots
-    n_cols = min(3, n_models)
-    n_rows = (n_models + n_cols - 1) // n_cols
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-    if n_rows == 1 and n_cols == 1:
-        axes = np.array([axes])
-    else:
-        axes = axes.flatten()
-
-    # Get all unique labels from all models' test sets
-    all_labels_set = set()
-    for splits in predictions.values():
-        if "test" in splits:
-            df = splits["test"]
-            # Filter out NaN and convert to strings
-            true_labels = [str(label) for label in df["y_true"].unique() if pd.notna(label)]
-            pred_labels = [str(label) for label in df["y_pred"].unique() if pd.notna(label)]
-            all_labels_set.update(true_labels)
-            all_labels_set.update(pred_labels)
-
-    all_labels: list[str] = sorted(all_labels_set)
-
-    for i, (model_name, splits) in enumerate(predictions.items()):
-        if i < len(axes):
-            ax = axes[i]
-
-            # Only analyze test set
-            if "test" in splits:
-                df = splits["test"]
-
-                # Calculate confusion matrix
-                cm = confusion_matrix(df["y_true"], df["y_pred"], labels=all_labels)
-
-                # Normalize by row (true labels)
-                cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
-                cm_normalized = np.nan_to_num(cm_normalized)
-
-                # Plot heatmap
-                sns.heatmap(
-                    cm_normalized,
-                    annot=True,
-                    fmt=".2f",
-                    cmap="Blues",
-                    xticklabels=all_labels,
-                    yticklabels=all_labels,
-                    ax=ax,
-                )
-
-                ax.set_title(f"Confusion Matrix - {model_name} (Test Set)")
-                ax.set_xlabel("Predicted")
-                ax.set_ylabel("True")
-                ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
-                ax.set_yticklabels(ax.get_yticklabels(), rotation=45, ha="right")
-
-    # Remove empty subplots
-    for i in range(n_models, len(axes)):
-        fig.delaxes(axes[i])
-
-    plt.tight_layout()
-    plt.close()  # Close figure instead of showing to prevent pop-ups
 
 
 def plot_top_error_types(df: pd.DataFrame, output_path, n: int = 10):

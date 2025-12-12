@@ -23,15 +23,6 @@ The dataset is fetched automatically by the pipeline; you do not need to downloa
 
 The dataset is fetched automatically from GitHub; you do not need to download anything manually.
 
-### Tandem GO
-
-- **Source**: Local CSV file (`data/Tandem GO_ Datasets RAG - Classificació v2.csv`).
-- **Content**: Multi-label classification dataset with tags extracted from name and description fields.
-- **Structure**: text utterances (combined from name and description) + comma-separated tags (multilabel format), with train/validation/test splits created from the combined data.
-- **Size**: Varies based on CSV file content.
-- **Note**: Tandem GO is always multilabel (each example can have multiple tags). The dataset requires the CSV file to be present in the `data/` directory.
-
-The dataset is loaded from a local CSV file; ensure the file exists before running experiments.
 
 ## Train/validation/test usage
 
@@ -59,9 +50,6 @@ X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_na
 X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="nlu_plus")
 # Note: y_train, y_val, y_test are lists of lists (multilabel format)
 
-# Multilabel dataset (Tandem GO)
-X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="tandem_go")
-# Note: y_train, y_val, y_test are lists of lists (multilabel format)
 ```
 
 ## Dataset size and experiment variants
@@ -80,8 +68,6 @@ Predefined experiment configs:
 - `config/dataset/clinc150/tiny.yaml`: very small subset for fast iteration
 - `config/dataset/nlu_plus/default.yaml`: NLU++ standard config
 - `config/dataset/nlu_plus/tiny.yaml`: NLU++ quick testing config
-- `config/dataset/tandem_go/default.yaml`: Tandem GO standard config
-- `config/dataset/tandem_go/tiny.yaml`: Tandem GO quick testing config
 
 Switching configs:
 

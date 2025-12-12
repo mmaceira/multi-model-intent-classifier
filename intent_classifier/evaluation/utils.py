@@ -6,7 +6,6 @@ This module provides helper functions used across the evaluation package.
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -144,33 +143,3 @@ def consistently_misclassified(pred_dfs: dict[str, dict[str, pd.DataFrame]], min
             combined[col] = combined[col].astype(bool)
     mask = combined.drop(columns=["id", "text", "y_true", "y_pred"]).sum(1) >= min_models
     return combined[mask]
-
-
-def export_analysis_results(results: dict[str, Any], output_dir: str | Path) -> None:
-    """Export analysis results to files.
-
-    Parameters
-    ----------
-    results : dict
-        Dictionary with analysis results
-    output_dir : str or Path
-        Directory to save results
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save error patterns
-    if not results["error_patterns"].empty:
-        results["error_patterns"].to_csv(output_dir / "error_patterns.csv", index=False)
-
-    # Save misclassified examples
-    if not results["misclassified_examples"].empty:
-        results["misclassified_examples"].to_csv(
-            output_dir / "misclassified_examples.csv", index=False
-        )
-
-    # Save text features
-    if not results["text_features"].empty:
-        results["text_features"].to_csv(output_dir / "text_features.csv", index=False)
-
-    print(f"Analysis results exported to {output_dir}")

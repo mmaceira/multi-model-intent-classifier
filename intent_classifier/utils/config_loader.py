@@ -427,18 +427,6 @@ def get_first_available_dataset() -> str | None:
     return None
 
 
-def get_config_file_or_discover() -> str:
-    """Get config file from CONFIG_FILE env var, or discover default.
-
-    This is a convenience wrapper around discover_config_file() that makes
-    the intent clearer when you want to check env var first.
-
-    Returns:
-        Config file path starting with "config/" (e.g., "config/dataset/clinc150/tiny.yaml")
-    """
-    return discover_config_file()
-
-
 def get_run_name_from_config(config_file: str | None = None) -> str | None:
     """Extract run_name from a config file.
 
@@ -455,9 +443,3 @@ def get_run_name_from_config(config_file: str | None = None) -> str | None:
         return config.get("general", {}).get("run_name")  # type: ignore[no-any-return]
     except Exception:
         return None
-
-
-def clear_config_cache() -> None:
-    """Clear the configuration cache."""
-    _CONFIG_CACHE.clear()
-    logger.debug("Config cache cleared")

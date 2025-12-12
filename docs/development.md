@@ -125,7 +125,7 @@ pytest -v
        # ...
    ```
 
-3. Update configuration schema in `intent_classifier/config_schema.py` if needed
+3. Update configuration files in `config/` if needed
 
 4. Write tests
 

@@ -1,106 +1,43 @@
-# NOTE: Embedding generation is handled by `scripts/pipeline/02_build_embeddings.py`.
-# This script now only builds indices if precomputed embeddings are supplied.
-# ----- Patched for OpenAI embedding support -----
-from __future__ import annotations
-
-import os
-from typing import Any
-
-# Add the parent directory to Python path to ensure imports work correctly
-
-# OpenAI embeddings are handled via EmbeddingGenerator from utils.embeddings
-# This import is kept for backward compatibility but OpenAIEmbedder doesn't exist
-# Use EmbeddingGenerator instead when needed
-
 """
 Build Index Module
 
 This module provides functionality for building FAISS indices for the RAG
 (Retrieval-Augmented Generation) system. It supports both SentenceTransformer
-and OpenAI embeddings, with options for backward compatibility and parallel
-index building.
+and OpenAI embeddings.
+
+Note: Embedding generation is handled by `scripts/pipeline/02_build_embeddings.py`.
+This module builds FAISS indices from precomputed embeddings or generates embeddings
+on-the-fly for index building.
 
 Key Features:
 - FAISS index building
-- Support for multiple embedding types
-- Parallel index building
-- Embedding generation
+- Support for multiple embedding types (SBERT, OpenAI)
 - Metadata management
 
-Classes:
-- None (Module-level functions only)
-
-Functions:
-- _load_precomputed_embeddings: Load precomputed embeddings from file
-- _load_csv: Load data from CSV file
-- _load_dataset: Load dataset by name
-- main: Main entry point for building indices
+Public Functions:
+- main: Main entry point for building indices (CLI)
 - build_openai_index: Build index using OpenAI embeddings
-- load_embedder: Load appropriate embedder based on configuration
-
-Dependencies:
-- argparse
-- csv
-- json
-- numpy
-- tqdm
-- pathlib
-- os
-- sys
-- faiss
-- sentence_transformers
-- openai
 
 Example Usage:
     >>> # Build indices using default settings
-    >>> python build_index.py
+    >>> python -m intent_classifier.rag.build_index
 
     >>> # Build indices with custom settings
-    >>> python build_index.py --use_openai --build_both
+    >>> python -m intent_classifier.rag.build_index --use_openai --build_both
 """
+
+from __future__ import annotations
 
 import argparse  # noqa: E402
 import csv  # noqa: E402
-import json  # noqa: E402
+import os
 from pathlib import Path  # noqa: E402
-
-import numpy as np  # noqa: E402
 
 from . import _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
 from .vector_store import VectorStore  # noqa: E402
 
-
-# ---------- Helper to load precomputed embeddings ----------
-def _load_precomputed_embeddings(meta_path):
-    if not meta_path.exists():
-        raise FileNotFoundError(
-            f"Precomputed embeddings not found at {meta_path}. "
-            "Run `scripts/pipeline/02_build_embeddings.py` first."
-        )
-    vectors = []
-    meta = []
-    with open(meta_path, encoding="utf-8") as fh:
-        for line in fh:
-            rec = json.loads(line)
-            vectors.append(rec["vector"])
-            meta.append(rec)
-    emb = np.array(vectors, dtype="float32")
-    return emb, meta
-
-
+# Constants
 DEFAULT_EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
-
-# Discover default dataset source dynamically
-def _get_default_source():
-    """Get default dataset source by discovering available datasets."""
-    from intent_classifier.utils.config_loader import get_first_available_dataset
-
-    return get_first_available_dataset()
-    return "clinc150"  # Fallback for backward compatibility
-
-
-DEFAULT_SOURCE = _get_default_source()
 
 # Create the base artifacts and embeddings directories
 _ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -110,15 +47,27 @@ _EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 _SBERT_DIR.mkdir(parents=True, exist_ok=True)
 _OPENAI_DIR.mkdir(parents=True, exist_ok=True)
 
-# New paths in separate directories
+# Paths for SBERT and OpenAI indices
 DEFAULT_SBERT_FAISS_PATH = _SBERT_DIR / "index.faiss"
 DEFAULT_SBERT_META_PATH = _SBERT_DIR / "meta.jsonl"
 DEFAULT_OPENAI_FAISS_PATH = _OPENAI_DIR / "index.faiss"
 DEFAULT_OPENAI_META_PATH = _OPENAI_DIR / "meta.jsonl"
 
-# Default to SentenceTransformer embeddings
+# Default paths (SBERT)
 DEFAULT_FAISS_PATH = DEFAULT_SBERT_FAISS_PATH
 DEFAULT_META_PATH = DEFAULT_SBERT_META_PATH
+
+
+# Helper functions
+def _get_default_source() -> str:
+    """Get default dataset source by discovering available datasets."""
+    from intent_classifier.utils.config_loader import get_first_available_dataset
+
+    dataset = get_first_available_dataset()
+    return dataset if dataset is not None else "clinc150"  # Fallback for backward compatibility
+
+
+DEFAULT_SOURCE = _get_default_source()
 
 
 def _load_csv(csv_path: str) -> tuple[list[str], list[str], list[int]]:
@@ -272,40 +221,3 @@ def build_openai_index(
 
 if __name__ == "__main__":
     main()
-
-
-def load_embedder(
-    model_name: str | None = None, use_openai: bool = False, batch_size: int = 100
-) -> Any:
-    """
-    Load either a local SBERT model (CPU) or OpenAI remote embedder.
-
-    Parameters
-    ----------
-    model_name
-        Local transformer model name.
-    use_openai
-        When True, route to OpenAI. Can also be toggled with env var USE_OPENAI_EMBEDDINGS=1.
-    batch_size
-        Batch size for OpenAI requests.
-    """
-    if use_openai or os.getenv("USE_OPENAI_EMBEDDINGS") == "1":
-        print("Using OpenAI embeddings endpoint...")
-        from intent_classifier.utils.embeddings import EmbeddingGenerator
-
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
-            )
-        return EmbeddingGenerator(
-            api_key=api_key, model="text-embedding-3-small", batch_size=batch_size
-        )
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        return SentenceTransformer(model_name or "all-MiniLM-L6-v2")
-    except ImportError as e:
-        raise RuntimeError(
-            "SentenceTransformer not installed; install or set USE_OPENAI_EMBEDDINGS=1"
-        ) from e

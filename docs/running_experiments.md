@@ -68,8 +68,6 @@ Preconfigured experiment files (organized by label type and dataset):
 - `config/dataset/clinc150/tiny.yaml` – very small smoke‑test config
 - `config/dataset/nlu_plus/default.yaml` – NLU++ standard config
 - `config/dataset/nlu_plus/tiny.yaml` – NLU++ quick testing config
-- `config/dataset/tandem_go/default.yaml` – Tandem GO standard config
-- `config/dataset/tandem_go/tiny.yaml` – Tandem GO quick testing config
 
 Use a different configuration file by setting `CONFIG_FILE`:
 

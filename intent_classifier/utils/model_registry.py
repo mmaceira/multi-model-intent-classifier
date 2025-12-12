@@ -90,18 +90,6 @@ def get_all_registered_models() -> dict[str, type[TextClassifier]]:
     return _MODEL_REGISTRY.copy()
 
 
-def is_registered(class_name: str) -> bool:
-    """Check if a model class is registered.
-
-    Args:
-        class_name: Name of the model class to check
-
-    Returns:
-        True if the class is registered, False otherwise
-    """
-    return class_name in _MODEL_REGISTRY
-
-
 def discover_and_register_models() -> None:
     """Auto-discover and register models from the algorithms package.
 
