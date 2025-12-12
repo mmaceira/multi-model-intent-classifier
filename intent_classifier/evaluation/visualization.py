@@ -72,10 +72,14 @@ def plot_label_distribution(
         for split_name in ["train", "test"]:
             if split_name in splits:
                 df = splits[split_name]
-                all_labels.update(df["y_true"].unique())
-                all_labels.update(df["y_pred"].unique())
+                # Filter out NaN and convert to strings
+                true_labels = [str(l) for l in df["y_true"].unique() if pd.notna(l)]
+                pred_labels = [str(l) for l in df["y_pred"].unique() if pd.notna(l)]
+                all_labels.update(true_labels)
+                all_labels.update(pred_labels)
 
-    all_labels = sorted(all_labels)
+    # Filter out NaN and ensure all labels are strings
+    all_labels = sorted([str(l) for l in all_labels if pd.notna(l)])
 
     for model_name, splits in predictions_dict.items():
         for split_name in ["train", "test"]:
@@ -201,7 +205,8 @@ def plot_precision_recall_curves(
                 df = splits[split_name]
                 all_labels.update(df["y_true"].unique())
 
-    all_labels = sorted(all_labels)
+    # Filter out NaN and ensure all labels are strings
+    all_labels = sorted([str(l) for l in all_labels if pd.notna(l)])
 
     for model_name, splits in predictions_dict.items():
         for split_name in ["train", "test"]:
@@ -276,7 +281,11 @@ def plot_confusion_matrix(
     for model_predictions in predictions_dict.values():
         for split_name in ["train", "test"]:
             if split_name in model_predictions:
-                classes.update(model_predictions[split_name]["y_true"].unique())
+                # Filter out NaN and convert to strings
+                true_labels = [
+                    str(l) for l in model_predictions[split_name]["y_true"].unique() if pd.notna(l)
+                ]
+                classes.update(true_labels)
     classes = sorted(classes)
 
     for model_name, model_predictions in predictions_dict.items():
@@ -286,8 +295,16 @@ def plot_confusion_matrix(
                 y_true = df["y_true"]
                 y_pred = df["y_pred"]
 
+                # Clean data: filter NaN and convert to strings
+                mask = pd.notna(y_true) & pd.notna(y_pred)
+                y_true_clean = np.array([str(v) for v in y_true[mask]])
+                y_pred_clean = np.array([str(v) for v in y_pred[mask]])
+
+                if len(y_true_clean) == 0:
+                    continue  # Skip if no valid data
+
                 # Compute confusion matrix
-                cm = confusion_matrix(y_true, y_pred, labels=classes)
+                cm = confusion_matrix(y_true_clean, y_pred_clean, labels=classes)
 
                 # Plot non-normalized confusion matrix
                 plt.figure(figsize=(10, 8))
@@ -350,15 +367,86 @@ def plot_model_comparisons(
                 y_true = df["y_true"].values
                 y_pred = df["y_pred"].values
 
-                metrics.append(
-                    {
-                        "Model": model_name,
-                        "Split": split_name.capitalize(),
-                        "Accuracy": accuracy_score(y_true, y_pred),
-                        "Macro F1": f1_score(y_true, y_pred, average="macro"),
-                        "Weighted F1": f1_score(y_true, y_pred, average="weighted"),
-                    }
-                )
+                # Detect and handle multi-label format
+                import pandas as pd
+
+                from intent_classifier.utils.label_utils import binarize_labels
+
+                is_multi = False
+                if len(y_true) > 0:
+                    sample = str(y_true[0]) if not pd.isna(y_true[0]) else ""
+                    if "," in sample and not sample.startswith("["):
+                        is_multi = True
+                        # Convert comma-separated strings to lists (preserve all entries, use empty list for NaN/empty)
+                        y_true_list = []
+                        for label in y_true:
+                            if pd.isna(label) or label == "":
+                                y_true_list.append([])
+                            else:
+                                tags = [tag.strip() for tag in str(label).split(",") if tag.strip()]
+                                y_true_list.append(tags if tags else [])
+                        y_pred_list = []
+                        for label in y_pred:
+                            if pd.isna(label) or label == "":
+                                y_pred_list.append([])
+                            else:
+                                tags = [tag.strip() for tag in str(label).split(",") if tag.strip()]
+                                y_pred_list.append(tags if tags else [])
+                        y_true = y_true_list
+                        y_pred = y_pred_list
+
+                if is_multi:
+                    # Multi-label metrics
+                    all_classes = sorted(
+                        set(tag for labels in y_true for tag in labels)
+                        | set(tag for labels in y_pred for tag in labels)
+                    )
+                    if all_classes:
+                        y_true_binary, _ = binarize_labels(y_true, classes=all_classes)
+                        y_pred_binary, _ = binarize_labels(y_pred, classes=all_classes)
+                        from sklearn.metrics import f1_score as sk_f1_score
+
+                        metrics.append(
+                            {
+                                "Model": model_name,
+                                "Split": split_name.capitalize(),
+                                "Accuracy": accuracy_score(
+                                    y_true_binary, y_pred_binary
+                                ),  # Subset accuracy
+                                "Macro F1": sk_f1_score(
+                                    y_true_binary, y_pred_binary, average="macro", zero_division=0
+                                ),
+                                "Weighted F1": sk_f1_score(
+                                    y_true_binary, y_pred_binary, average="micro", zero_division=0
+                                ),
+                            }
+                        )
+                else:
+                    # Single-label metrics
+                    # Clean data: remove NaN values and ensure consistent types
+                    mask = pd.notna(y_true) & pd.notna(y_pred)
+                    y_true_clean = y_true[mask]
+                    y_pred_clean = y_pred[mask]
+
+                    # Convert to strings to ensure consistent type
+                    y_true_clean = np.array([str(v) for v in y_true_clean])
+                    y_pred_clean = np.array([str(v) for v in y_pred_clean])
+
+                    if len(y_true_clean) > 0:
+                        metrics.append(
+                            {
+                                "Model": model_name,
+                                "Split": split_name.capitalize(),
+                                "Accuracy": accuracy_score(y_true_clean, y_pred_clean),
+                                "Macro F1": f1_score(
+                                    y_true_clean, y_pred_clean, average="macro", zero_division=0
+                                ),
+                                "Weighted F1": f1_score(
+                                    y_true_clean, y_pred_clean, average="weighted", zero_division=0
+                                ),
+                            }
+                        )
+                    # Skip if no valid data
 
     metrics_df = pd.DataFrame(metrics)
 
@@ -383,13 +471,13 @@ def plot_model_comparisons(
         train_df = metrics_df[metrics_df["Split"] == "Train"]
         sns.barplot(data=train_df, y="Model", x=metric, ax=axes[i, 0])
         axes[i, 0].set_title(f"{metric} (Train)")
-        axes[i, 0].set_yticklabels(axes[i, 0].get_yticklabels(), rotation=0)
+        axes[i, 0].tick_params(axis="y", rotation=0)
 
         # Test set
         test_df = metrics_df[metrics_df["Split"] == "Test"]
         sns.barplot(data=test_df, y="Model", x=metric, ax=axes[i, 1])
         axes[i, 1].set_title(f"{metric} (Test)")
-        axes[i, 1].set_yticklabels(axes[i, 1].get_yticklabels(), rotation=0)
+        axes[i, 1].tick_params(axis="y", rotation=0)
 
         # Set x-axis limits to be the same for train and test
         x_min = min(axes[i, 0].get_xlim()[0], axes[i, 1].get_xlim()[0])
@@ -640,8 +728,11 @@ def plot_confusion_matrices(
     for splits in predictions.values():
         if "test" in splits:
             df = splits["test"]
-            all_labels.update(df["y_true"].unique())
-            all_labels.update(df["y_pred"].unique())
+            # Filter out NaN and convert to strings
+            true_labels = [str(l) for l in df["y_true"].unique() if pd.notna(l)]
+            pred_labels = [str(l) for l in df["y_pred"].unique() if pd.notna(l)]
+            all_labels.update(true_labels)
+            all_labels.update(pred_labels)
 
     all_labels = sorted(all_labels)
 
@@ -765,7 +856,9 @@ def consistently_misclassified(
                     on=["text", "y_true", "y_pred"],
                     how="outer",
                 )
-                misclass_df[model_name] = misclass_df[model_name].fillna(False)
+                misclass_df[model_name] = (
+                    misclass_df[model_name].fillna(False).infer_objects(copy=False)
+                )
 
     if misclass_df is None:
         return pd.DataFrame()

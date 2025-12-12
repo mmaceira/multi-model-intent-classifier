@@ -15,26 +15,72 @@ Ollama is the default provider, offering local, cost-free inference.
 
 ### Setup
 
+#### 1. Install Ollama
+
 ```bash
 # Install Ollama (if not already installed)
 # Visit https://ollama.ai for installation instructions
 
-# Start Ollama server
-ollama serve
+# On Linux/macOS:
+curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull the model
-ollama pull llama3.1:8b
+# On Windows: Download installer from https://ollama.ai/download
 ```
+
+#### 2. Start Ollama Server
+
+```bash
+# Start Ollama server (usually runs automatically, but you can start it manually)
+ollama serve
+```
+
+#### 3. Pull the LLM Model
+
+```bash
+# Pull the default model used by RAG-LLM
+ollama pull llama3.1:8b
+
+# Verify the model is available
+ollama list
+```
+
+#### 4. Build Embeddings (Required for RAG Models)
+
+**Important**: Embeddings are separate from LLM models and need to be built separately:
+
+```bash
+# Run the embedding build script (this downloads SBERT model automatically)
+python scripts/pipeline/02_build_embeddings.py
+```
+
+**Note about embeddings**:
+- **SBERT embeddings** (`sentence-transformers/all-MiniLM-L6-v2`) are downloaded automatically from HuggingFace when you first run the embedding script
+- No manual download needed - the model downloads automatically (~80MB)
+- Embeddings are built from your dataset and stored locally in `output/{run_name}/embeddings/`
+- This is a one-time process per experiment
 
 ### Configuration
 
-Default configuration in `config/config.yaml`:
+Default configuration in config files (e.g., `config/dataset/clinc150/tiny.yaml`):
 ```yaml
 model:
   llm_model: "ollama/llama3.1:8b"  # Default LLM for RAG-LLM models
 ```
 
-No API key needed! Ollama runs locally.
+No API key needed! Ollama runs locally, and SBERT embeddings download automatically.
+
+#### 5. Verify Installation
+
+```bash
+# Check Ollama is running and model is available
+ollama list
+
+# Test Ollama with a simple query
+ollama run llama3.1:8b "Hello, world!"
+
+# Verify embeddings will be built (run the pipeline)
+python scripts/pipeline/02_build_embeddings.py --help
+```
 
 ## Using OpenAI Models
 
@@ -64,7 +110,7 @@ To use OpenAI models instead of Ollama, you need to set up an API key and update
        use_openai: false  # Set to true to use OpenAI embeddings instead of SBERT
    ```
 
-   **Option 2: Update `config/config.yaml`**
+   **Option 2: Update your main config file** (e.g., `config/dataset/clinc150/tiny.yaml`)
    ```yaml
    model:
      llm_model: "gpt-4o-mini"  # Change from "ollama/llama3.1:8b" to OpenAI model
@@ -74,7 +120,7 @@ To use OpenAI models instead of Ollama, you need to set up an API key and update
    ```yaml
    rag_llm:
      params:
-       model: "${model.llm_model}"  # Will use the OpenAI model from config.yaml
+       model: "${model.llm_model}"  # Will use the OpenAI model from the main config
        use_openai: false  # Set to true for OpenAI embeddings, false for SBERT
    ```
 
@@ -154,7 +200,7 @@ rag_llm:
 1. **From Ollama to OpenAI**:
    ```bash
    export OPENAI_API_KEY="your-key"
-   # Update config/config.yaml: llm_model: "gpt-4o-mini"
+   # Update your main config file: llm_model: "gpt-4o-mini"
    python scripts/pipeline/run_all.py
    ```
 
@@ -188,6 +234,12 @@ rag_llm:
 - **Model not found**: Run `ollama pull <model-name>`
 - **Connection refused**: Make sure `ollama serve` is running
 - **Slow inference**: Try a smaller model like `llama3.2:3b`
+
+### Embedding Issues
+- **SBERT model download fails**: Check internet connection - the model downloads from HuggingFace automatically
+- **Embeddings not found**: Run `python scripts/pipeline/02_build_embeddings.py` to build them
+- **Slow embedding generation**: This is normal for large datasets - embeddings are cached after first build
+- **Out of memory**: SBERT model (~80MB) should fit in most systems; if issues persist, use a smaller batch size: `SBERT_BATCH=16 python scripts/pipeline/02_build_embeddings.py`
 
 ### OpenAI Issues
 - **API key not found**: Set `OPENAI_API_KEY` environment variable

@@ -14,29 +14,22 @@ This directory contains production-ready utility scripts for the CLINC150 Intent
 
 ## Scripts Overview
 
-### reuters_news_classifier_demo.py
+### intent_classifier_demo.py
 
-A comprehensive demonstration script for intent classification (legacy name - works with CLINC150 dataset).
+A comprehensive demonstration script for intent classification using the CLINC150 dataset.
 
-**Purpose:** Showcase the full pipeline of intent classification and semantic search capabilities with a user-friendly interface.
+**Purpose:** Showcase the full pipeline of intent classification and semantic search capabilities with a user-friendly Gradio web interface.
 
 **Features:**
 - Supports all model types: Naive Bayes, SVM, BERT, and RAG variants
-- Interactive mode with real-time classification
-- Batch processing of multiple articles
-- Detailed performance metrics and visualizations
-- Export results to various formats (JSON, CSV, HTML)
+- Interactive web interface with real-time classification
+- Semantic search capabilities
+- Robust model loading supporting various serialization formats
 
 **Usage Example:**
 ```bash
-# Classify a single document
-python scripts/reuters_news_classifier_demo.py --model bert_lr --input "path/to/news/article.txt"
-
-# Batch processing mode
-python scripts/reuters_news_classifier_demo.py --model svm_linear --batch "path/to/articles/*.txt" --output results.csv
-
-# Interactive demo mode
-python scripts/reuters_news_classifier_demo.py --interactive
+# Run the Gradio web interface
+uv run python scripts/demos/intent_classifier_demo.py
 ```
 
 ### semantic_search_demo.py
@@ -73,38 +66,23 @@ python scripts/semantic_search_demo.py --interactive
 - `--output`: Path to save results (default: None, prints to console)
 - `--interactive`: Start in interactive mode
 
-### news_trend_analyzer.py
+### intent_trend_analyzer.py
 
-A script for analyzing intent trends and evolution over time (legacy script - may need adaptation for CLINC150).
+A script for analyzing intent trends and evolution using semantic search and LLMs.
 
-**Purpose:** Generate insights about intent distribution and trends in the dataset with time-based analysis.
+**Purpose:** Generate insights about intent distribution and trends in the dataset using a Gradio web interface.
 
 **Features:**
-- Time-series analysis of topic frequency
-- Trend detection and visualization
-- Topic correlation over time
-- Seasonal pattern identification
-- Export to multiple formats
+- Time-series and trend analysis of user intents
+- Retrieval of semantically similar utterances using vector embeddings
+- LLM-powered relevance classification and trend commentary
+- Interactive configuration and visualization of results
 
 **Usage Example:**
 ```bash
-# Basic trend analysis
-python scripts/news_trend_analyzer.py --start_date 2023-01-01 --end_date 2023-12-31
-
-# Focus on specific topics
-python scripts/news_trend_analyzer.py --topics "crude,oil,energy" --resolution weekly
-
-# Generate visualization
-python scripts/news_trend_analyzer.py --visualize --output trends.html
+# Run the Gradio web interface
+uv run python scripts/demos/intent_trend_analyzer.py
 ```
-
-**Parameters:**
-- `--start_date`: Start date for analysis (format: YYYY-MM-DD)
-- `--end_date`: End date for analysis (format: YYYY-MM-DD)
-- `--topics`: Comma-separated list of topics to analyze (default: all)
-- `--resolution`: Time resolution (daily, weekly, monthly, quarterly)
-- `--visualize`: Generate visualizations
-- `--output`: Output path for results and visualizations
 
 ### tune_hyperparams.py
 
@@ -122,7 +100,7 @@ A script for hyperparameter optimization using Ray Tune.
 **Usage Example:**
 ```bash
 # Tune Naive Bayes model
-python scripts/tune_hyperparams.py --config config/config.yaml --algo nb --num-samples 30
+python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
 
 # Tune SVM with specific search space
 python scripts/tune_hyperparams.py --config config/config.yaml --algo svm --search-space "config/svm_params.json"
@@ -218,23 +196,10 @@ The API supports multiple authentication methods:
 ```
 
 ### Batch Processing
-```python
-from scripts.news_trend_analyzer import NewsTrendAnalyzer
-
-analyzer = NewsTrendAnalyzer()
-results = analyzer.analyze_batch(
-    articles=["article1.txt", "article2.txt"],
-    output_format="json"
-)
-```
+See the pipeline scripts in `scripts/pipeline/` for batch processing capabilities.
 
 ### Custom Model Training
-```python
-from scripts.tune_hyperparams import HyperparameterTuner
-
-tuner = HyperparameterTuner(
-    config_path="config/hyperparams.yaml",
-    algorithm="lr"
-)
-best_params = tuner.optimize()
+Use the hyperparameter tuning script:
+```bash
+uv run python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --algo nb
 ```

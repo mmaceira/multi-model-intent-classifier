@@ -1,0 +1,20 @@
+Allowed labels: {allowed_labels}
+Label definitions:
+{defs_block}
+
+Retrieved labeled examples:
+{few_shots}
+
+CLASSIFY THIS QUERY:
+{query}
+
+Return exactly this JSON schema:
+{{ "label": "<comma-separated labels>", "confidence": <number 0..1> }}
+CRITICAL RULES:
+- The label MUST be EXACTLY one of the labels from the "Allowed labels" list above.
+- Copy the label EXACTLY as it appears in the Allowed labels list (same case, same format, same comma placement).
+- DO NOT create new label combinations - only use labels that exist in the Allowed labels list.
+- DO NOT add duplicate tags or modify the format.
+- If multiple labels are needed, use the EXACT format from Allowed labels: comma-separated, NO spaces (e.g., 'Alta,asseguranca').
+- If unsure, pick the best matching label from the Allowed labels list and set a low confidence.
+- confidence must be between 0 and 1.

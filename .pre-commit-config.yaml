@@ -1,36 +1,62 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
-        exclude: '.*\.lock$'
-      - id: check-merge-conflict
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.7.3
+      hooks:
+          - id: ruff
+            args: ["--fix"]
+          - id: ruff-format
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
+    - repo: https://github.com/psf/black-pre-commit-mirror
+      rev: 24.10.0
+      hooks:
+          - id: black
 
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-        language_version: python3
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v5.0.0
+      hooks:
+          - id: end-of-file-fixer
+          - id: trailing-whitespace
+          - id: mixed-line-ending
+          - id: check-merge-conflict
+          - id: check-yaml
+          - id: check-toml
 
-  - repo: local
-    hooks:
-      - id: commit-message-check
-        name: "Enforce commit message format"
-        entry: python scripts/check_commit_message.py
-        language: system
-        stages: [commit-msg]
-      - id: check-env-file
-        name: "Prevent committing .env files"
-        entry: python scripts/check_env_file.py
-        language: system
-        stages: [pre-commit]
+    - repo: https://github.com/commitizen-tools/commitizen
+      rev: v3.30.0
+      hooks:
+          - id: commitizen
+            stages: [commit-msg]
+          - id: commitizen-branch
+            args: ["--rev-range", "origin/main..HEAD"]
+            stages: [pre-push]
+
+    - repo: https://github.com/pycqa/pylint
+      rev: v3.2.7
+      hooks:
+          - id: pylint
+            name: pylint (intent_classifier)
+            args: ["-E", "intent_classifier"]
+            additional_dependencies:
+                - typer
+                - python-dotenv
+                - loguru
+
+    - repo: https://github.com/pre-commit/mirrors-mypy
+      rev: v1.13.0
+      hooks:
+          - id: mypy
+            args: ["--explicit-package-bases"]
+            files: ^intent_classifier/.*\.py$
+            additional_dependencies:
+                - typer
+                - rich
+                - loguru
+                - python-dotenv
+
+    - repo: local
+      hooks:
+          - id: check-env-file
+            name: "Prevent committing .env files"
+            entry: python scripts/check_env_file.py
+            language: system
+            stages: [pre-commit]

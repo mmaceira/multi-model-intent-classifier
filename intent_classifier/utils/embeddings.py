@@ -186,3 +186,23 @@ class EmbeddingGenerator:
                 raise
 
         return np.array(embeddings)
+
+    def encode(self, texts: List[str], **kwargs) -> np.ndarray:
+        """Alias for generate_embeddings for compatibility with SentenceTransformer API.
+
+        This method provides compatibility with code that expects a .encode() method
+        like SentenceTransformer models have.
+
+        Parameters
+        ----------
+        texts : List[str]
+            List of texts to generate embeddings for.
+        **kwargs
+            Additional arguments (ignored, kept for compatibility)
+
+        Returns
+        -------
+        np.ndarray
+            Array of embeddings, one for each input text.
+        """
+        return self.generate_embeddings(texts, show_progress=kwargs.get("show_progress_bar", False))

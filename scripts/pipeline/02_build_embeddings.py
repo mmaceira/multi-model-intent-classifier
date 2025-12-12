@@ -5,20 +5,21 @@ Build Embeddings
 This script generates embeddings using SBERT (Sentence-BERT) models and stores
 the indices inside the experiment folder. OpenAI embeddings are optional and only
 built if OPENAI_API_KEY is set. These embeddings are used for semantic search and
-RAG-based classification on the CLINC150 intent classification dataset.
+RAG-based classification.
 
 By default, only SBERT embeddings are built (no API keys required).
 """
 
 import os
 import sys
-from pathlib import Path
 
 import numpy as np
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -29,7 +30,6 @@ from config.notebook_setup import config_vars  # noqa: E402
 
 # Import dataset and embedding modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
-from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder  # noqa: E402
 from intent_classifier.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
 from intent_classifier.rag.vector_store import VectorStore  # noqa: E402
 
@@ -55,8 +55,9 @@ def main():
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -133,11 +134,25 @@ def main():
             print(f"Using model: {OPENAI_MODEL}")
             print("OPENAI_API_KEY found - building OpenAI embeddings...")
             try:
-                openai_embedder = OpenAIEmbedder(
-                    model=OPENAI_MODEL, batch_size=int(os.getenv("OPENAI_BATCH", "32"))
-                )
-                openai_vecs = openai_embedder.encode(X_train)
+                # Use OpenAI API directly
+                import openai
+
+                client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+                print("Encoding utterances with OpenAI API...")
+                openai_vecs = []
+                batch_size = int(os.getenv("OPENAI_BATCH", "100"))
+                for i in range(0, len(X_train), batch_size):
+                    batch = X_train[i : i + batch_size]
+                    response = client.embeddings.create(model=OPENAI_MODEL, input=batch)
+                    batch_vecs = [item.embedding for item in response.data]
+                    openai_vecs.extend(batch_vecs)
+                    print(
+                        f"  Processed {min(i+batch_size, len(X_train))}/{len(X_train)} utterances..."
+                    )
+
                 openai_vecs = np.array(openai_vecs, dtype="float32")
+                print(f"Generated embeddings with shape: {openai_vecs.shape}")
 
                 meta_openai = []
                 for i, (txt, label) in enumerate(zip(X_train, y_train, strict=False)):
@@ -149,6 +164,9 @@ def main():
                     openai_vecs, meta_openai, openai_vecs.shape[1], openai_faiss, openai_meta
                 )
                 print(f"✅ OpenAI index saved at {openai_faiss}")
+            except ImportError:
+                print("⚠️  OpenAI package not installed - skipping OpenAI embeddings.")
+                print("   Install with: pip install openai")
             except Exception as e:
                 print(f"⚠️  Failed to build OpenAI embeddings: {e}")
                 print("   Continuing with SBERT embeddings only...")

@@ -615,11 +615,17 @@ def comprehensive_analysis(
             ]
 
         # Convert to DataFrame
-        max_length = max(len(words) for words in class_word_freqs.values())
-        for class_name in class_word_freqs:
-            class_word_freqs[class_name] += [""] * (max_length - len(class_word_freqs[class_name]))
-
-        results["advanced_class"] = pd.DataFrame(class_word_freqs)
+        # Handle empty class_word_freqs (can happen with tiny datasets or multi-label data)
+        if class_word_freqs:
+            max_length = max(len(words) for words in class_word_freqs.values())
+            for class_name in class_word_freqs:
+                class_word_freqs[class_name] += [""] * (
+                    max_length - len(class_word_freqs[class_name])
+                )
+            results["advanced_class"] = pd.DataFrame(class_word_freqs)
+        else:
+            # Create empty DataFrame if no class-specific data
+            results["advanced_class"] = pd.DataFrame()
 
         if create_csv:
             results["advanced_class"].to_csv(

@@ -37,15 +37,18 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
+from sklearn.multioutput import MultiOutputClassifier
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from intent_classifier.model import TextClassifier
+from intent_classifier.utils.model_registry import register_model
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+@register_model("EmbeddingLogReg")
 class EmbeddingLogReg(TextClassifier):
     """Flexible embedding-based Logistic Regression (OpenAI or SBERT embeddings).
 
@@ -107,7 +110,8 @@ class EmbeddingLogReg(TextClassifier):
         self.batch_size = batch_size
         self.Cs = tuple(Cs) if Cs is not None else (0.1, 0.5, 1, 2, 5, 10)
         self.max_iter = max_iter
-        self.cv = cv
+        self.cv = cv  # Public attribute for sklearn compatibility
+        self._cv_param = cv  # Internal use for dynamic CV adjustment
         self.n_jobs = n_jobs
         self.scoring = scoring
 
@@ -115,7 +119,7 @@ class EmbeddingLogReg(TextClassifier):
         # Initialize embedder based on backend
         # ------------------------------------------------------------------
         if use_openai:
-            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+            from intent_classifier.utils.embeddings import EmbeddingGenerator
 
             # Check for API key
             if api_key is None:
@@ -125,7 +129,9 @@ class EmbeddingLogReg(TextClassifier):
                         "use_openai=True requires OPENAI_API_KEY environment variable "
                         "or api_key parameter"
                     )
-            self.embedder = OpenAIEmbedder(model=model, api_key=api_key, batch_size=batch_size)
+            self.embedder = EmbeddingGenerator(
+                api_key=api_key, model=model or "text-embedding-3-small", batch_size=batch_size
+            )
         else:
             # Use SBERT embeddings (local, no API key needed)
             from sentence_transformers import SentenceTransformer
@@ -143,15 +149,14 @@ class EmbeddingLogReg(TextClassifier):
         )
         pipe = make_pipeline(StandardScaler(with_mean=True), base_clf)
 
-        self.clf = GridSearchCV(
-            estimator=pipe,
-            param_grid={"logisticregression__C": self.Cs},
-            cv=cv,
-            scoring=scoring,
-            n_jobs=n_jobs,
-            refit=True,
-        )
+        # Store cv parameter for dynamic adjustment during fit
+        self._cv_param = cv
+        self.clf = None  # Will be initialized in _fit_model with proper CV strategy
         self._is_fitted = False
+        self._base_clf = None  # Will store GridSearchCV if multi-label (before wrapping)
+        self._is_multilabel = False  # Will be set during fit()
+        self._label_binarizer = None  # Will be set during fit() for multi-label
+        self._classes = None  # Will be set during fit()
 
     # ------------------------------------------------------------------
     # scikit‑learn plumbing
@@ -183,6 +188,14 @@ class EmbeddingLogReg(TextClassifier):
     # Fit / predict API
     # ------------------------------------------------------------------
     def _fit_model(self, X_vec: np.ndarray, y):
+        """Train the EmbeddingLogReg classifier.
+
+        Args:
+            X_vec: Vectorized text features with shape (n_samples, n_features)
+            y: Target labels in sklearn format:
+                - Single-label: array of shape (n_samples,) with string labels
+                - Multi-label: binary matrix of shape (n_samples, n_classes) with 0/1 values
+        """
         backend_name = "OpenAI" if self.use_openai else "SBERT"
         logger.info(
             "[EmbeddingLogReg-%s] Fitting GridSearchCV on %d vectors (dims=%d)",
@@ -190,39 +203,130 @@ class EmbeddingLogReg(TextClassifier):
             X_vec.shape[0],
             X_vec.shape[1],
         )
+
+        # ========================================================================
+        # STEP 1: Initialize GridSearchCV with CV strategy
+        # ========================================================================
+        cv_strategy = self._cv_param
+        pipe = make_pipeline(
+            StandardScaler(with_mean=True),
+            LogisticRegression(
+                max_iter=self.max_iter,
+                solver="lbfgs",
+                n_jobs=self.n_jobs,
+            ),
+        )
+
+        self.clf = GridSearchCV(
+            estimator=pipe,
+            param_grid={"logisticregression__C": self.Cs},
+            cv=cv_strategy,
+            scoring=self.scoring,
+            n_jobs=self.n_jobs,
+            refit=True,
+            error_score=0.0,  # Use 0.0 for failed fits instead of raising error
+        )
+
+        # ========================================================================
+        # STEP 2: Wrap GridSearchCV with MultiOutputClassifier if multi-label
+        # ========================================================================
+        # LogisticRegression supports multi-label via MultiOutputClassifier wrapper
+        # which trains one binary classifier per label
+        if self._is_multilabel:
+            # MULTI-LABEL PATH: Wrap GridSearchCV with MultiOutputClassifier
+            self._base_clf = self.clf  # Store original GridSearchCV for logging
+            self.clf = MultiOutputClassifier(self.clf, n_jobs=self.n_jobs)
+        # else: SINGLE-LABEL PATH: Use GridSearchCV directly (no wrapping needed)
+
+        # ========================================================================
+        # STEP 3: Train the classifier
+        # ========================================================================
         self.clf.fit(X_vec, y)
         self._is_fitted = True
-        logger.info(
-            "[EmbeddingLogReg-%s] Best C = %.3f | CV‑score = %.4f",
-            backend_name,
-            self.clf.best_params_["logisticregression__C"],
-            self.clf.best_score_,
-        )
+
+        # ========================================================================
+        # STEP 4: Log training results
+        # ========================================================================
+        if self._is_multilabel:
+            logger.info(
+                "[EmbeddingLogReg-%s] Multi-label mode | CV‑score = %.4f",
+                backend_name,
+                self._base_clf.best_score_ if hasattr(self._base_clf, "best_score_") else 0.0,
+            )
+        else:
+            logger.info(
+                "[EmbeddingLogReg-%s] Best C = %.3f | CV‑score = %.4f",
+                backend_name,
+                self.clf.best_params_["logisticregression__C"],
+                self.clf.best_score_,
+            )
 
     def _predict_model(self, X_vec):
         """Hook expected by the TextClassifier base class."""
         return self.clf.predict(X_vec)
 
     def fit(self, X: List[str], y):
+        # Handle label format detection and conversion (same as TransformerLogReg)
+        import numpy as np
+
+        from intent_classifier.utils.label_utils import (
+            binarize_labels,
+            is_multilabel,
+            to_multilabel_format,
+        )
+
+        # Detect label format
+        self._is_multilabel = is_multilabel(y)
+
+        # Convert labels to format expected by sklearn models
+        if self._is_multilabel:
+            y_multilabel = to_multilabel_format(y)
+            y_binary, self._label_binarizer = binarize_labels(y_multilabel)
+            self._classes = self._label_binarizer.classes_
+            y_for_training = y_binary
+        else:
+            y_for_training = np.asarray(y)
+            self._classes = np.unique(y_for_training)
+
+        # Vectorize text
         X_vec = self.vectorize(X)
-        self._fit_model(X_vec, y)
+
+        # Train model with converted labels
+        self._fit_model(X_vec, y_for_training)
+        self._is_fitted = True
         return self
 
     def predict(self, X: List[str]):
-        if not self._is_fitted:
-            raise RuntimeError("Model must be fitted before calling predict()")
-        X_vec = self.vectorize(X)
-        return self._predict_model(X_vec)
+        # Use parent class predict() to handle label format conversion
+        # This ensures proper conversion from binary matrix to list of lists for multi-label
+        return super().predict(X)
 
     # Optional convenience
     def transform(self, X: List[str]):
         return self.vectorize(X)
 
     def predict_proba(self, X: List[str]):
+        """Generate probability estimates for each class.
+
+        Args:
+            X: Raw text documents to classify
+
+        Returns:
+            np.ndarray: Probability matrix of shape (n_samples, n_classes)
+                - Single-label: probabilities sum to 1.0 per sample
+                - Multi-label: probabilities for each label independently
+        """
         if not self._is_fitted:
             raise RuntimeError("Fit the model before predict_proba()")
         X_vec = self.vectorize(X)
-        return self.clf.best_estimator_.predict_proba(X_vec)
+
+        # Both single-label and multi-label use predict_proba, but access differs:
+        # - Single-label: access best_estimator_ from GridSearchCV
+        # - Multi-label: MultiOutputClassifier wraps GridSearchCV and handles it automatically
+        if self._is_multilabel:
+            return self.clf.predict_proba(X_vec)
+        else:
+            return self.clf.best_estimator_.predict_proba(X_vec)
 
     # ------------------------------------------------------------------
     # Pickling support
@@ -243,11 +347,66 @@ class EmbeddingLogReg(TextClassifier):
             )
 
         # ----------------------------------------------------------------
-        # 1. Grab fitted pieces
+        # 1. Grab fitted pieces - handle single-label vs multi-label
         # ----------------------------------------------------------------
-        pipe: Pipeline = self.clf.best_estimator_
-        scaler: StandardScaler = pipe.named_steps["standardscaler"]
-        logreg: LogisticRegression = pipe.named_steps["logisticregression"]
+        if self._is_multilabel:
+            # Multi-label: self.clf is MultiOutputClassifier wrapping GridSearchCV objects
+            # Extract from ALL estimators (one per label)
+            # Note: MultiOutputClassifier.estimators_ contains the fitted GridSearchCV objects
+            if not hasattr(self.clf, "estimators_") or len(self.clf.estimators_) == 0:
+                raise RuntimeError("Multi-label model not properly fitted")
+
+            # Store parameters from all estimators
+            estimators_params = []
+            for grid_search in self.clf.estimators_:
+                pipe: Pipeline = grid_search.best_estimator_
+                scaler: StandardScaler = pipe.named_steps["standardscaler"]
+                logreg: LogisticRegression = pipe.named_steps["logisticregression"]
+
+                estimators_params.append(
+                    {
+                        "scaler_params": {
+                            "mean_": deepcopy(scaler.mean_),
+                            "scale_": deepcopy(scaler.scale_),
+                            "n_features_in_": scaler.n_features_in_,
+                        },
+                        "logreg_params": {
+                            "coef_": deepcopy(logreg.coef_),
+                            "intercept_": deepcopy(logreg.intercept_),
+                            "classes_": deepcopy(logreg.classes_),
+                            "n_features_in_": logreg.n_features_in_,
+                        },
+                        "best_C": grid_search.best_params_["logisticregression__C"],
+                        "best_score": grid_search.best_score_,
+                    }
+                )
+
+            # Use first estimator's params for backward compatibility fields
+            first_params = estimators_params[0]
+            scaler_params = first_params["scaler_params"]
+            logreg_params = first_params["logreg_params"]
+            best_C = first_params["best_C"]
+            best_score = first_params["best_score"]
+        else:
+            # Single-label: self.clf is GridSearchCV directly
+            pipe: Pipeline = self.clf.best_estimator_
+            scaler: StandardScaler = pipe.named_steps["standardscaler"]
+            logreg: LogisticRegression = pipe.named_steps["logisticregression"]
+
+            scaler_params = {
+                "mean_": deepcopy(scaler.mean_),
+                "scale_": deepcopy(scaler.scale_),
+                "n_features_in_": scaler.n_features_in_,
+            }
+            logreg_params = {
+                "coef_": deepcopy(logreg.coef_),
+                "intercept_": deepcopy(logreg.intercept_),
+                "classes_": deepcopy(logreg.classes_),
+                "n_features_in_": logreg.n_features_in_,
+            }
+            best_C = self.clf.best_params_["logisticregression__C"]
+            best_score = self.clf.best_score_
+            estimators_params = None  # Not used for single-label
 
         state: dict[str, Any] = {
             # --- bare hyper‑parameters ----------------------------------
@@ -261,20 +420,17 @@ class EmbeddingLogReg(TextClassifier):
             "n_jobs": 1,  # always 1 on reload
             "scoring": self.scoring,
             # --- fitted weights -----------------------------------------
-            "scaler_params": {
-                "mean_": deepcopy(scaler.mean_),
-                "scale_": deepcopy(scaler.scale_),
-                "n_features_in_": scaler.n_features_in_,
-            },
-            "logreg_params": {
-                "coef_": deepcopy(logreg.coef_),
-                "intercept_": deepcopy(logreg.intercept_),
-                "classes_": deepcopy(logreg.classes_),
-                "n_features_in_": logreg.n_features_in_,
-            },
+            "scaler_params": scaler_params,
+            "logreg_params": logreg_params,
+            # --- multi-label: store all estimators' params --------------
+            "estimators_params": estimators_params,  # None for single-label, list for multi-label
             # --- a bit of CV bookkeeping (optional) ---------------------
-            "best_C": self.clf.best_params_["logisticregression__C"],
-            "best_score": self.clf.best_score_,
+            "best_C": best_C,
+            "best_score": best_score,
+            # --- multi-label flag for __setstate__ ----------------------
+            "_is_multilabel": self._is_multilabel,
+            # --- classes for multi-label reconstruction -------------------
+            "_classes": self._classes,
         }
 
         # We *intentionally* leave out:
@@ -310,11 +466,18 @@ class EmbeddingLogReg(TextClassifier):
         # ------------- resurrect the embedder (fresh instance) -------
         self.api_key = None  # supply at runtime if needed
         if state["use_openai"]:
-            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+            from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-            self.embedder = OpenAIEmbedder(
-                model=self.model,
-                api_key=self.api_key,
+            # Get API key from environment if not set
+            api_key = self.api_key or os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "use_openai=True requires OPENAI_API_KEY environment variable "
+                    "or api_key parameter"
+                )
+            self.embedder = EmbeddingGenerator(
+                api_key=api_key,
+                model=self.model or "text-embedding-3-small",
                 batch_size=self.batch_size,
             )
         else:
@@ -323,30 +486,91 @@ class EmbeddingLogReg(TextClassifier):
             self.embedder = SentenceTransformer(self.model)
 
         # ------------- rebuild the scaler + classifier ------------------
-        scaler = StandardScaler(with_mean=True)
-        scaler.mean_ = state["scaler_params"]["mean_"]
-        scaler.scale_ = state["scaler_params"]["scale_"]
-        scaler.n_features_in_ = state["scaler_params"]["n_features_in_"]
-
-        logreg = LogisticRegression(
-            max_iter=self.max_iter,
-            solver="lbfgs",
-            multi_class="ovr",
-            n_jobs=1,  # no parallel backend on load
-        )
-        logreg.classes_ = state["logreg_params"]["classes_"]
-        logreg.coef_ = state["logreg_params"]["coef_"]
-        logreg.intercept_ = state["logreg_params"]["intercept_"]
-        logreg.n_features_in_ = state["logreg_params"]["n_features_in_"]
-
         from sklearn.pipeline import Pipeline
 
-        self.clf = Pipeline(
-            steps=[
-                ("standardscaler", scaler),
-                ("logisticregression", logreg),
+        is_multilabel = state.get("_is_multilabel", False)
+        estimators_params = state.get("estimators_params")
+
+        # Backward compatibility: if multi-label but no estimators_params, use single estimator
+        # (old pickle format that only stored first estimator)
+        if is_multilabel and estimators_params is None:
+            # Convert single estimator format to list format for consistency
+            estimators_params = [
+                {
+                    "scaler_params": state["scaler_params"],
+                    "logreg_params": state["logreg_params"],
+                    "best_C": state.get("best_C", 1.0),
+                    "best_score": state.get("best_score", 0.0),
+                }
             ]
-        )
+
+        if is_multilabel and estimators_params is not None and len(estimators_params) > 0:
+            # Multi-label: reconstruct all estimators and wrap in MultiOutputClassifier
+            estimators = []
+            for est_params in estimators_params:
+                scaler = StandardScaler(with_mean=True)
+                scaler.mean_ = est_params["scaler_params"]["mean_"]
+                scaler.scale_ = est_params["scaler_params"]["scale_"]
+                scaler.n_features_in_ = est_params["scaler_params"]["n_features_in_"]
+
+                logreg = LogisticRegression(
+                    max_iter=self.max_iter,
+                    solver="lbfgs",
+                    multi_class="ovr",
+                    n_jobs=1,  # no parallel backend on load
+                )
+                logreg.classes_ = est_params["logreg_params"]["classes_"]
+                logreg.coef_ = est_params["logreg_params"]["coef_"]
+                logreg.intercept_ = est_params["logreg_params"]["intercept_"]
+                logreg.n_features_in_ = est_params["logreg_params"]["n_features_in_"]
+
+                pipe = Pipeline(
+                    steps=[
+                        ("standardscaler", scaler),
+                        ("logisticregression", logreg),
+                    ]
+                )
+                estimators.append(pipe)
+
+            # Create MultiOutputClassifier with first estimator as template, then replace with all
+            # This ensures proper initialization of MultiOutputClassifier internals
+            self.clf = MultiOutputClassifier(
+                estimators[0] if estimators else Pipeline([]), n_jobs=1
+            )
+            self.clf.estimators_ = estimators
+            self.clf.n_outputs_ = len(estimators)
+            # Mark as fitted (since estimators are already fitted)
+            self.clf._fitted = True
+        else:
+            # Single-label: reconstruct single pipeline
+            scaler = StandardScaler(with_mean=True)
+            scaler.mean_ = state["scaler_params"]["mean_"]
+            scaler.scale_ = state["scaler_params"]["scale_"]
+            scaler.n_features_in_ = state["scaler_params"]["n_features_in_"]
+
+            logreg = LogisticRegression(
+                max_iter=self.max_iter,
+                solver="lbfgs",
+                multi_class="ovr",
+                n_jobs=1,  # no parallel backend on load
+            )
+            logreg.classes_ = state["logreg_params"]["classes_"]
+            logreg.coef_ = state["logreg_params"]["coef_"]
+            logreg.intercept_ = state["logreg_params"]["intercept_"]
+            logreg.n_features_in_ = state["logreg_params"]["n_features_in_"]
+
+            self.clf = Pipeline(
+                steps=[
+                    ("standardscaler", scaler),
+                    ("logisticregression", logreg),
+                ]
+            )
+
+        # Restore multi-label flag and related attributes
+        self._is_multilabel = is_multilabel
+        self._label_binarizer = None
+        self._classes = state.get("_classes", state["logreg_params"]["classes_"])
+        self._base_clf = None  # Not restored (was only for logging during fit)
 
         # ------------- book‑keeping -------------------------------------
         self._is_fitted = True

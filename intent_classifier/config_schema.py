@@ -5,9 +5,9 @@ It ensures type safety and catches configuration errors at startup.
 
 Usage:
     >>> from intent_classifier.config_schema import load_and_validate_config
-    >>> config = load_and_validate_config("config/config.yaml")
+    >>> config = load_and_validate_config("config/dataset/{dataset_name}/tiny.yaml")
     >>> print(config.general.run_name)
-    "experiment_10_classes"
+    "experiment_tiny_dataset"
 """
 
 from pathlib import Path
@@ -27,11 +27,15 @@ class GeneralCfg(BaseModel):
 class DatasetCfg(BaseModel):
     """Dataset configuration settings."""
 
-    name: str = Field(..., description="Dataset name (e.g., 'clinc150')")
+    name: str = Field(..., description="Dataset name (must match a dataset in config/dataset/)")
     use_oos: bool = Field(default=False, description="Include out-of-scope examples")
+    multilabel: bool = Field(default=False, description="Enable multi-label mode")
     max_classes: Optional[int] = Field(None, ge=1, description="Limit number of classes")
     max_train_samples: Optional[int] = Field(None, ge=1, description="Limit training samples")
     max_test_samples: Optional[int] = Field(None, ge=1, description="Limit test samples")
+    min_samples_per_label: Optional[int] = Field(
+        None, ge=1, description="Minimum samples per label (filters rare labels)"
+    )
 
 
 class PathsCfg(BaseModel):
@@ -63,6 +67,11 @@ class ModelCfg(BaseModel):
     rag_top_k: int = Field(default=25, ge=1, description="Number of neighbors for RAG models")
     llm_model: str = Field(
         default="ollama/llama3.1:8b", description="LLM model for RAG-LLM classification"
+    )
+    ollama_endpoint: Optional[str] = Field(
+        default=None,
+        description="Ollama API endpoint URL (e.g., http://localhost:11434). "
+        "If not set, uses OLLAMA_API_BASE env var or default http://localhost:11434",
     )
 
 

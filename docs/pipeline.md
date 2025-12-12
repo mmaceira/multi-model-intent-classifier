@@ -487,10 +487,10 @@ Step 5: Model Evaluation
 
 All pipeline decisions can be customized via configuration files:
 
-- **Dataset**: `config/config.yaml` (dataset size, classes, splits)
+- **Dataset**: Main config file (e.g., `config/dataset/clinc150/tiny.yaml`) - dataset size, classes, splits
 - **Models**: `config/models_config.yaml` (which models to train, hyperparameters)
 - **Embeddings**: Step 2 automatically detects available backends
-- **LLM**: `config/config.yaml` (Ollama by default, OpenAI optional)
+- **LLM**: Main config file (Ollama by default, OpenAI optional)
 
 See [Configuration](configuration.md) for detailed configuration options.
 

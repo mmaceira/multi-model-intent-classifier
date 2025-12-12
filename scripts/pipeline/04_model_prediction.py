@@ -9,29 +9,36 @@ to the unified `intent_classifier.prediction.run_prediction` helper.
 import sys
 from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 # Suppress verbose warnings before other imports
-from intent_classifier.utils.warnings_config import suppress_pydantic_warnings  # noqa: E402
+from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
 
 suppress_pydantic_warnings()
 
 # Import config setup
-from config.notebook_setup import (  # noqa: E402
+# Import from prediction.py file (not prediction/ directory)
+from config.notebook_setup import (
     MODELS_DIR,
     PREDICTIONS_DIR,
     config_vars,
 )
 
 # Import dataset and prediction modules
-from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
-from intent_classifier.prediction import run_prediction  # noqa: E402
-from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
-from intent_classifier.utils.model_utils import load_model_paths  # noqa: E402
+from intent_classifier.datasets.dataset import get_dataset
+
+prediction_module_path = Path(__file__).parent.parent.parent / "intent_classifier" / "prediction.py"
+if str(prediction_module_path.parent) not in sys.path:
+    sys.path.insert(0, str(prediction_module_path.parent))
+from intent_classifier.prediction import run_prediction
+from intent_classifier.utils.model_loader import load_models_from_config
+from intent_classifier.utils.model_utils import load_model_paths
 
 
 def main():
@@ -44,8 +51,9 @@ def main():
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),

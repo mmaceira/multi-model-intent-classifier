@@ -109,6 +109,7 @@ class RagKMajority(RagClassifierBase):
         labels: Sequence[str],
         top_k: int = 5,
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        multilabel_threshold: float = 0.5,
     ) -> None:
         """
         Initialize the K-Majority classifier.
@@ -118,6 +119,7 @@ class RagKMajority(RagClassifierBase):
             labels (Sequence[str]): List of possible classification labels
             top_k (int): Number of nearest neighbors to consider (default: 5)
             embedding_model (str): Model name for generating embeddings
+            multilabel_threshold (float): Threshold for multi-label predictions (default: 0.5)
 
         Example:
             >>> retriever = Retriever.from_default()
@@ -128,6 +130,8 @@ class RagKMajority(RagClassifierBase):
         self.retriever = retriever
         self.top_k = top_k
         self.embedding_model = embedding_model
+        self.multilabel_threshold = multilabel_threshold
+        self._is_multilabel = False
         self._label_to_idx = {label: i for i, label in enumerate(sorted(labels))}
 
     @classmethod
@@ -137,6 +141,7 @@ class RagKMajority(RagClassifierBase):
         use_openai: bool = False,
         embedding_model: str = None,
         config: dict = None,
+        multilabel_threshold: float = 0.5,
     ) -> "RagKMajority":
         """
         Create a classifier with default configuration.
@@ -180,23 +185,24 @@ class RagKMajority(RagClassifierBase):
 
         retriever = Retriever.from_default(use_openai=use_openai)
         labels = {str(m["label"]) for m in retriever.store.meta}
-        return cls(retriever, sorted(labels), top_k, embedding_model)
+        return cls(retriever, sorted(labels), top_k, embedding_model, multilabel_threshold)
 
-    def predict(self, docs: Sequence[str], **_) -> List[str]:
+    def predict(self, docs: Sequence[str], **_) -> List[str] | List[List[str]]:
         """
         Predict labels for a sequence of documents using similarity-weighted voting.
 
         This method:
         1. Generates embeddings for the documents
         2. Retrieves k nearest neighbors for each document
-        3. Applies similarity-weighted voting to determine the label
+        3. Applies similarity-weighted voting to determine the label(s)
 
         Args:
             docs (Sequence[str]): Documents to classify
             **_: Additional arguments (ignored)
 
         Returns:
-            List[str]: Predicted labels for each document
+            List[str] or List[List[str]]: Predicted labels for each document.
+                Returns List[str] for single-label mode, List[List[str]] for multi-label mode.
 
         Example:
             >>> classifier = RagKMajority.load_default()
@@ -216,13 +222,39 @@ class RagKMajority(RagClassifierBase):
             # Get nearest neighbors for this embedding
             neighbors = self.retriever.top_k(query_emb, self.top_k)
 
-            # Apply similarity-weighted voting
+            # ========================================================================
+            # STEP 1: Compute similarity-weighted scores for each label
+            # ========================================================================
             scores = defaultdict(float)
+            total_score = 0.0
             for n in neighbors:
-                scores[n["label"]] += n["score"]
+                label = n["label"]
+                # Handle multi-label: if label is a list, count each tag separately
+                if isinstance(label, list):
+                    # Multi-label: distribute score equally among all tags
+                    tag_score = n["score"] / len(label) if label else n["score"]
+                    for tag in label:
+                        scores[tag] += tag_score
+                else:
+                    # Single-label: use label directly
+                    scores[label] += n["score"]
+                total_score += n["score"]
 
-            # Get label with highest weighted score
-            preds.append(max(scores.items(), key=lambda kv: kv[1])[0])
+            # ========================================================================
+            # STEP 2: Select labels based on mode (single-label vs multi-label)
+            # ========================================================================
+            if self._is_multilabel:
+                # MULTI-LABEL PATH: Return all labels above threshold
+                # Threshold is relative to total similarity score
+                threshold_score = self.multilabel_threshold * total_score
+                labels = [label for label, score in scores.items() if score >= threshold_score]
+                # If no labels above threshold, fallback to highest scoring label
+                preds.append(
+                    sorted(labels) if labels else [max(scores.items(), key=lambda kv: kv[1])[0]]
+                )
+            else:
+                # SINGLE-LABEL PATH: Return label with highest weighted score
+                preds.append(max(scores.items(), key=lambda kv: kv[1])[0])
 
         return preds
 
@@ -268,7 +300,16 @@ class RagKMajority(RagClassifierBase):
             label_scores = defaultdict(float)
             total_score = 0.0
             for n in neighbors:
-                label_scores[n["label"]] += n["score"]
+                label = n["label"]
+                # Handle multi-label: if label is a list, count each tag separately
+                if isinstance(label, list):
+                    # Multi-label: distribute score equally among all tags
+                    tag_score = n["score"] / len(label) if label else n["score"]
+                    for tag in label:
+                        label_scores[tag] += tag_score
+                else:
+                    # Single-label: use label directly
+                    label_scores[label] += n["score"]
                 total_score += n["score"]
 
             # Convert scores to probabilities

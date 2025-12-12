@@ -6,10 +6,12 @@ This script loads the dataset with no limits to see what the full dataset contai
 """
 
 from collections import Counter
-from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[1]
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+
+# Get repo root
+repo_root = get_repo_root()
 
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 

@@ -175,36 +175,20 @@ def _get_experiment_name() -> Optional[str]:
         return None
 
     try:
-        import yaml
+        from intent_classifier.utils.config_loader import get_run_name_from_config
 
-        from intent_classifier.utils.paths import get_repo_root
+        run_name = get_run_name_from_config(config_file)
+        if run_name:
+            from intent_classifier.utils.paths import get_config_path
 
-        repo_root = get_repo_root()
-        # Handle both "config_tiny_dataset.yaml" and "config/config_tiny_dataset.yaml"
-        if config_file.startswith("config/"):
-            config_path = repo_root / config_file
+            config_path = get_config_path(config_file)
+            logger.info(f"Loaded experiment name '{run_name}' from config file: {config_path}")
         else:
-            config_path = repo_root / "config" / config_file
-
-        if not config_path.exists():
             logger.warning(
-                f"Config file not found: {config_path}. "
-                f"Using default models directory. "
-                f"Set EXPERIMENT_NAME or ensure CONFIG_FILE points to a valid config file."
+                f"Config file {config_file} does not contain 'general.run_name'. "
+                f"Using default models directory."
             )
-            return None
-
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-            run_name = config.get("general", {}).get("run_name")
-            if run_name:
-                logger.info(f"Loaded experiment name '{run_name}' from config file: {config_path}")
-            else:
-                logger.warning(
-                    f"Config file {config_path} does not contain 'general.run_name'. "
-                    f"Using default models directory."
-                )
-            return run_name
+        return run_name
     except Exception as e:
         logger.warning(
             f"Failed to read config file '{config_file}': {e}. "

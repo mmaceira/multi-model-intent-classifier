@@ -7,15 +7,17 @@ This directory contains the core source code for the CLINC150 RAG Classifier pro
 ```
 intent_classifier/
 ├── algorithms/     # Machine learning algorithms implementation
-├── datasets/       # Dataset handling and preprocessing
-├── embeddings/     # Embedding generation and management
+├── datasets/       # Dataset handling (generic loader system)
 ├── evaluation/     # Model evaluation and metrics
-├── exploration.py  # Data exploration and visualization
-├── model.py        # Core model interfaces and implementations
-├── prediction.py   # Prediction utilities and inference pipeline
+├── hparam/         # Hyperparameter tuning strategies
+├── pipeline/        # Pipeline orchestration
+├── prediction/      # Prediction utilities (single-label and multi-label)
 ├── rag/            # RAG implementation and utilities
-├── training.py     # Training utilities and pipeline
-└── utils/          # Utility functions and helpers
+├── utils/          # Utility functions and helpers
+├── config_schema.py # Configuration schema definitions
+├── exploration.py   # Data exploration and visualization
+├── model.py         # Core model interfaces and implementations
+└── training.py     # Training utilities and pipeline
 ```
 
 ## Core Modules
@@ -45,24 +47,15 @@ classifier.fit(X_train, y_train)
 predictions = classifier.predict(X_test)
 ```
 
-### prediction.py
+### prediction/
 
-Handles all aspects of model inference and prediction:
+Handles all aspects of model inference and prediction for both single-label and multi-label classification:
 
-- `classify_text`: End-to-end text classification function
-- `TextPredictionPipeline`: Reusable prediction pipeline
-- `ModelRegistry`: Factory pattern for model instantiation
-- `ModelCache`: Caching system for efficient model loading
+- `base.py`: Base prediction utilities
+- `singlelabel.py`: Single-label prediction functions
+- `multilabel.py`: Multi-label prediction functions
 
-```python
-# Example usage
-from intent_classifier.prediction import classify_text
-
-# Classify a single document
-result = classify_text("What is the weather today?", model_type="bert_lr")
-print(f"Predicted class: {result['class']}")
-print(f"Confidence: {result['confidence']}")
-```
+The prediction module provides utilities for loading models and making predictions, with separate handling for single-label and multi-label scenarios.
 
 ### training.py
 
@@ -105,62 +98,78 @@ Tools for dataset exploration and visualization:
 
 Utility functions and helpers:
 
-- `logging.py`: Logging configuration with rotating file handlers
-- `config.py`: Configuration management with YAML support
-- `file_utils.py`: File handling and IO operations
-- `time_utils.py`: Time measurement and benchmarking
-- `nlp_utils.py`: NLP-specific utilities
+- `config_loader.py`: Configuration loading and management with YAML support
+- `embeddings.py`: Embedding generation utilities (SBERT, OpenAI)
+- `file_ops.py`: File handling and IO operations
+- `label_utils.py`: Label processing utilities (single-label, multi-label)
+- `model_factory.py`: Factory for creating model instances
+- `model_loader.py`: Model loading utilities with hyperparameter support
+- `model_registry.py`: Model registry for managing available models
+- `model_utils.py`: Model utility functions
+- `paths.py`: Path resolution utilities
+- `retry.py`: Retry logic for API calls
+- `seed.py`: Random seed management
+- `text_utils.py`: Text processing utilities
+- `types.py`: Type definitions
+- `warnings_config.py`: Warning configuration
 
 ### datasets/
 
-Dataset handling and preprocessing:
+Dataset handling using a generic loader system:
 
-- `clinc150.py`: CLINC150 intent classification dataset loader
-- `dataset.py`: Main dataset loading interface
-- `preprocessing.py`: Text preprocessing pipeline with multiple cleaning options
-- `augmentation.py`: Data augmentation techniques for expanded training
-- `validation.py`: Data validation and quality checking tools
+- `dataset.py`: Main dataset loading interface with automatic discovery of datasets from config files
+- `generic_loader.py`: Generic dataset loader that supports multiple source types (HuggingFace, GitHub JSON, CSV, local JSON)
 
-### embeddings/
+Datasets are automatically discovered from `config/dataset/{dataset_name}/loader.yaml` files. Supported datasets include:
+- `clinc150`: Single-label intent classification (from HuggingFace)
+- `nlu_plus`: Multi-label intent classification (from GitHub)
+- `tandem_go`: Multi-label classification (from local CSV)
 
-Embedding generation and management:
+### utils/embeddings.py
 
-- `transformer.py`: Transformer-based embeddings with model providers
-- `faiss_index.py`: FAISS index management for efficient similarity search
-- `embedding_utils.py`: Utility functions for embedding manipulation
-- `cache.py`: Caching system for embedding reuse and persistence
+Embedding generation and management utilities:
+
+- Embedding generation using SBERT (local) or OpenAI (API)
+- FAISS index management for efficient similarity search
+- Embedding utilities for RAG models
 
 ### algorithms/
 
 Contains implementations of various machine learning algorithms used for classification:
 
-- `naive_bayes.py`: Multinomial Naive Bayes implementation with custom smoothing
-- `svm.py`: Support Vector Machine with optimized hyperparameters
-- `logistic_regression.py`: Logistic Regression with transformer embeddings
-- `ensemble.py`: Ensemble methods including voting and stacking
+- `naive_bayes.py`: Multinomial Naive Bayes implementation with TF-IDF
+- `linear_svm.py`: Linear SVM implementation (unigrams and bigrams) with calibration support
+- `transformer_logreg.py`: Transformer embeddings (MiniLM) + Logistic Regression
+- `embedding_logreg.py`: Flexible embedding backends (SBERT/OpenAI) + Logistic Regression
 
 ### rag/
 
 RAG implementation and utilities:
 
-- `__init__.py`: Module initialization and configuration
-- `adapter_sklearn.py`: Scikit-learn compatibility adapter
-- `rag_kmajority.py`: K-Majority RAG implementation
-- `rag_llm.py`: LLM-based RAG implementation
-- `centroid_nn.py`: Centroid-based nearest neighbors
-- `build_index.py`: Index building utilities
+- `adapter_sklearn.py`: Scikit-learn compatibility adapter for RAG models
+- `rag_kmajority.py`: K-Majority RAG implementation (majority voting on retrieved neighbors)
+- `rag_llm/`: LLM-based RAG classifier with support for multiple LLM providers (Ollama, OpenAI, etc.)
+  - `classifier.py`: Main RAG-LLM classifier implementation
+  - `prompts/`: Prompt templates for single-label and multi-label classification
+- `centroid_nn.py`: Centroid-based nearest neighbors classifier
+- `build_index.py`: FAISS index building utilities
 - `vector_store.py`: Vector store implementation
 - `retrieval.py`: Document retrieval system
 - `classifier_base.py`: Base class for RAG classifiers
 
 ### evaluation/
 
-Model evaluation and metrics:
+Model evaluation and metrics with support for both single-label and multi-label classification:
 
-- `metrics.py`: Custom evaluation metrics beyond standard sklearn
-- `cross_validation.py`: Stratified cross-validation for imbalanced datasets
-- `error_analysis.py`: In-depth error analysis and misclassification detection
-- `benchmark.py`: Performance benchmarking across hardware configurations
+- `base.py`: Base evaluation utilities
+- `evaluation.py`: Main evaluation functions
+- `metrics.py`: Core metrics calculation
+- `metrics_singlelabel.py`: Single-label specific metrics
+- `metrics_multilabel.py`: Multi-label specific metrics
+- `singlelabel.py`: Single-label evaluation functions
+- `multilabel.py`: Multi-label evaluation functions
+- `utils.py`: Evaluation utilities
+- `visualization.py`: Visualization tools for evaluation results
 
 ## Design Patterns
 

@@ -37,7 +37,7 @@ models:
       cv: 3  # Reduced from 5 for full dataset stability
 
   embedding_logreg:
-    enabled: false  # Disabled by default. Can use SBERT (local, no API key) or OpenAI (requires OPENAI_API_KEY)
+    enabled: true  # Disabled by default. Can use SBERT (local, no API key) or OpenAI (requires OPENAI_API_KEY)
     name: "Embedding + LogReg"
     class: "EmbeddingLogReg"
     params:
@@ -67,23 +67,47 @@ models:
       top_k: "${model.rag_top_k}"
 
   rag_llm_local:
-    enabled: true  # Enable to train RAG-LLM with local SBERT embeddings (no API keys needed)
-    name: "RAG-LLM (local-embeddings)"
+    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
+    name: "RAG-LLM (local-embeddings, default prompt)"
     class: "RagSklearnAdapter"
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
       # LLM model configuration:
-      # - Default: Uses Ollama (ollama/llama3.1:8b) from config.yaml - no API keys needed
+      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
       # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
       # - To use other providers: See litellm docs for supported models
-      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from config.yaml)
+      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
       # Embedding configuration: Uses local SBERT embeddings (no API key needed)
       use_openai: false  # Always false for local embeddings
       embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
+      # Prompt style configuration:
+      # - "default": Full detailed prompt with all instructions
+      # - "short": Concise prompt for faster/cheaper inference
+      prompt_style: "default"  # Options: "default" or "short"
+
+  rag_llm_local_short:
+    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
+    name: "RAG-LLM (local-embeddings, short prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # LLM model configuration:
+      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
+      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
+      # - To use other providers: See litellm docs for supported models
+      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
+      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
+      use_openai: false  # Always false for local embeddings
+      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
+      # Prompt style configuration:
+      # - "default": Full detailed prompt with all instructions
+      # - "short": Concise prompt for faster/cheaper inference
+      prompt_style: "short"  # Options: "default" or "short"
 
   rag_llm_openai:
-    enabled: true  # Enable to train RAG-LLM with OpenAI embeddings (requires OPENAI_API_KEY and OpenAI embeddings to be built)
+    enabled: false  # Disabled - too slow for full dataset. Enable for quick testing only.
     name: "RAG-LLM (OpenAI-embeddings)"
     class: "RagSklearnAdapter"
     params:

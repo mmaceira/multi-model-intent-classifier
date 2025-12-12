@@ -7,12 +7,13 @@ This script checks if .env files are being staged and fails if they are.
 
 import subprocess
 import sys
-from pathlib import Path
 
 
 def main():
     """Check if .env files are staged for commit."""
-    repo_root = Path(__file__).resolve().parents[1]
+    from intent_classifier.utils.paths import get_repo_root
+
+    repo_root = get_repo_root()
 
     # Check if .env is staged (but allow deletions)
     try:

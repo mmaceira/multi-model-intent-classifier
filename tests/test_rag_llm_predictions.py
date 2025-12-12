@@ -8,10 +8,12 @@ to verify that all fixes are working correctly.
 
 import os
 import sys
-from pathlib import Path
+
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
 
 # Add project root to path
-project_root = Path(__file__).resolve().parents[1]
+project_root = get_repo_root()
 sys.path.insert(0, str(project_root))
 
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402

@@ -11,8 +11,11 @@ import json
 import sys
 from pathlib import Path
 
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+
 # Add project root to path so `rag_llm` can be imported when installed or run from source.
-repo_root = Path(__file__).resolve().parents[1]
+repo_root = get_repo_root()
 sys.path.insert(0, str(repo_root))
 
 

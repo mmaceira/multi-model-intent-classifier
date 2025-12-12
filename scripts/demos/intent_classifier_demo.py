@@ -44,7 +44,7 @@ from intent_classifier.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_mo
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
 config_path = project_root / "config" / config_file
 with open(config_path) as f:
     config = yaml.safe_load(f)
@@ -288,7 +288,6 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                 # If this is a RagSklearnAdapter with no rag component, initialize it
                 if hasattr(classifier_obj, "rag") and classifier_obj.rag is None:
                     print(f"[load_model] Initializing RAG component for {model_id}")
-                    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
                     from intent_classifier.rag import (
                         load_centroid,
                         load_kmajority,
@@ -296,6 +295,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         set_artifacts_dir,
                     )
                     from intent_classifier.rag.vector_store import VectorStore
+                    from intent_classifier.utils.embeddings import EmbeddingGenerator
 
                     # Set embeddings directory before loading RAG models
                     set_artifacts_dir(embeddings_path, embeddings_path)
@@ -316,7 +316,14 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         )
                     else:  # LLM-based RAG
                         if "openai" in model_id:
-                            embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                            api_key = os.getenv("OPENAI_API_KEY")
+                            if not api_key:
+                                raise ValueError(
+                                    "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+                                )
+                            embedder = EmbeddingGenerator(
+                                api_key=api_key, model="text-embedding-3-small", batch_size=50
+                            )
                             rag_model = load_llm(
                                 top_k=top_k,
                                 model=config.get("model", {}).get(

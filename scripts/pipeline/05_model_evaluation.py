@@ -7,11 +7,12 @@ comprehensive evaluation metrics and visualizations.
 """
 
 import sys
-from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -38,8 +39,9 @@ def main():
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -98,7 +100,7 @@ def main():
 
     # Define the desired model order
     # Note: Use actual model names from configuration
-    # (may include suffixes like "(local-embeddings)")
+    # (may include suffixes like "(local-embeddings, default prompt)")
     model_order = [
         "Naive Bayes",
         "Linear SVM",
@@ -107,7 +109,8 @@ def main():
         "Embedding + LogReg",
         "RAG-CentroidNN",
         "RAG-kMajority",
-        "RAG-LLM (local-embeddings)",  # RAG-LLM with local SBERT embeddings
+        "RAG-LLM (local-embeddings, default prompt)",  # RAG-LLM with local SBERT embeddings and default prompt
+        "RAG-LLM (local-embeddings, short prompt)",  # RAG-LLM with local SBERT embeddings and short prompt
         "RAG-LLM (OpenAI-embeddings)",  # RAG-LLM with OpenAI embeddings
     ]
 

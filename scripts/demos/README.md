@@ -84,7 +84,7 @@ python scripts/demos/semantic_search_demo.py
 
 ## Configuration
 
-All demos automatically load configuration from `config/config.yaml` to determine:
+All demos automatically load configuration from the config file specified by `CONFIG_FILE` (default: `config/dataset/clinc150/tiny.yaml`) to determine:
 - Model directory paths
 - Embedding directory paths
 - Default model names
@@ -96,18 +96,18 @@ You can override paths in the Gradio interface if needed.
 
 ### Models Not Found
 - Ensure you've run the training pipeline: `python scripts/pipeline/run_all.py`
-- Check that the model directory path in the demo matches your `config.yaml` settings
+- Check that the model directory path in the demo matches your config file settings
 - Verify models exist in `output/{run_name}/models/`
 
 ### FAISS Index Not Found
 - Run the embeddings pipeline step: `python scripts/pipeline/02_build_embeddings.py`
-- Check that embeddings directory path matches your `config.yaml` settings
+- Check that embeddings directory path matches your config file settings
 - Verify index files exist in `output/{run_name}/embeddings/sbert/` or `output/{run_name}/embeddings/openai/`
 
 ### LLM Errors (Trend Analyzer)
 - For Ollama: Ensure `ollama serve` is running and models are pulled (e.g., `ollama pull llama3.1:8b`)
 - For OpenAI: Set `OPENAI_API_KEY` environment variable
-- Check that the LLM model name in `config.yaml` matches your available models
+- Check that the LLM model name in your config file matches your available models
 
 ## Notes
 

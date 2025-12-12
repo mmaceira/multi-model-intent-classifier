@@ -1,10 +1,8 @@
 """Run hyperparameter tuning and expose results to the main pipeline."""
 
 import json
-import os
 import subprocess
 import sys
-from pathlib import Path
 from typing import Any, Dict
 
 import yaml
@@ -15,7 +13,7 @@ def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
 
     This function runs the hyperparameter tuning script and returns the best
     hyperparameters found. The results are also saved to artifacts/best_params.json
-    and config/hyperparameters/{config_name}/best_*.yaml.
+    and config/algorithm/hyperparameters/{config_name}/best_*.yaml.
 
     Args:
         config: Configuration dictionary (must include dataset, general, model sections)
@@ -26,11 +24,16 @@ def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         RuntimeError: If tuning fails
     """
-    repo_root = Path(__file__).resolve().parents[3]
+    from intent_classifier.utils.paths import get_repo_root
 
-    # Get config file name from environment or infer from config
-    config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-    config_path = repo_root / "config" / config_file
+    repo_root = get_repo_root()
+
+    # Get config file name from environment or discover default
+    from intent_classifier.utils.config_loader import discover_config_file
+    from intent_classifier.utils.paths import get_config_path
+
+    config_file = discover_config_file()
+    config_path = get_config_path(config_file)
 
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -68,8 +71,8 @@ def run_tuning(config: Dict[str, Any]) -> Dict[str, Any]:
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Hyperparameter tuning failed with exit code {e.returncode}") from e
 
-    # Load best hyperparameters from the config/hyperparameters directory
-    hyperparams_dir = repo_root / "config" / "hyperparameters" / config_name
+    # Load best hyperparameters from the config/algorithm/hyperparameters directory
+    hyperparams_dir = repo_root / "config" / "algorithm" / "hyperparameters" / config_name
     best_params = {}
 
     if hyperparams_dir.exists():

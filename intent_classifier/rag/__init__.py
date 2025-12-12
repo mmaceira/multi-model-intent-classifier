@@ -52,7 +52,9 @@ from typing import Any, Optional, Union
 
 def _resolve_repo_root() -> Path:
     """Best-effort repository root discovery."""
-    return Path(__file__).resolve().parents[2]
+    from intent_classifier.utils.paths import get_repo_root
+
+    return get_repo_root()
 
 
 def _resolve_default_embeddings_dir() -> Path:
@@ -223,15 +225,22 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
             embedder_class_name = (
                 cfg["embedder"].__class__.__name__ if hasattr(cfg["embedder"], "__class__") else ""
             )
-            use_openai = embedder_class_name == "OpenAIEmbedder"
+            use_openai = embedder_class_name in ("OpenAIEmbedder", "EmbeddingGenerator")
 
         if use_openai is not None:
             cfg["use_openai"] = use_openai
             if use_openai and "embedder" not in cfg:
                 os.environ["USE_OPENAI_EMBEDDINGS"] = "1"
-                from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+                from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-                cfg["embedder"] = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+                    )
+                cfg["embedder"] = EmbeddingGenerator(
+                    api_key=api_key, model="text-embedding-3-small", batch_size=50
+                )
 
         return _lazy_load("rag_llm", "RagLLM", **cfg)
 

@@ -1,12 +1,15 @@
 # General Configuration
 general:
-  run_name: "experiment_100_classes"     # used as experiment id
+  run_name: "experiment_tiny_dataset"     # used as experiment id
   seed: 42
 
 # Dataset configuration
 dataset:
-  name: "clinc150"                           # dataset name (CLINC150 intent classification)
-  use_oos: false                             # include out-of-scope examples
+  name: "clinc150"                           # dataset name (must match directory name in config/dataset/)
+  use_oos: false                             # include out-of-scope examples (if supported by dataset)
+  max_classes: 10                             # Limit number of classes for quick testing (None = all classes)
+  max_train_samples: 100                     # Limit training samples for quick testing (None = all)
+  max_test_samples: 50                       # Limit test samples for quick testing (None = all)
 
 # Paths (all are resolved relative to repo root)
 paths:
@@ -25,9 +28,4 @@ model:
 
   # Classifier options
   classifier: "linear_svm"                    # [linear_svm | naive_bayes | transformer_logreg]
-  rag_top_k: 25                               # for RAG voting / centroids
-
-  # LLM options (for RAG-LLM models)
-  # Supported: Ollama (e.g., "ollama/llama3.1:8b"), OpenAI (e.g., "gpt-4o-mini", "gpt-4o"), Anthropic, etc.
-  # See litellm documentation for full list: https://docs.litellm.ai/
-  llm_model: "ollama/llama3.1:8b"             # Default LLM model for RAG-LLM classification
+  rag_top_k: 5                                # for RAG voting / centroids

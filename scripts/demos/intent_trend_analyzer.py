@@ -45,7 +45,7 @@ logging.basicConfig(
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
 config_path = project_root / "config" / config_file
 with open(config_path) as f:
     config = yaml.safe_load(f)
@@ -255,7 +255,7 @@ retrieving similar utterances and asking an LLM to comment on relevance and tren
 - **Prerequisites**
   - Run the training pipeline up to embeddings (`python scripts/pipeline/02_build_embeddings.py`).
   - Ensure the FAISS index and metadata paths below point to that experiment run.
-  - Have an LLM backend configured in `config/config.yaml` (defaults to `ollama/llama3.1:8b`).
+  - Have an LLM backend configured in your config file (defaults to `ollama/llama3.1:8b`).
 - **How to use**
   1. Verify or adjust the FAISS index and metadata paths.
   2. Optionally change how many similar utterances to retrieve.

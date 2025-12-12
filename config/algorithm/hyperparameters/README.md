@@ -17,7 +17,7 @@ Hyperparameters are automatically loaded by the model loader when training model
 Run the hyperparameter tuning script:
 
 ```bash
-python scripts/tune_hyperparams.py --config config/config.yaml --all
+python scripts/tune_hyperparams.py --config config/singlelabel/clinc150/tiny.yaml --all
 ```
 
 This will:

@@ -2,7 +2,11 @@
 
 This project uses **YAML files + environment variables** to control datasets, models, and experiments. Most users only need to edit one of the config files in `config/` and optionally set a few env vars.
 
-## Main config (`config/config.yaml`)
+## Main config (`config/dataset/{dataset_name}/{config_name}.yaml`)
+
+Config files are organized by dataset:
+- `config/dataset/clinc150/` - CLINC150 dataset configs
+- `config/dataset/nlu_plus/` - NLU++ dataset configs (multi-label)
 
 The main config defines:
 
@@ -18,7 +22,7 @@ The main config defines:
 
 Environment variables can override some of these (e.g. `SEED`, `MODEL_TYPE`, `RAG_K`, `MODEL_ID`, `DATASET_NAME`, `CONFIG_FILE`).
 
-## Model selection (`config/models_config.yaml`)
+## Model selection (`config/algorithm/models_config.yaml`)
 
 `models_config.yaml` controls **which models are actually run** and with what adapter classes:
 
@@ -27,30 +31,31 @@ Environment variables can override some of these (e.g. `SEED`, `MODEL_TYPE`, `RA
   - `name`: human‑readable label for reports.
   - `class`: Python class name (e.g. `NaiveBayesClassifier`, `RagSklearnAdapter`).
   - Optional `params`: model‑specific arguments such as `method`, `top_k`, `model`, `use_openai`.
-- String interpolation lets you reuse values from `config.yaml`, e.g. `top_k: "${model.rag_top_k}"`, `model: "${model.llm_model}"`.
+- String interpolation lets you reuse values from the main config, e.g. `top_k: "${model.rag_top_k}"`, `model: "${model.llm_model}"`.
 
 Typical workflow:
 - Enable/disable models by toggling `enabled`.
-- Adjust RAG parameters in `params` while keeping base defaults in `config.yaml`.
+- Adjust RAG parameters in `params` while keeping base defaults in the main config.
 
 ## Multiple experiment configs
 
-The repo ships with several configs such as:
+The repo ships with several configs organized by label type and dataset:
 
-- `config/config.yaml`: default full‑dataset run.
-- `config/config_10_classes.yaml`, `config/config_25_classes.yaml`: smaller‑class experiments.
-- `config/config_tiny_dataset.yaml`: very small setup for quick tests.
+- `config/dataset/clinc150/tiny.yaml`: very small setup for quick tests
+- `config/dataset/clinc150/default.yaml`: standard full‑dataset run
+- `config/dataset/nlu_plus/default.yaml`: NLU++ standard config
+- `config/dataset/nlu_plus/tiny.yaml`: NLU++ quick testing config
 
 To switch configs, set `CONFIG_FILE`:
 
 ```bash
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py
 ```
 
 ## Datasets and hyperparameters
 
 - Dataset‑related options (class limits, sample caps, OOS behavior) live under `dataset:` and are documented in more detail in `experiments.md`.
-- Tuned hyperparameters are loaded from `config/hyperparameters/{config_name}/`. See `hyperparameter_tuning.md` for how these files are created and used.
+- Tuned hyperparameters are loaded from `config/algorithm/hyperparameters/{config_name}/`. See `hyperparameter_tuning.md` for how these files are created and used.
 
 ## Environment variables (summary)
 

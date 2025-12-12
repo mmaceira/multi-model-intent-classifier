@@ -18,27 +18,17 @@ import dataframe_image as dfi
 import matplotlib.pyplot as plt  # noqa: F401 – kept for future extensions
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.preprocessing import label_binarize  # noqa: F401 – kept for future use
+
+from intent_classifier.utils.file_ops import ensure_dir
 
 from .metrics import analyze_text_features, compute_metrics  # noqa: F401 – API surface
 from .utils import (
-    analyse_error_patterns,
-    consistently_misclassified,
-    ensure_dir,
     load_all_prediction_files,
     setup_logging,
 )
 from .visualization import (
-    generate_detailed_error_report,
-    plot_confusion_matrix,
-    plot_label_distribution,
-    plot_model_comparisons,
-    plot_precision_recall_curves,
     plot_roc_curves,  # noqa: F401 – exported elsewhere
-    plot_top_error_types,
-    plot_top_misclassifications,
-    visualize_error_distribution,
 )
 
 __all__ = [
@@ -200,114 +190,83 @@ def analyze_rag_documents(
 
 
 def run_evaluations(
-    model_names: List[str],
+    model_names: List[str] | Dict[str, Any] | None,
     *,
     artefacts_root: str | Path = "artefacts",
     output_dir: str | Path = "results",
     verbose: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
-    """Compute metrics from persisted predictions and render rich reports."""
-    logger = setup_logging(verbose)
-    logger.info("Starting evaluation process → output dir: %s", output_dir)
+    """Compute metrics from persisted predictions and render rich reports.
 
-    results: Dict[str, Dict[str, Any]] = {}
+    This function automatically detects whether the task is single-label or multi-label
+    and uses the appropriate evaluation implementation.
+
+    Args:
+        model_names: List of model names to evaluate, dict of models (keys will be used),
+                    or None/empty list to evaluate all models with predictions
+        artefacts_root: Root directory containing prediction files
+        output_dir: Directory to save evaluation results
+        verbose: Whether to print progress and warning messages
+
+    Returns:
+        Dictionary mapping model names to their metrics
+    """
+    from intent_classifier.evaluation.multilabel import MultiLabelEvaluationRunner
+    from intent_classifier.evaluation.singlelabel import SingleLabelEvaluationRunner
+
     artefacts_root, output_dir = Path(artefacts_root), ensure_dir(output_dir)
 
     predictions_dict = load_all_prediction_files(artefacts_root)
     if not predictions_dict:
+        logger = setup_logging(verbose)
         logger.error("No prediction files found.")
-        return results
+        return {}
 
     first_model = next(iter(predictions_dict))
     if "test" not in predictions_dict[first_model]:
+        logger = setup_logging(verbose)
         logger.error("No test predictions found for model %s", first_model)
-        return results
+        return {}
 
-    classes = sorted(predictions_dict[first_model]["test"]["y_true"].unique())
-    is_multiclass = len(classes) > 2  # noqa: F841 – may be used downstream
+    # If model_names is a dict, convert to list of keys (model names)
+    # If None or empty, use all models that have predictions
+    if isinstance(model_names, dict):
+        model_names = list(model_names.keys())
+    elif model_names is None or len(model_names) == 0:
+        model_names = list(predictions_dict.keys())
 
-    # ------------------------------------------------------------------
-    # Per‑model processing
-    # ------------------------------------------------------------------
-    for name, model_predictions in predictions_dict.items():
-        if name not in model_names:
-            continue
+    # Detect multi-label format from test predictions
+    test_df = predictions_dict[first_model]["test"]
+    y_true_test = test_df["y_true"].values
 
-        model_out_dir = ensure_dir(output_dir / name)
-        logger.info("Processing model %s", name)
+    # Check if labels contain commas (multi-label format in CSV)
+    is_multi_format = False
+    if len(y_true_test) > 0:
+        sample_label = str(y_true_test[0])
+        # Multi-label format: comma-separated labels (e.g., "tag1,tag2")
+        # Single-label format: single label (e.g., "tag1")
+        # Check if there are commas and it's not just an empty string
+        if "," in sample_label and sample_label.strip():
+            is_multi_format = True
+        # Also check if any label has multiple tags
+        for label in y_true_test[: min(10, len(y_true_test))]:
+            label_str = str(label)
+            if pd.notna(label) and label_str and "," in label_str:
+                is_multi_format = True
+                break
 
-        model_results: Dict[str, float] = {}
-        for split_name, df in model_predictions.items():
-            split_out_dir = ensure_dir(model_out_dir / split_name)
-            y_true, y_pred = df["y_true"].values, df["y_pred"].values
+    # Select appropriate runner based on label type
+    if is_multi_format:
+        runner = MultiLabelEvaluationRunner(verbose=verbose)
+    else:
+        runner = SingleLabelEvaluationRunner(verbose=verbose)
 
-            # Core metrics ---------------------------------------------------
-            model_results.update(
-                {
-                    f"{split_name}_accuracy": accuracy_score(y_true, y_pred),
-                    f"{split_name}_macro_f1": f1_score(y_true, y_pred, average="macro"),
-                    f"{split_name}_weighted_f1": f1_score(y_true, y_pred, average="weighted"),
-                }
-            )
-
-            # Classification report ----------------------------------------
-            pd.DataFrame(classification_report(y_true, y_pred, output_dict=True)).T.to_csv(
-                split_out_dir / f"{split_name}_report.csv"
-            )
-
-            # Visualisations -------------------------------------------------
-            single_model_predictions = {name: {split_name: df}}
-            plot_label_distribution(single_model_predictions, split_out_dir)
-            plot_confusion_matrix(single_model_predictions, split_out_dir)
-            plot_precision_recall_curves(single_model_predictions, split_out_dir)
-            visualize_error_distribution(single_model_predictions, split_out_dir)
-            generate_detailed_error_report(
-                single_model_predictions, split_out_dir, only_split=split_name
-            )
-
-            if split_name == "test" and "text" in df.columns:
-                plot_top_misclassifications(df, split_out_dir / "top_misclassifications.csv")
-                analyze_top_errors(df, split_out_dir / f"{split_name}_top_20_errors.csv")
-                plot_top_error_types(df, split_out_dir / "top_10_error_types.png", n=10)
-                if "retrieved_docs" in df.columns:
-                    analyze_rag_documents(df, split_out_dir / f"{split_name}_rag_analysis.csv")
-
-        # Overfitting indicators ----------------------------------------------
-        if {"train", "test"}.issubset(model_predictions):
-            for metric in ["accuracy", "macro_f1", "weighted_f1"]:
-                model_results[f"{metric}_diff"] = model_results.get(
-                    f"train_{metric}"
-                ) - model_results.get(f"test_{metric}")
-
-        results[name] = model_results
-
-    # ------------------------------------------------------------------
-    # Summary & cross‑model visualisations
-    # ------------------------------------------------------------------
-    summary_df = pd.DataFrame(results).T
-    for metric in ["test_accuracy", "test_macro_f1", "test_weighted_f1"]:
-        if metric in summary_df.columns:
-            summary_df[f"{metric}_best"] = summary_df[metric] == summary_df[metric].max()
-    summary_df.to_csv(output_dir / "summary_metrics.csv")
-
-    if len(model_names) > 1:
-        plot_model_comparisons(predictions_dict, output_dir)
-
-    # Global error analysis ----------------------------------------------------
-    error_patterns = analyse_error_patterns(predictions_dict)
-    error_patterns.to_csv(output_dir / "common_error_patterns.csv", index=False)
-    misclass_examples = consistently_misclassified(
-        predictions_dict, min_models=len(predictions_dict)
+    # Delegate to the appropriate runner
+    return runner.run_evaluations(
+        model_names=model_names,
+        artefacts_root=artefacts_root,
+        output_dir=output_dir,
     )
-    if not misclass_examples.empty:
-        misclass_examples.to_csv(output_dir / "consistently_misclassified.csv", index=False)
-
-    if "text" in predictions_dict[first_model]["test"].columns:
-        analyze_text_features(predictions_dict).to_csv(
-            output_dir / "text_features_analysis.csv", index=False
-        )
-
-    return results
 
 
 # -----------------------------------------------------------------------------

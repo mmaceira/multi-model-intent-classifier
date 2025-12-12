@@ -386,12 +386,17 @@ class VectorStore:
         # Use SentenceTransformer
         # Determine device
         if device is None:
-            try:
-                import torch
-
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-            except ImportError:
+            # Check for environment variable to force CPU mode
+            force_cpu = os.getenv("FORCE_CPU", "").lower() in ("1", "true", "yes")
+            if force_cpu:
                 device = "cpu"
+            else:
+                try:
+                    import torch
+
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                except ImportError:
+                    device = "cpu"
 
         # Create cache key that includes device
         cache_key = f"{model_name}::{device}"

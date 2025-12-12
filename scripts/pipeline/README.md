@@ -179,7 +179,7 @@ uv sync --extra all
 
 ### 2. Configuration Setup
 
-The scripts use the configuration system defined in `config/config.yaml`. Make sure your configuration is properly set up before running the scripts.
+The scripts use the configuration system defined in config files (e.g., `config/dataset/clinc150/tiny.yaml`). Make sure your configuration is properly set up before running the scripts.
 
 The configuration file defines:
 - Experiment name and paths
@@ -194,15 +194,25 @@ The configuration file defines:
 ```bash
 # Install Ollama (if not already installed)
 # Visit https://ollama.ai for installation instructions
+# On Linux/macOS: curl -fsSL https://ollama.ai/install.sh | sh
 
 # Start Ollama service (if not already running)
 ollama serve
 
 # Pull the default model (if not already downloaded)
 ollama pull llama3.1:8b
+
+# Verify installation
+ollama list
 ```
 
 **Note**: The pipeline works completely with Ollama - no API keys needed! All models use local resources by default.
+
+**Important**: Embeddings are separate from LLM models:
+- **SBERT embeddings** are downloaded automatically from HuggingFace when you run `02_build_embeddings.py`
+- No manual download needed - the SBERT model (~80MB) downloads automatically
+- Embeddings are built from your dataset and stored in `output/{run_name}/embeddings/`
+- See [LLM Providers documentation](../../docs/llm_providers.md) for more details
 
 ### 4. Optional: OpenAI Setup
 
@@ -275,7 +285,7 @@ All outputs are organized by experiment. Each experiment (e.g., `experiment_10_c
 ### Getting Help
 
 - Check the logs: Each script prints detailed information about what it's doing
-- Review configuration: Ensure `config/config.yaml` and `config/models_config.yaml` are correct
+- Review configuration: Ensure your main config file and `config/models_config.yaml` are correct
 - Check prerequisites: Verify all dependencies are installed and services (like Ollama) are running
 
 ## Features

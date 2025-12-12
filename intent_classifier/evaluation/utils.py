@@ -11,24 +11,6 @@ from typing import Any, Dict, Union
 import pandas as pd
 
 
-def ensure_dir(path: Union[str, Path]) -> Path:
-    """Ensure a directory exists, creating it if necessary.
-
-    Parameters
-    ----------
-    path : str or Path
-        Path to the directory
-
-    Returns
-    -------
-    Path
-        Path object pointing to the directory
-    """
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def setup_logging(verbose: bool = True) -> logging.Logger:
     """Set up logging configuration.
 
@@ -94,7 +76,8 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
                 logger.info(f"Successfully loaded {split} predictions for {model_name}")
 
     if not dfs:
-        raise FileNotFoundError(f"No prediction files found in {exp}")
+        # Return empty dict instead of raising - let caller handle gracefully
+        return {}
 
     return dfs
 
@@ -150,7 +133,12 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
     if combined is None:
         return pd.DataFrame()
 
+    # Fill NaN values and convert to bool, avoiding pandas deprecation warning
     combined = combined.fillna(False)
+    # Convert object columns to bool explicitly to avoid FutureWarning
+    for col in combined.columns:
+        if col not in ["id", "text", "y_true", "y_pred"]:
+            combined[col] = combined[col].astype(bool)
     mask = combined.drop(columns=["id", "text", "y_true", "y_pred"]).sum(1) >= min_models
     return combined[mask]
 

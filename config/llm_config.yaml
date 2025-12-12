@@ -1,0 +1,43 @@
+# LLM Provider Configuration
+# This file centralizes all LLM provider settings (Ollama, OpenAI, etc.)
+# These settings are automatically merged into dataset configs
+
+# Ollama Configuration
+ollama:
+  # Ollama API endpoint URL
+  # - Can be set here, or via OLLAMA_API_BASE environment variable
+  # - If not set, defaults to http://localhost:11434
+  # - Protocol (http://) will be added automatically if missing
+  endpoint: "http://localhost:11434"  # e.g., "http://localhost:11434" or "192.168.1.100:11434"
+
+  # Default Ollama model for RAG-LLM classification
+  # - Model name with or without "ollama/" prefix (will be normalized automatically)
+  # - Examples: "llama3.1:8b", "ollama/llama3.1:8b", "qwen2.5:14b"
+  default_model: "ollama/llama3.1:8b"
+
+# OpenAI Configuration
+openai:
+  # OpenAI API key
+  # - Can be set here, or via OPENAI_API_KEY environment variable
+  # - Environment variable takes precedence
+  # api_key: "your-api-key-here"  # Optional: set via OPENAI_API_KEY env var instead
+
+  # Default OpenAI model for embeddings
+  embedding_model: "text-embedding-3-small"
+
+  # Default OpenAI model for LLM classification (if using OpenAI LLM)
+  default_model: "gpt-4o-mini"
+
+# Notes:
+# - Priority order for Ollama endpoint:
+#   1. OLLAMA_API_BASE environment variable (highest priority)
+#   2. ollama.endpoint from this config file
+#   3. Default: http://localhost:11434
+#
+# - Priority order for Ollama model:
+#   1. Command-line arguments (if applicable)
+#   2. model.llm_model from dataset config (if set, for backward compatibility)
+#   3. ollama.default_model from this config file
+#   4. Default: ollama/llama3.1:8b
+#
+# - For OpenAI, always use OPENAI_API_KEY environment variable for security

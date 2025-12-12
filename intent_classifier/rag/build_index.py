@@ -7,11 +7,9 @@ import os
 
 # Add the parent directory to Python path to ensure imports work correctly
 
-try:
-    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
-except ImportError:
-    # Fall back to relative import if absolute import fails
-    from ..embeddings.openai_embedder import OpenAIEmbedder
+# OpenAI embeddings are handled via EmbeddingGenerator from utils.embeddings
+# This import is kept for backward compatibility but OpenAIEmbedder doesn't exist
+# Use EmbeddingGenerator instead when needed
 
 """
 Build Index Module
@@ -34,7 +32,7 @@ Classes:
 Functions:
 - _load_precomputed_embeddings: Load precomputed embeddings from file
 - _load_csv: Load data from CSV file
-- _load_clinc150: Load CLINC150 dataset
+- _load_dataset: Load dataset by name
 - main: Main entry point for building indices
 - build_openai_index: Build index using OpenAI embeddings
 - load_embedder: Load appropriate embedder based on configuration
@@ -90,7 +88,18 @@ def _load_precomputed_embeddings(meta_path):
 
 
 DEFAULT_EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_SOURCE = "clinc150"
+
+
+# Discover default dataset source dynamically
+def _get_default_source():
+    """Get default dataset source by discovering available datasets."""
+    from intent_classifier.utils.config_loader import get_first_available_dataset
+
+    return get_first_available_dataset()
+    return "clinc150"  # Fallback for backward compatibility
+
+
+DEFAULT_SOURCE = _get_default_source()
 
 # Create the base artifacts and embeddings directories
 _ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -121,23 +130,56 @@ def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
     return texts, labels, years
 
 
-def _load_clinc150() -> tuple[list, list, list]:
+def _load_dataset(dataset_name: str) -> tuple[list, list, list]:
+    """Load a dataset by name.
+
+    Args:
+        dataset_name: Name of the dataset to load
+
+    Returns:
+        Tuple of (texts, labels, years) where years are placeholders (0)
+    """
     from intent_classifier.datasets.dataset import get_dataset
 
-    X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name="clinc150")
+    X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name=dataset_name)
     # Merge validation into training
     X_train = X_train + X_val
+    # Handle both single-label (list of strings) and multi-label (list of lists) formats
+    if y_train and isinstance(y_train[0], list):
+        # Multi-label: convert to string representation for compatibility
+        y_train = [", ".join(labels) if labels else "" for labels in y_train]
+    if y_val and isinstance(y_val[0], list):
+        y_val = [", ".join(labels) if labels else "" for labels in y_val]
     y_train = y_train + y_val
-    # CLINC150 doesn't have years, use placeholder
+    # Datasets don't have years, use placeholder
     return X_train, y_train, [0] * len(X_train)
 
 
 def main():
+    # Discover available datasets for choices
+    available_datasets = []
+    try:
+        from intent_classifier.utils.paths import get_repo_root
+
+        repo_root = get_repo_root()
+        dataset_dir = repo_root / "config" / "dataset"
+        if dataset_dir.exists():
+            available_datasets = sorted([d.name for d in dataset_dir.iterdir() if d.is_dir()])
+    except Exception:
+        pass
+    if not available_datasets:
+        available_datasets = ["clinc150"]  # Fallback
+
     p = argparse.ArgumentParser(description="Build FAISS index for RAG")
     p.add_argument("--emb_model", default=DEFAULT_EMB_MODEL)
     src = p.add_mutually_exclusive_group()
     src.add_argument("--train_csv")
-    src.add_argument("--source", default=DEFAULT_SOURCE, choices=["clinc150"])
+    src.add_argument(
+        "--source",
+        default=DEFAULT_SOURCE,
+        choices=available_datasets,
+        help=f"Dataset source (available: {', '.join(available_datasets)})",
+    )
     p.add_argument("--faiss_path", default=str(DEFAULT_FAISS_PATH))
     p.add_argument("--meta_path", default=str(DEFAULT_META_PATH))
     p.add_argument("--use_openai", action="store_true", help="Use OpenAI embeddings")
@@ -147,7 +189,7 @@ def main():
     if args.train_csv:
         texts, labels, years = _load_csv(args.train_csv)
     else:
-        texts, labels, years = _load_clinc150()
+        texts, labels, years = _load_dataset(args.source)
 
     # Set appropriate paths based on the specified model
     # The paths now refer to our new directory structure
@@ -199,10 +241,17 @@ def build_openai_index(
     faiss_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Initialize OpenAI embedder
-    openai_embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+    from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-    # Generate embeddings (encode() now returns numpy array directly)
-    emb = openai_embedder.encode(texts).astype("float32")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable must be set for OpenAI embeddings")
+    openai_embedder = EmbeddingGenerator(
+        api_key=api_key, model="text-embedding-3-small", batch_size=50
+    )
+
+    # Generate embeddings
+    emb = openai_embedder.generate_embeddings(texts).astype("float32")
 
     print(f"Generated {len(emb)} OpenAI embeddings with dimension {emb.shape[1]}")
 
@@ -235,7 +284,16 @@ def load_embedder(model_name: str = None, use_openai: bool = False, batch_size: 
     """
     if use_openai or os.getenv("USE_OPENAI_EMBEDDINGS") == "1":
         print("Using OpenAI embeddings endpoint...")
-        return OpenAIEmbedder(batch_size=batch_size)
+        from intent_classifier.utils.embeddings import EmbeddingGenerator
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+            )
+        return EmbeddingGenerator(
+            api_key=api_key, model="text-embedding-3-small", batch_size=batch_size
+        )
     try:
         from sentence_transformers import SentenceTransformer
 

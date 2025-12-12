@@ -45,10 +45,12 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 from intent_classifier.utils.method_logger import log_method
+from intent_classifier.utils.model_registry import register_model
 
 logger = logging.getLogger(__name__)
 
 
+@register_model("RagSklearnAdapter")
 class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
     def __init__(self, rag_clf, **_):
         self.rag = rag_clf
@@ -171,7 +173,38 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             # Try to find repo root
             current_file = Path(__file__).resolve()
             for parent in [current_file.parent.parent.parent, current_file.parent.parent]:
-                config_path = parent / "config" / "config.yaml"
+                # Try to find a config file in the new structure
+                # Try to find first available dataset config as default
+                dataset_dir = parent / "config" / "dataset"
+                if dataset_dir.exists():
+                    dataset_dirs = [d for d in dataset_dir.iterdir() if d.is_dir()]
+                    if dataset_dirs:
+                        first_dataset = sorted(dataset_dirs)[0].name
+                        if (dataset_dir / first_dataset / "tiny.yaml").exists():
+                            config_path = dataset_dir / first_dataset / "tiny.yaml"
+                        elif (dataset_dir / first_dataset / "default.yaml").exists():
+                            config_path = dataset_dir / first_dataset / "default.yaml"
+                        else:
+                            config_path = dataset_dir / first_dataset / "tiny.yaml"  # Fallback
+                    else:
+                        config_path = (
+                            parent / "config" / "dataset" / "clinc150" / "tiny.yaml"
+                        )  # Final fallback
+                else:
+                    config_path = (
+                        parent / "config" / "dataset" / "clinc150" / "tiny.yaml"
+                    )  # Final fallback
+                if not config_path.exists():
+                    # Fallback: try to find any config in the new structure
+                    dataset_dir = parent / "config" / "dataset"
+                    if dataset_dir.exists():
+                        for dataset_subdir in dataset_dir.iterdir():
+                            if dataset_subdir.is_dir():
+                                for config_file in dataset_subdir.glob("*.yaml"):
+                                    config_path = config_file
+                                    break
+                                if config_path.exists():
+                                    break
                 if config_path.exists():
                     with open(config_path, "r") as f:
                         return yaml.safe_load(f)
@@ -263,6 +296,10 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
 
                 # Get min_labels from state (new parameter in new implementation)
                 min_labels = state.get("min_labels", 4)
+                # Get prompt_style from state or config
+                prompt_style = state.get("prompt_style") or config.get("model", {}).get(
+                    "prompt_style", "default"
+                )
 
                 # New implementation uses TF-IDF retrieval, no embedder needed
                 # The use_openai parameter is kept for compatibility but not used
@@ -271,6 +308,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     model=llm_model,
                     use_openai=use_openai,  # Kept for compatibility, but new impl doesn't use it
                     min_labels=min_labels,
+                    prompt_style=prompt_style,
                 )
 
             # Update rag_clf for consistency

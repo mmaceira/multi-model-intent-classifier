@@ -1,14 +1,37 @@
 ## Experiments
 
-This page summarizes **how CLINC150 is used**, how splits work, and which preset experiment configs exist. It is intentionally brief and focuses on choices you need to make when running experiments.
+This page summarizes **available datasets**, how splits work, and which preset experiment configs exist. It is intentionally brief and focuses on choices you need to make when running experiments.
 
-## Dataset: CLINC150
+## Available Datasets
+
+### CLINC150
 
 - **Source**: HuggingFace `clinc_oos` (config `plus`), downloaded automatically on first use.
 - **Content**: 150 intents across multiple domains, plus optional out‑of‑scope (OOS) examples.
-- **Structure**: text utterances + string intent labels, with predefined train/validation/test splits.
+- **Structure**: text utterances + string intent labels (single-label), with predefined train/validation/test splits.
+- **Size**: ~22,500 examples total.
 
 The dataset is fetched automatically by the pipeline; you do not need to download anything manually.
+
+### NLU++
+
+- **Source**: GitHub `PolyAI-LDN/task-specific-datasets` (nlupp config), downloaded automatically on first use.
+- **Content**: 68 intents across banking and hotels domains.
+- **Structure**: text utterances + list of intent labels (multilabel format), with cross-validation folds that are combined and split into train/validation/test.
+- **Size**: ~25,715 examples total.
+- **Note**: NLU++ is always multilabel (each example can have multiple intent labels).
+
+The dataset is fetched automatically from GitHub; you do not need to download anything manually.
+
+### Tandem GO
+
+- **Source**: Local CSV file (`data/Tandem GO_ Datasets RAG - Classificació v2.csv`).
+- **Content**: Multi-label classification dataset with tags extracted from name and description fields.
+- **Structure**: text utterances (combined from name and description) + comma-separated tags (multilabel format), with train/validation/test splits created from the combined data.
+- **Size**: Varies based on CSV file content.
+- **Note**: Tandem GO is always multilabel (each example can have multiple tags). The dataset requires the CSV file to be present in the `data/` directory.
+
+The dataset is loaded from a local CSV file; ensure the file exists before running experiments.
 
 ## Train/validation/test usage
 
@@ -29,29 +52,41 @@ Typical loading pattern:
 ```python
 from intent_classifier.datasets.dataset import get_dataset
 
+# Single-label dataset (CLINC150)
 X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
+
+# Multilabel dataset (NLU++)
+X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="nlu_plus")
+# Note: y_train, y_val, y_test are lists of lists (multilabel format)
+
+# Multilabel dataset (Tandem GO)
+X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="tandem_go")
+# Note: y_train, y_val, y_test are lists of lists (multilabel format)
 ```
 
 ## Dataset size and experiment variants
 
 You control dataset size through the `dataset:` section of your config:
 
-- `name`: usually `"clinc150"`.
-- `use_oos`: whether to include OOS examples as an extra class.
-- `max_classes`: limit the number of intents (subset of 150).
-- `max_train_samples`, `max_test_samples`: cap the number of examples per split (with stratified sampling).
+- `name`: `"clinc150"` or `"nlu_plus"`.
+- `use_oos`: whether to include OOS examples as an extra class (CLINC150 only).
+- `multilabel`: whether to use multilabel format (NLU++ is always multilabel).
+- `max_classes`: limit the number of intents (subset of available classes).
+- `max_train_samples`, `max_test_samples`, `max_val_samples`: cap the number of examples per split (with stratified sampling for single-label, random sampling for multilabel).
 
 Predefined experiment configs:
 
-- `config/config.yaml`: default full‑dataset run.
-- `config/config_10_classes.yaml`: 10‑class subset.
-- `config/config_25_classes.yaml`: 25‑class subset.
-- `config/config_tiny_dataset.yaml`: very small subset for fast iteration.
+- `config/dataset/clinc150/default.yaml`: standard full‑dataset run
+- `config/dataset/clinc150/tiny.yaml`: very small subset for fast iteration
+- `config/dataset/nlu_plus/default.yaml`: NLU++ standard config
+- `config/dataset/nlu_plus/tiny.yaml`: NLU++ quick testing config
+- `config/dataset/tandem_go/default.yaml`: Tandem GO standard config
+- `config/dataset/tandem_go/tiny.yaml`: Tandem GO quick testing config
 
 Switching configs:
 
 ```bash
-CONFIG_FILE=config/config_25_classes.yaml python scripts/pipeline/run_all.py
+CONFIG_FILE=config/dataset/clinc150/default.yaml python scripts/pipeline/run_all.py
 ```
 
 For complete configuration details and all available keys, see `configuration.md`.

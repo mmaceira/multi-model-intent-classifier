@@ -1,11 +1,11 @@
 # config/notebook_setup.py
 # Configuration setup module for pipeline scripts
-# This module loads and processes config.yaml, creating convenient variables
-# for use in pipeline scripts
+# This module loads and processes config files from the structure:
+# config/dataset/{dataset_name}/{config_name}.yaml
+# Creates convenient variables for use in pipeline scripts
 import logging
 import os
 import random
-import re
 from pathlib import Path
 
 # Optional matplotlib import (only needed for plotting, which is in optional dependencies)
@@ -18,41 +18,24 @@ except ImportError:
     pass
 
 import numpy as np
-import yaml
 
-# infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[1]
+# Import centralized config loader
+from intent_classifier.utils.config_loader import load_config_with_metadata
+from intent_classifier.utils.paths import get_repo_root
 
-# Allow config file to be overridden via environment variable
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-config_path = repo_root / "config" / config_file
+# Get repo root
+repo_root = get_repo_root()
 
-with open(config_path) as fp:
-    cfg = yaml.safe_load(fp)
+# Load config using centralized loader
+config_metadata = load_config_with_metadata()
+cfg = config_metadata["config"]
+dataset_name = config_metadata["dataset_name"]
+config_name = config_metadata["config_name"]
+label_type = config_metadata["label_type"]
+config_path = config_metadata["config_path"]
+config_file = config_metadata["config_file"]
 
-
-# Function to substitute ${var} with values from the config
-def substitute_vars(value, config):
-    if isinstance(value, str):
-        # Find all ${section.var} patterns and replace them with values from config
-        var_pattern = r"\${([^}]+)}"
-        for var_path in re.findall(var_pattern, value):
-            if "." in var_path:
-                section, var = var_path.split(".", 1)
-                if section in config and var in config[section]:
-                    value = value.replace(f"${{{var_path}}}", str(config[section][var]))
-        return value
-    return value
-
-
-# Apply variable substitution to all values in config
-for section_key, section_value in cfg.items():
-    if isinstance(section_value, dict):
-        for key, value in section_value.items():
-            if isinstance(value, str) and "${" in value:
-                cfg[section_key][key] = substitute_vars(value, cfg)
-
-# Create specific variables from config.yaml sections
+# Create specific variables from config sections
 # This flattens the hierarchical config into module-level variables with prefixes
 
 # Dictionary to store flattened variables for easy reference
@@ -67,6 +50,12 @@ for section_key, section_value in cfg.items():
 
             # Handle path creation for items in the paths section
             if section_key == "paths":
+                # If we detected label_type and dataset_name, add prefix to output paths
+                if label_type and dataset_name and value.startswith("output/"):
+                    # Extract the part after "output/" (e.g., "${general.run_name}/embeddings")
+                    path_suffix = value.replace("output/", "", 1)
+                    # Build new path: output/{label_type}/{dataset_name}/{path_suffix}
+                    value = f"output/{label_type}/{dataset_name}/{path_suffix}"
                 value = repo_root / value
 
             # Store in the global namespace and our tracking dictionary

@@ -1,0 +1,9 @@
+Labels: {allowed_labels}
+Examples:
+{few_shots}
+
+Query: {query}
+
+Return: {{ "label": "<comma-separated>", "confidence": 0.0-1.0 }}
+CRITICAL: Use EXACTLY one label from the Labels list above. Copy it exactly as shown. Do not create new combinations.
+Format: comma-separated, no spaces (e.g., 'Alta,asseguranca').

@@ -82,6 +82,48 @@ def get_config_dir() -> Path:
     return _get_repo_root_cached() / "config"
 
 
+def get_config_path(config_file: str | Path) -> Path:
+    """Get the path to a config file.
+
+    Args:
+        config_file: Config file path. Must be:
+                    - Absolute path, or
+                    - Path starting with "config/" (relative to repo root)
+                    Examples: "config/dataset/clinc150/tiny.yaml"
+
+    Returns:
+        Path to config file
+
+    Raises:
+        ValueError: If config_file doesn't start with "config/" and isn't absolute
+    """
+    config_file = Path(config_file)
+    if config_file.is_absolute():
+        return config_file
+
+    config_file_str = str(config_file)
+    if not config_file_str.startswith("config/"):
+        raise ValueError(
+            f"Config file path must start with 'config/' or be absolute. "
+            f"Got: {config_file_str}. "
+            f"Example: config/dataset/clinc150/tiny.yaml"
+        )
+
+    return _get_repo_root_cached() / config_file_str
+
+
+def get_hyperparameters_dir(config_name: str) -> Path:
+    """Get the hyperparameters directory for a given config.
+
+    Args:
+        config_name: Name of the config (without .yaml extension)
+
+    Returns:
+        Path to hyperparameters directory
+    """
+    return get_config_dir() / "algorithm" / "hyperparameters" / config_name
+
+
 def get_output_dir(experiment_name: str = "default") -> Path:
     """Get the output directory for an experiment.
 

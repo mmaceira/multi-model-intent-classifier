@@ -20,10 +20,17 @@ pip install -U pip
 pip install -e ".[all]"
 
 # Run a tiny end-to-end experiment (< 5 minutes)
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+# Single-label example (CLINC150)
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py
+
+# Multi-label example (NLU++)
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml python scripts/pipeline/run_all.py
+
+# Multi-label example (Tandem GO - requires CSV file in data/ directory)
+CONFIG_FILE=config/dataset/tandem_go/tiny.yaml python scripts/pipeline/run_all.py
 ```
 
-That's it! The pipeline will automatically download CLINC150, tune hyperparameters, train models, and generate predictions and evaluations.
+That's it! The pipeline will automatically download the dataset, tune hyperparameters, train models, and generate predictions and evaluations. The system automatically detects whether you're using single-label or multi-label data and uses the appropriate evaluation metrics.
 
 ## 📚 Documentation
 
@@ -43,12 +50,12 @@ Comprehensive documentation is available in the [`docs/`](docs/) folder:
 ## 📋 Overview
 
 This project implements a comprehensive NLP pipeline for:
-- Automated intent classification of user utterances
+- Automated intent classification of user utterances (single-label and multi-label)
 - Semantic search and document retrieval
 - Business insights generation
 - Real-time document similarity matching
 
-Built on the CLINC150 dataset, it provides a production-ready solution for intent classification and information retrieval. The system combines traditional machine learning approaches with modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques.
+Built on multiple datasets (CLINC150, NLU++, Tandem GO), it provides a production-ready solution for intent classification and information retrieval. The system supports both **single-label classification** (one intent per utterance) and **multi-label classification** (multiple intents per utterance), combining traditional machine learning approaches with modern transformer-based models and Retrieval-Augmented Generation (RAG) techniques.
 
 ### Use Cases
 
@@ -115,20 +122,34 @@ The `intent-classify` command works with any trained model. You can specify:
 **Note**: The API server is **not required** for CLI classification. Models are loaded directly from disk.
 
 ```bash
-# Using a model file path
+# Using a model file path (single-label)
 intent-classify --model-path artifacts/model.pkl --text "what's my account balance?"
 # → {"label": "banking_balance", "confidence": 0.97}
 
 # Using a model directory (models are stored here after training)
 intent-classify --model-path output/experiment_tiny_dataset/models/Linear\ SVM/ --text "book me a flight to London"
+
+# Multi-label models return a list of labels
+intent-classify --model-path output/experiment_nlu_plus/models/Linear\ SVM/ --text "check my account balance and transfer money"
+# → {"label": ["banking_balance", "banking_transfer"], "confidence": 0.95}
 ```
 
 After training models:
 ```bash
 # Train models (use CONFIG_FILE environment variable, not --config flag)
-# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
-CONFIG_FILE=config_tiny_dataset.yaml intent-train
+# Note: CONFIG_FILE should be the full path relative to repo root
+
+# Single-label example
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml intent-train
 intent-classify --model-path output/experiment_tiny_dataset/models/Linear\ SVM/ --text "book me a flight to London"
+
+# Multi-label example (NLU++)
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml intent-train
+intent-classify --model-path output/experiment_nlu_plus/models/Linear\ SVM/ --text "check my account balance and transfer money"
+
+# Multi-label example (Tandem GO)
+CONFIG_FILE=config/dataset/tandem_go/tiny.yaml intent-train
+intent-classify --model-path output/tiny/models/Linear\ SVM/ --text "your text here"
 ```
 
 ### Serve API
@@ -140,15 +161,14 @@ The API server loads models from the experiment directory specified by `CONFIG_F
 uv sync --extra api
 
 # Use the same config file as training to load models from the correct directory
-# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
-CONFIG_FILE=config_tiny_dataset.yaml api-serve --host 0.0.0.0 --port 8000
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml api-serve --host 0.0.0.0 --port 8000
 # Or specify experiment name directly
 EXPERIMENT_NAME=experiment_tiny_dataset api-serve --host 0.0.0.0 --port 8000
 
 # Then open /docs and POST /v1/predict with {"model_id": "...", "text": "..."}
 ```
 
-**Supported model IDs**: `naive_bayes`, `linear_svm`, `tfidf_svm`, `minilm_logreg`, `rag_centroid`, `rag_kmajority`, `rag_llm_local`, `rag_llm_openai`
+**Supported model IDs**: `naive_bayes`, `linear_svm`, `linear_svm_bigrams`, `transformer_logreg`, `embedding_logreg`, `rag_centroid`, `rag_kmajority`, `rag_llm_local`, `rag_llm_local_short`, `rag_llm_openai`
 
 See `scripts/api/README_API.md` for endpoint details.
 
@@ -197,10 +217,10 @@ intent-train
 python scripts/pipeline/run_all.py
 
 # Run with custom config and tuning
-# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
-CONFIG_FILE=config_tiny_dataset.yaml intent-train --tune --save-model artifacts/model.pkl
+# Note: CONFIG_FILE should be the full path relative to repo root
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml intent-train --tune --save-model artifacts/model.pkl
 # Or use the script directly:
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
 ```
 
 ### Individual Steps (Advanced)
@@ -218,20 +238,28 @@ See [Running Experiments](docs/running_experiments.md) for more details.
 
 ## ⚙️ Configuration
 
-The project uses YAML configuration files:
+The project uses YAML configuration files organized by label type and dataset:
 
-- **Main config** (`config/config.yaml` or `config/config_*.yaml`): Controls dataset, paths, embedding backends, and LLM models
+- **Main config** (`config/{singlelabel|multilabel}/{dataset_name}/{config_name}.yaml`): Controls dataset, paths, embedding backends, and LLM models
 - **Models config** (`config/models_config.yaml`): Controls which models are trained and their hyperparameters
+
+The system automatically detects whether you're using single-label or multi-label data based on the config file path and dataset format. All models support both single-label and multi-label classification.
 
 See [Configuration](docs/configuration.md) for details.
 
 **Quick example:**
 ```bash
-# Use a different config file (use CONFIG_FILE environment variable)
-# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
-CONFIG_FILE=config_tiny_dataset.yaml intent-train
+# Single-label config (CLINC150)
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml intent-train
+
+# Multi-label config (NLU++)
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml intent-train
+
+# Multi-label config (Tandem GO)
+CONFIG_FILE=config/dataset/tandem_go/tiny.yaml intent-train
+
 # Or use the script directly:
-CONFIG_FILE=config_tiny_dataset.yaml python scripts/pipeline/run_all.py
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py
 ```
 
 **To enable/disable models**: Edit `config/models_config.yaml` and set `enabled: true/false` for each model.
@@ -247,8 +275,8 @@ intent-train --tune
 python scripts/pipeline/run_all.py --tune
 
 # Or tune separately
-# Note: CONFIG_FILE should be relative to the config/ directory (without "config/" prefix)
-CONFIG_FILE=config.yaml python scripts/tune_hyperparams.py --all
+# Note: CONFIG_FILE should be the full path relative to repo root
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/tune_hyperparams.py --all
 ```
 
 Tuned hyperparameters are automatically used during training. See [Hyperparameter Tuning](docs/hyperparameter_tuning.md) for details.
@@ -257,7 +285,7 @@ Tuned hyperparameters are automatically used during training. See [Hyperparamete
 
 Performance metrics, resource requirements, and scaling guidance are provided below. Most of the pipeline runs comfortably on CPU; GPU is only required for the heaviest transformer-based models.
 
-### CLINC150 (100-class subset) benchmark
+### CLINC150 (100-class subset) benchmark - Single-Label
 
 On a 100-class CLINC150 configuration, the current pipeline achieves the following test metrics:
 
@@ -273,6 +301,16 @@ On a 100-class CLINC150 configuration, the current pipeline achieves the followi
 | RAG-LLM (OpenAI embeddings)  | 0.9380   | 0.7225   | 0.9465      |
 
 Published CLINC150 baselines on the full 150-intent dataset typically report transformer models in the **94–97% accuracy** range, with simpler TF‑IDF/SVM or CNN models around **90–95%**; your MiniLM + LogReg and RAG variants are therefore competitive with strong literature baselines while also providing richer RAG-style behaviors (e.g., explanations, retrieval) on top of high classification performance.
+
+### Multi-Label Classification
+
+For multi-label tasks, the system uses appropriate metrics:
+- **Subset Accuracy**: Exact match ratio (all labels must match)
+- **Hamming Loss**: Average fraction of labels incorrectly predicted
+- **Jaccard Similarity**: Intersection over union of predicted and true labels
+- **Precision/Recall/F1**: Computed per-label (macro/micro averages)
+
+All models support multi-label classification automatically when trained on multi-label datasets (NLU++).
 
 **Quick reference:**
 - **Naive Bayes**: Fastest inference (60k docs/s), minimal resources
@@ -312,9 +350,9 @@ uv run ruff check intent_classifier/ scripts/
 - For GPU support, install `faiss-gpu` instead
 
 ### Long First Run
-- The first run downloads the CLINC150 dataset (~50MB) from HuggingFace
+- The first run downloads the dataset (CLINC150 ~50MB, NLU++ ~10MB) from HuggingFace/GitHub
 - This is a one-time download and is cached for subsequent runs
-- Use `config/config_tiny_dataset.yaml` for faster testing
+- Use `config/dataset/clinc150/tiny.yaml` or `config/dataset/nlu_plus/tiny.yaml` for faster testing
 
 ### Model Not Found
 - Ensure you've run the training pipeline first: `python scripts/pipeline/run_all.py`

@@ -7,11 +7,12 @@ all heavy-lifting to the unified `intent_classifier.training.run_training` helpe
 """
 
 import sys
-from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root  # noqa: E402
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -37,8 +38,9 @@ def main():
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -57,12 +59,13 @@ def main():
     try:
         # Check if hyperparameters exist (will be checked by model loader based on config name)
         import os
-        from pathlib import Path
 
-        repo_root = Path(__file__).resolve().parents[2]
-        config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-        config_name = Path(config_file).stem
-        hyperparams_dir = repo_root / "config" / "hyperparameters" / config_name
+        config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
+        # Extract config name from path (e.g., "tiny" from "config/dataset/clinc150/tiny.yaml")
+        from intent_classifier.utils.config_loader import parse_config_path
+
+        _, config_name = parse_config_path(config_file)
+        hyperparams_dir = repo_root / "config" / "algorithm" / "hyperparameters" / config_name
         # Check if any hyperparameter files exist
         if hyperparams_dir.exists() and any(hyperparams_dir.glob("best_*.yaml")):
             num_files = len(list(hyperparams_dir.glob("best_*.yaml")))
@@ -79,7 +82,9 @@ def main():
 
         models = load_models_from_config()
         if not models:
-            print("⚠️  Warning: No models were loaded. Check your config/models_config.yaml file.")
+            print(
+                "⚠️  Warning: No models were loaded. Check your config/algorithm/models_config.yaml file."
+            )
             return
         print(f"✅ Successfully loaded {len(models)} model(s) for training")
     except Exception as e:
