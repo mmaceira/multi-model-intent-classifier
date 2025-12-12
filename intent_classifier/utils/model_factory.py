@@ -53,7 +53,23 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
         return RagSklearnAdapter(load_centroid(top_k=top_k))
 
     elif method == "llm":
-        model_name = params.get("model", "ollama/llama3.1:8b")
+        # Get model name with fallback to LLM config default
+        model_name = params.get("model")
+        # Check if model is missing, None, or still contains unsubstituted variable
+        if not model_name or model_name.startswith("${"):
+            # Try to get from LLM config
+            from intent_classifier.utils.config_loader import _load_llm_config
+
+            llm_config = _load_llm_config()
+            if llm_config and "ollama" in llm_config and "default_model" in llm_config["ollama"]:
+                model_name = llm_config["ollama"]["default_model"]
+                logger.info(f"Using LLM model from llm_config.yaml: {model_name}")
+            else:
+                # Final fallback
+                model_name = "ollama/llama3.1:8b"
+                logger.warning(
+                    f"LLM model not found in params or config, using fallback: {model_name}"
+                )
         use_openai = params.get(
             "use_openai", False
         )  # Kept for compatibility, but new impl uses TF-IDF

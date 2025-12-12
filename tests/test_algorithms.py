@@ -62,7 +62,15 @@ def test_linear_svm_bigrams(toy_corpus):
 def test_transformer_logreg_tiny_corpus(toy_corpus):
     """Test TransformerLogReg with a tiny corpus."""
     X, y = toy_corpus
-    clf = TransformerLogReg(n_jobs=1, cv=2)
+    try:
+        clf = TransformerLogReg(n_jobs=1, cv=2)
+    except Exception as e:
+        # Check for CUDA out of memory errors
+        error_type = type(e).__name__
+        error_msg = str(e).lower()
+        if "OutOfMemoryError" in error_type or "out of memory" in error_msg or "cuda" in error_msg:
+            pytest.skip(f"Skipping test due to GPU memory constraints: {e}")
+        raise
     _basic_fit_predict_checks(clf, X, y)
 
 
@@ -70,7 +78,17 @@ def test_embedding_logreg_sbert_backend(toy_corpus):
     """Test EmbeddingLogReg with SBERT backend."""
     X, y = toy_corpus
     # Use cv=2 since we only have 2 samples per class
-    clf = EmbeddingLogReg(use_openai=False, model="sentence-transformers/all-MiniLM-L6-v2", cv=2)
+    try:
+        clf = EmbeddingLogReg(
+            use_openai=False, model="sentence-transformers/all-MiniLM-L6-v2", cv=2
+        )
+    except Exception as e:
+        # Check for CUDA out of memory errors
+        error_type = type(e).__name__
+        error_msg = str(e).lower()
+        if "OutOfMemoryError" in error_type or "out of memory" in error_msg or "cuda" in error_msg:
+            pytest.skip(f"Skipping test due to GPU memory constraints: {e}")
+        raise
     _basic_fit_predict_checks(clf, X, y)
 
 

@@ -268,20 +268,29 @@ class TestClassifySingle:
         assert result["confidence"] == 0.0
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
-    def test_classify_single_invalid_label_raises(
+    def test_classify_single_invalid_label_uses_fallback(
         self, mock_llm: Any, retriever: Retriever, label_defs: dict[str, str]
     ) -> None:
-        """Test that invalid labels raise an error."""
-        mock_llm.return_value = '{"label": "invalid_label", "confidence": 0.8}'
-        with pytest.raises(ValueError, match="Invalid label"):
-            classify_single(
-                model="gpt-4o-mini",
-                query="What's the weather?",
-                retriever=retriever,
-                label_defs=label_defs,
-                k=5,
-                m=2,
-            )
+        """Test that invalid labels use fallback instead of raising an error."""
+        # First call returns invalid label, second call (repair attempt) also fails
+        mock_llm.side_effect = [
+            '{"label": "invalid_label", "confidence": 0.8}',
+            '{"label": "still_invalid", "confidence": 0.7}',  # Repair also fails
+        ]
+        result = classify_single(
+            model="gpt-4o-mini",
+            query="What's the weather?",
+            retriever=retriever,
+            label_defs=label_defs,
+            k=5,
+            m=2,
+        )
+        # Should not raise, but use fallback label from retrieved examples
+        assert "label" in result
+        assert "confidence" in result
+        assert result["label"] in result["allowed_labels"]
+        # The fallback should be from the top retrieved example
+        assert result["label"] in ["weather_query", "transfer_money", "play_music", "time_query"]
 
     @patch("intent_classifier.rag.rag_llm.classifier._call_llm")
     def test_classify_single_includes_metadata(

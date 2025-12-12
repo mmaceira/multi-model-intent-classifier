@@ -6,6 +6,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
@@ -86,6 +87,36 @@ class TransformerLogReg(TextClassifier):
     def vectorize(self, texts):
         return self.embedder.encode(texts, convert_to_numpy=True)
 
+    @staticmethod
+    def _adjust_cv_strategy(cv: int, y: np.ndarray, is_multilabel: bool) -> int:
+        """Adjust CV strategy based on class distribution to avoid warnings.
+
+        Args:
+            cv: Original CV parameter (number of folds)
+            y: Target labels (binary matrix for multilabel, array for single-label)
+            is_multilabel: Whether this is a multilabel problem
+
+        Returns:
+            Adjusted CV parameter (reduced if needed to avoid warnings)
+        """
+        if is_multilabel:
+            # For multilabel, check minimum class frequency across all labels
+            min_class_freq = int(y.sum(axis=0).min()) if y.ndim == 2 else 1
+        else:
+            # For single-label, check minimum class frequency
+            unique, counts = np.unique(y, return_counts=True)
+            min_class_freq = int(counts.min()) if len(counts) > 0 else 1
+
+        # Ensure we have at least 2 samples per class for CV to work
+        # Reduce CV folds if needed (minimum 2 folds for meaningful CV)
+        adjusted_cv = min(cv, max(2, min_class_freq))
+        if adjusted_cv < cv:
+            logger.info(
+                f"Reducing CV folds from {cv} to {adjusted_cv} due to small class sizes "
+                f"(minimum class frequency: {min_class_freq})"
+            )
+        return adjusted_cv
+
     # ------------------------------------------------------------------
     # Fit / predict API required by TextClassifier
     # ------------------------------------------------------------------
@@ -105,9 +136,10 @@ class TransformerLogReg(TextClassifier):
         )
 
         # ========================================================================
-        # STEP 1: Initialize GridSearchCV with CV strategy
+        # STEP 1: Initialize GridSearchCV with CV strategy (adjusted for small datasets)
         # ========================================================================
-        cv_strategy = self._cv_param
+        # Adjust CV strategy based on class distribution to avoid warnings
+        cv_strategy = self._adjust_cv_strategy(self._cv_param, y, self._is_multilabel)
         pipe = make_pipeline(
             StandardScaler(with_mean=True),
             LogisticRegression(

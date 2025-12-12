@@ -52,13 +52,14 @@ def substitute_vars(value: Any, config: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config.
 
     Supports ${section.var} syntax for variable substitution.
+    If a variable is not found, it remains as-is (caller should handle fallbacks).
 
     Args:
         value: Value that may contain variable references
         config: Configuration dictionary to look up variables
 
     Returns:
-        Value with variables substituted
+        Value with variables substituted (or original if substitution failed)
 
     Example:
         >>> config = {"general": {"run_name": "experiment1"}}
@@ -67,11 +68,22 @@ def substitute_vars(value: Any, config: dict[str, Any]) -> Any:
     """
     if isinstance(value, str) and "${" in value:
         var_pattern = r"\${([^}]+)}"
+        original_value = value
         for var_path in re.findall(var_pattern, value):
             if "." in var_path:
                 section, var = var_path.split(".", 1)
                 if section in config and var in config[section]:
-                    value = value.replace(f"${{{var_path}}}", str(config[section][var]))
+                    replacement = str(config[section][var])
+                    value = value.replace(f"${{{var_path}}}", replacement)
+                else:
+                    # Variable not found - log warning but keep original
+                    logger.debug(
+                        f"Variable ${{{var_path}}} not found in config "
+                        f"(section={section}, var={var}). Keeping original value."
+                    )
+        # If no substitutions were made and value still contains ${, return original
+        if value == original_value and "${" in value:
+            logger.debug(f"Could not substitute variables in: {value}")
         return value
     return value
 

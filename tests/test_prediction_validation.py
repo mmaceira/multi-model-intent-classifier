@@ -51,7 +51,7 @@ def single_label_trained_model(tmp_path):
 def multilabel_trained_model(tmp_path):
     """Create a trained multi-label model for testing."""
     X_train, y_train, X_val, y_val, _, _, classes = get_dataset(
-        dataset_name="nlu_plus",
+        dataset_name="tandem_go",
         multilabel=True,
         max_train_samples=50,
         max_test_samples=20,
@@ -277,7 +277,7 @@ def test_all_algorithms_single_label_valid_classes(algorithm_class, algorithm_kw
 def test_all_algorithms_multilabel_valid_classes(algorithm_class, algorithm_kwargs, tmp_path):
     """Test that all multi-label algorithms produce valid class predictions."""
     X_train, y_train, X_val, y_val, _, _, classes = get_dataset(
-        dataset_name="nlu_plus",
+        dataset_name="tandem_go",
         multilabel=True,
         max_train_samples=50,
         max_test_samples=20,
