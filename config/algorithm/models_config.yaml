@@ -84,7 +84,8 @@ models:
       # Prompt style configuration:
       # - "default": Full detailed prompt with all instructions
       # - "short": Concise prompt for faster/cheaper inference
-      prompt_style: "default"  # Options: "default" or "short"
+      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
+      prompt_style: "default"  # Options: "default", "short", "n8n_prompt"
 
   rag_llm_local_short:
     enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
@@ -104,7 +105,29 @@ models:
       # Prompt style configuration:
       # - "default": Full detailed prompt with all instructions
       # - "short": Concise prompt for faster/cheaper inference
-      prompt_style: "short"  # Options: "default" or "short"
+      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
+      prompt_style: "short"  # Options: "default", "short", "n8n_prompt"
+
+  rag_llm_local_n8n:
+    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
+    name: "RAG-LLM (local-embeddings, n8n prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # LLM model configuration:
+      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
+      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
+      # - To use other providers: See litellm docs for supported models
+      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
+      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
+      use_openai: false  # Always false for local embeddings
+      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
+      # Prompt style configuration:
+      # - "default": Full detailed prompt with all instructions
+      # - "short": Concise prompt for faster/cheaper inference
+      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
+      prompt_style: "n8n_prompt"  # Options: "default", "short", "n8n_prompt"
 
   rag_llm_openai:
     enabled: false  # Disabled - too slow for full dataset. Enable for quick testing only.

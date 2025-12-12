@@ -1,89 +1,56 @@
-## Experiments
+# Experiments
 
-This page summarizes **available datasets**, how splits work, and which preset experiment configs exist. It is intentionally brief and focuses on choices you need to make when running experiments.
+## Overview
 
-## Available Datasets
+Available datasets, data splits, and experiment configs.
+
+## Datasets
 
 ### CLINC150
 
-- **Source**: HuggingFace `clinc_oos` (config `plus`), downloaded automatically on first use.
-- **Content**: 150 intents across multiple domains, plus optional out‑of‑scope (OOS) examples.
-- **Structure**: text utterances + string intent labels (single-label), with predefined train/validation/test splits.
-- **Size**: ~22,500 examples total.
-
-The dataset is fetched automatically by the pipeline; you do not need to download anything manually.
+- **Source**: HuggingFace `clinc_oos` (config `plus`)
+- **Content**: 150 intents, single-label
+- **Size**: ~22,500 examples
+- Downloads automatically on first use
 
 ### NLU++
 
-- **Source**: GitHub `PolyAI-LDN/task-specific-datasets` (nlupp config), downloaded automatically on first use.
-- **Content**: 68 intents across banking and hotels domains.
-- **Structure**: text utterances + list of intent labels (multilabel format), with cross-validation folds that are combined and split into train/validation/test.
-- **Size**: ~25,715 examples total.
-- **Note**: NLU++ is always multilabel (each example can have multiple intent labels).
+- **Source**: GitHub `PolyAI-LDN/task-specific-datasets`
+- **Content**: 68 intents, multi-label
+- **Size**: ~25,715 examples
+- Downloads automatically on first use
 
-The dataset is fetched automatically from GitHub; you do not need to download anything manually.
+## Data Splits
 
+Standard ML practice:
+- **Train**: Fit models
+- **Validation**: Hyperparameter tuning and model selection
+- **Test**: Final evaluation only
 
-## Train/validation/test usage
+Training and tuning never touch the test set. Some analysis scripts merge train+val for larger corpus, but training always uses proper splits.
 
-The project follows standard ML practice:
+## Configuration
 
-- **Train set**: used to fit models.
-- **Validation set**: used for hyperparameter tuning and model selection.
-- **Test set**: used only for final evaluation.
+Control dataset size via `dataset:` section:
 
-Key rules:
+- `name`: `"clinc150"` or `"nlu_plus"`
+- `use_oos`: Include OOS examples (CLINC150 only)
+- `max_classes`: Limit number of intents
+- `max_train_samples`, `max_test_samples`, `max_val_samples`: Cap examples per split
 
-- Training and tuning never touch the test set.
-- Validation remains separate for model selection; it is not merged into training.
-- Some analysis and embedding‑building scripts temporarily merge train+val to get a larger corpus, but this merged data is **not** used as a replacement for proper train/val splitting during training.
+## Preconfigured Configs
 
-Typical loading pattern:
+- `config/dataset/clinc150/default.yaml` - Full dataset
+- `config/dataset/clinc150/tiny.yaml` - Quick test
+- `config/dataset/nlu_plus/default.yaml` - Full dataset
+- `config/dataset/nlu_plus/tiny.yaml` - Quick test
 
-```python
-from intent_classifier.datasets.dataset import get_dataset
+## Outputs
 
-# Single-label dataset (CLINC150)
-X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
+Exploratory analysis generates:
+- Class distributions
+- Text length statistics
+- Vocabulary analysis
+- Train/test comparisons
 
-# Multilabel dataset (NLU++)
-X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="nlu_plus")
-# Note: y_train, y_val, y_test are lists of lists (multilabel format)
-
-```
-
-## Dataset size and experiment variants
-
-You control dataset size through the `dataset:` section of your config:
-
-- `name`: `"clinc150"` or `"nlu_plus"`.
-- `use_oos`: whether to include OOS examples as an extra class (CLINC150 only).
-- `multilabel`: whether to use multilabel format (NLU++ is always multilabel).
-- `max_classes`: limit the number of intents (subset of available classes).
-- `max_train_samples`, `max_test_samples`, `max_val_samples`: cap the number of examples per split (with stratified sampling for single-label, random sampling for multilabel).
-
-Predefined experiment configs:
-
-- `config/dataset/clinc150/default.yaml`: standard full‑dataset run
-- `config/dataset/clinc150/tiny.yaml`: very small subset for fast iteration
-- `config/dataset/nlu_plus/default.yaml`: NLU++ standard config
-- `config/dataset/nlu_plus/tiny.yaml`: NLU++ quick testing config
-
-Switching configs:
-
-```bash
-CONFIG_FILE=config/dataset/clinc150/default.yaml python scripts/pipeline/run_all.py
-```
-
-For complete configuration details and all available keys, see `configuration.md`.
-
-## Data exploration outputs
-
-The exploratory analysis step (`01_exploratory_analysis.py`) automatically generates:
-
-- Class distributions.
-- Text length statistics.
-- Vocabulary and stopword analysis.
-- Train/test comparison and vocabulary drift views.
-
-These artifacts are written under `output/{run_name}/data_exploration/` and are useful to sanity‑check your experiments before relying on evaluation metrics.
+Saved to `output/{run_name}/data_exploration/`.

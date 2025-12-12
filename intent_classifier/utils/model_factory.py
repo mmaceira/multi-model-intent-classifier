@@ -74,7 +74,9 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
             "use_openai", False
         )  # Kept for compatibility, but new impl uses TF-IDF
         min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
-        prompt_style = params.get("prompt_style", "default")  # Prompt style: "default" or "short"
+        prompt_style = params.get(
+            "prompt_style", "default"
+        )  # Prompt style: "default", "short", "n8n_prompt", etc.
 
         logger.info(
             f"Creating LLM RAG model with top_k={top_k}, model={model_name}, "

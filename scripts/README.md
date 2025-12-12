@@ -1,205 +1,65 @@
-# CLINC150 Intent Classification - Utility Scripts
+# Scripts
 
-This directory contains production-ready utility scripts for the CLINC150 Intent Classification project. These scripts provide command-line interfaces for model training, demonstration, evaluation, and API serving.
+## Overview
 
-## Table of Contents
-- [Scripts Overview](#scripts-overview)
-- [Installation & Setup](#installation--setup)
-- [Usage Guide](#usage-guide)
-- [API Documentation](#api-documentation)
-- [Performance Considerations](#performance-considerations)
-- [Deployment Guide](#deployment-guide)
-- [Troubleshooting](#troubleshooting)
-- [Development Notes](#development-notes)
+Utility scripts for training, demos, evaluation, and API serving.
 
-## Scripts Overview
+## Commands
 
-### intent_classifier_demo.py
+### Training
 
-A comprehensive demonstration script for intent classification using the CLINC150 dataset.
-
-**Purpose:** Showcase the full pipeline of intent classification and semantic search capabilities with a user-friendly Gradio web interface.
-
-**Features:**
-- Supports all model types: Naive Bayes, SVM, BERT, and RAG variants
-- Interactive web interface with real-time classification
-- Semantic search capabilities
-- Robust model loading supporting various serialization formats
-
-**Usage Example:**
 ```bash
-# Run the Gradio web interface
+# Full pipeline
+uv run intent-train --config config/dataset/clinc150/tiny.yaml
+
+# Individual steps
+uv run python scripts/pipeline/00_data_loading.py
+uv run python scripts/pipeline/01_exploratory_analysis.py
+uv run python scripts/pipeline/02_build_embeddings.py
+uv run python scripts/pipeline/03_model_training.py
+uv run python scripts/pipeline/04_model_prediction.py
+uv run python scripts/pipeline/05_model_evaluation.py
+```
+
+### Classification
+
+```bash
+uv run intent-classify --model-path output/experiment/models/Linear\ SVM/ --text "your text here"
+```
+
+### API Server
+
+```bash
+# Install API dependencies
+uv sync --extra api
+
+# Start server
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run api-serve --host 0.0.0.0 --port 8000
+```
+
+### Demos
+
+```bash
+# Intent classifier demo
 uv run python scripts/demos/intent_classifier_demo.py
-```
 
-### semantic_search_demo.py
+# Semantic search demo
+uv run python scripts/demos/semantic_search_demo.py
 
-A demonstration script for semantic search capabilities using vector embeddings.
-
-**Purpose:** Provide an interface for semantic search across the CLINC150 dataset using different embedding models.
-
-**Features:**
-- Configurable embedding models
-- Adjustable similarity thresholds
-- Result ranking and filtering
-- Interactive mode for exploration
-- Export search results with metadata
-
-**Usage Example:**
-```bash
-# Basic search
-python scripts/semantic_search_demo.py --query "interest rates federal reserve" --top_k 5
-
-# With specific model and threshold
-python scripts/semantic_search_demo.py --query "crude oil production" --model openai --top_k 10 --threshold 0.75
-
-# Interactive mode
-python scripts/semantic_search_demo.py --interactive
-```
-
-**Parameters:**
-- `--query`: The search query text
-- `--top_k`: Number of results to return (default: 5)
-- `--model`: Embedding model to use (default: "all-MiniLM-L6-v2", options: "openai", "all-MiniLM-L6-v2", "paraphrase-mpnet-base-v2")
-- `--threshold`: Minimum similarity threshold (default: 0.6)
-- `--batch`: Path to file with multiple queries
-- `--output`: Path to save results (default: None, prints to console)
-- `--interactive`: Start in interactive mode
-
-### intent_trend_analyzer.py
-
-A script for analyzing intent trends and evolution using semantic search and LLMs.
-
-**Purpose:** Generate insights about intent distribution and trends in the dataset using a Gradio web interface.
-
-**Features:**
-- Time-series and trend analysis of user intents
-- Retrieval of semantically similar utterances using vector embeddings
-- LLM-powered relevance classification and trend commentary
-- Interactive configuration and visualization of results
-
-**Usage Example:**
-```bash
-# Run the Gradio web interface
+# Intent trend analyzer
 uv run python scripts/demos/intent_trend_analyzer.py
 ```
 
-### tune_hyperparams.py
-
-A script for hyperparameter optimization using Ray Tune.
-
-**Purpose:** Find optimal hyperparameters for different classification models to maximize performance metrics.
-
-**Features:**
-- Distributed hyperparameter search
-- Multiple search algorithms (Random, Bayesian, BOHB)
-- Cross-validation integration
-- Early stopping for efficiency
-- Comprehensive logging and reporting
-
-**Usage Example:**
-```bash
-# Tune Naive Bayes model
-python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
-
-# Tune SVM with specific search space
-python scripts/tune_hyperparams.py --config config/config.yaml --algo svm --search-space "config/svm_params.json"
-
-# Tune BERT model with GPU
-python scripts/tune_hyperparams.py --config config/config.yaml --algo bert_lr --gpu --num-samples 10
-```
-
-**Parameters:**
-- `--config`: Path to YAML configuration file (required)
-- `--algo`: Algorithm to tune (`nb` for Naïve Bayes, `svm` for SVM, `bert_lr` for BERT+LR)
-- `--num-samples`: Number of hyperparameter combinations to try (default: 30)
-- `--search-space`: Custom search space definition file
-- `--output`: Path to save results (default: "output/hyperparams/")
-- `--gpu`: Use GPU for training if available
-- `--cpus`: Number of CPU cores to use (default: auto-detect)
-- `--metric`: Metric to optimize (default: "f1_macro")
-
-**Tunes:**
-- C parameter for Logistic Regression
-- alpha parameter for Multinomial Naïve Bayes
-- Learning rate for transformer models
-- Batch size and other training parameters
-
-## API Documentation
-
-The `api` directory contains a FastAPI implementation for serving the trained models.
-
-### API Architecture
-- `main.py`: The FastAPI application entry point
-- `model_loader.py`: Model loading and management
-- `routes/`: API endpoint definitions
-- `schemas/`: Pydantic models for request/response validation
-- `middleware/`: Request processing middleware
-- `services/`: Business logic implementation
-
-### API Endpoints
-
-#### 1. Classification
-- **Endpoint**: POST `/api/v1/classify`
-- **Description**: Classify a document into one of the predefined topics
-- **Request Body**: JSON with `text` field containing document content
-- **Response**: JSON with predicted topic, confidence, and metadata
-- **Optional Parameters**:
-  - `model`: Model to use (default: configured in settings)
-  - `return_confidence`: Whether to return confidence scores (default: true)
-  - `return_alternatives`: Whether to return alternative classifications (default: false)
-
-#### 2. Semantic Search
-- **Endpoint**: POST `/api/v1/search`
-- **Description**: Find semantically similar documents
-- **Request Body**: JSON with `query` text and optional parameters
-- **Response**: Array of similar documents with similarity scores
-- **Optional Parameters**:
-  - `top_k`: Number of results to return (default: 5)
-  - `threshold`: Minimum similarity threshold (default: 0.6)
-  - `embedding_model`: Model to use for embeddings (default: configured in settings)
-
-#### 3. Model Management
-- **Endpoint**: GET `/api/v1/models`
-- **Description**: List available models
-- **Response**: Array of model information (name, type, metrics)
-
-- **Endpoint**: POST `/api/v1/models/load`
-- **Description**: Load a model into memory
-- **Request Body**: JSON with `model_id` and optional parameters
-- **Response**: Status of the load operation
-
-- **Endpoint**: DELETE `/api/v1/models/{model_id}`
-- **Description**: Unload a model from memory
-- **Response**: Status of the unload operation
-
-### Running the API Server
+### Hyperparameter Tuning
 
 ```bash
-# Development mode
-uvicorn scripts.api.main:app --reload --host 127.0.0.1 --port 8000
-
-# Production mode
-uvicorn scripts.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --all
 ```
 
-### API Authentication
-The API supports multiple authentication methods:
-- API key authentication (via `X-API-Key` header)
-- JWT token authentication
-- OAuth2 (configurable via settings)
+## Directories
 
-1. **Classification**
-   - POST `/api/v1/classify`
-   - Input: Text document
-   - Output: Predicted topic and confidence
-```
+- **api/**: FastAPI implementation
+- **demos/**: Interactive Gradio demos
+- **pipeline/**: Training pipeline scripts
 
-### Batch Processing
-See the pipeline scripts in `scripts/pipeline/` for batch processing capabilities.
-
-### Custom Model Training
-Use the hyperparameter tuning script:
-```bash
-uv run python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --algo nb
-```
+See individual README files in each directory for details.

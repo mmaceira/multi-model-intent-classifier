@@ -16,15 +16,13 @@ from pydantic import BaseModel, Field, field_validator
 from intent_classifier.utils.model_loader import load_persisted_model
 from intent_classifier.utils.paths import get_embeddings_dir, get_models_dir
 from intent_classifier.utils.seed import set_global_seed
+from intent_classifier.utils.warnings_config import configure_logging
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Set up logging (entry point - this is where we configure logging)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_logging(level="INFO", suppress_warnings=True)
 logger = logging.getLogger(__name__)
 
 # Set global seed for reproducibility

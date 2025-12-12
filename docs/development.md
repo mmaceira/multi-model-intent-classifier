@@ -1,58 +1,53 @@
 # Development
 
-This guide covers development setup, code style, testing, and contributing to the project.
+## Overview
 
-## Environment Setup
+Development setup, code style, and testing guidelines.
 
-1. Install development dependencies:
-   ```bash
-   uv sync --extra dev
-   ```
+## Quickstart
 
-2. Set up pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
+```bash
+# Install dev dependencies
+uv sync --extra dev
+
+# Set up pre-commit hooks
+pre-commit install
+
+# Run tests
+uv run pytest -q
+```
+
+## Commands
+
+### Code Formatting
+
+```bash
+# Format code
+uv run black intent_classifier/ scripts/
+
+# Lint code
+uv run ruff check intent_classifier/ scripts/
+```
+
+### Testing
+
+```bash
+# Run all tests
+uv run pytest -q
+
+# Run specific test
+uv run pytest tests/test_dataset_clinc150.py -q
+
+# Run with coverage
+uv run pytest --cov=intent_classifier -q
+```
 
 ## Code Style
 
 - PEP 8-compliant with type hints on public functions
-- Format and lint with **black** and **ruff**
-
-```bash
-# Format code
-black intent_classifier/ scripts/
-
-# Lint code
-ruff check intent_classifier/ scripts/
-```
-
-## Testing
-
-**Important**: Tests require the HuggingFace `datasets` library. Install dev dependencies with `uv sync --extra dev` before running `pytest`.
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_dataset_clinc150.py
-
-# Run with coverage
-pytest --cov=src
-
-# Run with verbose output
-pytest -v
-```
-
-### Writing Tests
-
-- Place tests in the `tests/` directory
-- Use descriptive test names
-- Test both success and failure cases
-- Mock external dependencies (APIs, file I/O)
+- Format with `black`, lint with `ruff`
+- Use docstrings for all public functions and classes
+- Include type hints
 
 ## Project Structure
 
@@ -67,162 +62,29 @@ pytest -v
 
 ## Adding New Algorithms
 
-1. Create a new file in `intent_classifier/algorithms/`:
-   ```python
-   # intent_classifier/algorithms/my_algorithm.py
-   from sklearn.base import BaseEstimator, ClassifierMixin
-
-   class MyAlgorithm(BaseEstimator, ClassifierMixin):
-       def __init__(self, param1=1.0):
-           self.param1 = param1
-
-       def fit(self, X, y):
-           # Training logic
-           return self
-
-       def predict(self, X):
-           # Prediction logic
-           return predictions
-   ```
-
-2. Add to `intent_classifier/algorithms/__init__.py`:
-   ```python
-   from .my_algorithm import MyAlgorithm
-   __all__ = [..., 'MyAlgorithm']
-   ```
-
-3. Add configuration in `config/models_config.yaml`:
-   ```yaml
-   my_algorithm:
-     enabled: true
-     name: "My Algorithm"
-     class: "MyAlgorithm"
-     params:
-       param1: 1.0
-   ```
-
-4. Add hyperparameter tuning support in `scripts/tune_hyperparams.py` (optional)
-
-5. Write tests in `tests/`
+1. Create algorithm in `intent_classifier/algorithms/`
+2. Add to `intent_classifier/algorithms/__init__.py`
+3. Add configuration in `config/algorithm/models_config.yaml`
+4. Write tests in `tests/`
 
 ## Adding New Datasets
 
-1. Create a new dataset loader in `intent_classifier/datasets/`:
-   ```python
-   # intent_classifier/datasets/my_dataset.py
-   def load_my_dataset(**kwargs):
-       # Load dataset logic
-       return X_train, y_train, X_val, y_val, X_test, y_test, classes
-   ```
-
-2. Add to `intent_classifier/datasets/dataset.py`:
-   ```python
-   from .my_dataset import load_my_dataset
-
-   def get_dataset(dataset_name, **kwargs):
-       if dataset_name == "my_dataset":
-           return load_my_dataset(**kwargs)
-       # ...
-   ```
-
-3. Update configuration files in `config/` if needed
-
+1. Create loader in `intent_classifier/datasets/`
+2. Add to `intent_classifier/datasets/dataset.py`
+3. Update config files in `config/`
 4. Write tests
-
-## Documentation
-
-### Code Documentation
-- Use docstrings for all public functions and classes
-- Follow Google or NumPy docstring style
-- Include type hints
-
-### Documentation Files
-- Update relevant docs in `docs/` when adding features
-- Keep README.md concise with links to detailed docs
-- Add examples for new features
-
-## Git Workflow
-
-1. Create a feature branch:
-   ```bash
-   git checkout -b feature/my-feature
-   ```
-
-2. Make changes and commit:
-   ```bash
-   git add .
-   git commit -m "Add my feature"
-   ```
-
-3. Run tests and formatting:
-   ```bash
-   uv run pytest -q
-   uv run black intent_classifier/ scripts/
-   uv run ruff check intent_classifier/ scripts/
-   ```
-
-4. Push and create pull request
 
 ## Pre-commit Hooks
 
-The project uses pre-commit hooks to ensure code quality:
-- Code formatting (black)
-- Linting (ruff)
-- Commit message validation
+Hooks run automatically on `git commit`. Run manually:
 
-Hooks run automatically on `git commit`. To run manually:
 ```bash
 pre-commit run --all-files
 ```
 
-## Debugging
+## Git Workflow
 
-### Common Issues
-
-1. **Import errors**: Make sure you've installed dependencies (`uv sync --extra all` or `uv sync --extra dev`)
-2. **Config errors**: Check that config files are valid YAML and match the schema
-3. **Dataset errors**: Verify dataset download and paths
-4. **Memory errors**: Use smaller datasets or reduce batch sizes
-
-### Debug Mode
-
-Enable verbose logging:
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-### Profiling
-
-Profile code performance:
-```bash
-python -m cProfile -s cumulative scripts/pipeline/03_model_training.py
-```
-
-## External Dependencies
-
-See [Installation](installation.md) for details on optional dependencies.
-
-## Code Review Checklist
-
-Before submitting a PR:
-- [ ] Code follows PEP 8 style guide
-- [ ] Type hints added to functions
-- [ ] Docstrings added to public functions
-- [ ] Tests added/updated
-- [ ] All tests pass
-- [ ] Documentation updated
-- [ ] No hardcoded paths or secrets
-- [ ] Config changes are backward compatible (if possible)
-
-## Release Process
-
-1. Update CHANGELOG.md
-2. Tag release and push tags
-
-## Getting Help
-
-- Check existing documentation in `docs/`
-- Review code examples in `scripts/`
-- Check test files for usage examples
-- Open an issue for bugs or feature requests
+1. Create feature branch: `git checkout -b feature/my-feature`
+2. Make changes and commit using Commitizen: `cz c`
+3. Run tests and formatting: `uv run pytest -q && uv run black intent_classifier/ scripts/`
+4. Push and create pull request

@@ -6,13 +6,12 @@ This script handles the initial data loading and preprocessing for intent
 classification tasks. It supports multiple datasets configured via config files.
 """
 
-import logging
 import os
 import sys
-import warnings
 
 # Import path utilities
 from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.warnings_config import configure_logging
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -30,8 +29,7 @@ from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.exploration import class_frequency, length_distribution  # noqa: E402
 
 # Configure logging and warnings
-warnings.filterwarnings("ignore")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+configure_logging(level="INFO", suppress_warnings=True)
 
 
 def main():

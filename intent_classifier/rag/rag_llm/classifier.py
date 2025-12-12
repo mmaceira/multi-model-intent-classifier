@@ -218,7 +218,7 @@ def _load_prompt_template(prompt_style: str, prompt_type: str, is_multilabel: bo
     """Load a prompt template from file.
 
     Args:
-        prompt_style: Prompt style ("default" or "short")
+        prompt_style: Prompt style (e.g., "default", "short", "n8n_prompt")
         prompt_type: Type of prompt ("system" or "user")
         is_multilabel: Whether in multilabel mode
 
@@ -263,7 +263,7 @@ def _build_prompts(
         few_shots: Formatted few-shot examples
         query: Query text to classify
         is_multilabel: Whether in multilabel mode
-        prompt_style: Prompt style ("default" or "short")
+        prompt_style: Prompt style (e.g., "default", "short", "n8n_prompt")
 
     Returns:
         Tuple of (system_prompt, user_prompt)
@@ -305,7 +305,7 @@ def classify_single(
         label_defs: Optional label definitions dictionary
         k: Number of neighbors to retrieve
         m: Minimum distinct labels required
-        prompt_style: Prompt style ("default" or "short")
+        prompt_style: Prompt style (e.g., "default", "short", "n8n_prompt")
     """
     label_defs = label_defs or {}
     retrieved = retriever.select_topk_with_min_labels(query, k=k, m=m)

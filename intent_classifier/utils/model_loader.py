@@ -233,7 +233,13 @@ def load_models_from_config(
             model_id_to_hyperparam_key[model_id] = "rag_kmajority"
         elif model_id == "rag_centroid":
             model_id_to_hyperparam_key[model_id] = "rag_centroid"
-        elif model_id in ("rag_llm", "rag_llm_local", "rag_llm_local_short", "rag_llm_openai"):
+        elif model_id in (
+            "rag_llm",
+            "rag_llm_local",
+            "rag_llm_local_short",
+            "rag_llm_local_n8n",
+            "rag_llm_openai",
+        ):
             # Support both old single rag_llm and new separate local/openai variants
             model_id_to_hyperparam_key[model_id] = "rag_llm"
         else:

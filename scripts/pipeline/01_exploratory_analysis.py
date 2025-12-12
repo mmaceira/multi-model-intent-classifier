@@ -7,10 +7,8 @@ datasets. It analyzes various aspects of the data to better understand its
 characteristics and potential challenges.
 """
 
-import logging
 import os
 import sys
-import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -19,6 +17,7 @@ import pandas as pd
 
 # Import path utilities
 from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.warnings_config import configure_logging
 
 # Get repo root and add to path for config imports (config is not part of the installed package)
 repo_root = get_repo_root()
@@ -42,8 +41,7 @@ from intent_classifier.exploration import (  # noqa: E402
 )
 
 # Configure logging and warnings
-warnings.filterwarnings("ignore")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+configure_logging(level="INFO", suppress_warnings=True)
 
 
 def main():

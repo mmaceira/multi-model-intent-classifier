@@ -1,44 +1,37 @@
-# Configuration Files
+# Configuration
 
-This directory contains configuration files organized by dataset and algorithm.
+## Overview
+
+Configuration files organized by dataset and algorithm.
 
 ## Structure
 
 ```
 config/
 ├── dataset/          # Dataset configuration files
-│   ├── clinc150/     # CLINC150 dataset configs
-│   │   ├── tiny.yaml    # Quick testing config (limited samples/classes)
-│   │   └── default.yaml # Standard config (full dataset)
-│   ├── nlu_plus/    # NLU++ dataset (always multi-label)
-│   │   ├── default.yaml # Standard config (full dataset)
-│   │   └── tiny.yaml    # Quick testing config (limited samples)
-│
-├── algorithm/        # Algorithm configuration files
-│   ├── models_config.yaml   # Model selection and hyperparameters
-│   └── hyperparameters/      # Best hyperparameters from tuning
-│       └── config_tiny_dataset/
-│           └── best_*.yaml
+│   ├── clinc150/     # CLINC150 configs
+│   └── nlu_plus/     # NLU++ configs (multi-label)
+└── algorithm/        # Algorithm configuration
+    ├── models_config.yaml   # Model selection
+    └── hyperparameters/     # Tuned hyperparameters
 ```
 
 ## Usage
 
-Specify the config file using the `CONFIG_FILE` environment variable:
-
 ```bash
-# Dataset config examples
-CONFIG_FILE=config/dataset/clinc150/tiny.yaml python scripts/pipeline/run_all.py
-CONFIG_FILE=config/dataset/clinc150/default.yaml intent-train
-CONFIG_FILE=config/dataset/nlu_plus/default.yaml intent-train
-CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml python scripts/pipeline/run_all.py
+# Single-label
+uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+
+# Multi-label
+uv run python scripts/pipeline/run_all.py --config config/dataset/nlu_plus/tiny.yaml
 ```
 
 ## Datasets
 
-- **clinc150**: Single-label intent classification dataset (150 intents)
-- **nlu_plus**: Always multi-label (68 intents across banking and hotels domains)
+- **clinc150**: Single-label intent classification (150 intents)
+- **nlu_plus**: Multi-label intent classification (68 intents)
 
 ## Algorithms
 
-- **models_config.yaml**: Controls which models are trained and their configuration
+- **models_config.yaml**: Controls which models are trained
 - **hyperparameters/**: Contains tuned hyperparameters organized by config name

@@ -1,0 +1,17 @@
+Etiquetes permeses: {allowed_labels}
+Definicions d'etiquetes:
+{defs_block}
+
+Exemples etiquetats recuperats:
+{few_shots}
+
+# Correu a netejar i classificar:
+{query}
+
+Retorna exactament aquest esquema JSON:
+{{ "label": "<etiqueta permesa>", "confidence": <número 0..1> }}
+Regles:
+- Tria EXACTAMENT UNA etiqueta de les etiquetes permeses.
+- Fes coincidir el cas EXACTE i el format de les etiquetes a les etiquetes permeses.
+- Si no estàs segur, tria la millor etiqueta i estableix una confiança baixa.
+- La confiança ha de ser entre 0 i 1.
