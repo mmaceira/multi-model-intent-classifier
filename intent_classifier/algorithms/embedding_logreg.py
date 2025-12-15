@@ -145,7 +145,25 @@ class EmbeddingLogReg(TextClassifier):
             # Use Ollama/Qwen embeddings via litellm + LitellmOllamaEmbedder
             from intent_classifier.utils.embeddings import LitellmOllamaEmbedder
 
-            base_url = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_HOST")
+            # Resolve base_url: env vars > config > default
+            base_url = (
+                os.getenv("OLLAMA_API_BASE")
+                or os.getenv("OLLAMA_HOST")
+                or os.getenv("MODEL_OLLAMA_ENDPOINT")
+            )
+            # Fall back to config if env vars not set
+            if base_url is None:
+                try:
+                    from intent_classifier.utils.config_loader import (
+                        discover_config_file,
+                        load_config,
+                    )
+
+                    config = load_config(discover_config_file(), apply_variable_substitution=False)
+                    base_url = config.get("model", {}).get("ollama_endpoint")
+                except Exception:
+                    # Silently fall back if config loading fails
+                    pass
             embedder = LitellmOllamaEmbedder(
                 model=model or "ollama/qwen3-embedding:latest",
                 base_url=base_url,

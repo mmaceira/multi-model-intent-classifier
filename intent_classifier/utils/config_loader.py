@@ -341,6 +341,12 @@ def load_config(
             # Set ollama_endpoint from ollama.endpoint if not already set
             if "ollama_endpoint" not in config["model"] and "endpoint" in ollama_cfg:
                 config["model"]["ollama_endpoint"] = ollama_cfg["endpoint"]
+            # Set ollama_embedding_model_name from ollama.embedding_model if not already set
+            if (
+                "ollama_embedding_model_name" not in config["model"]
+                and "embedding_model" in ollama_cfg
+            ):
+                config["model"]["ollama_embedding_model_name"] = ollama_cfg["embedding_model"]
 
         # Merge OpenAI settings
         if "openai" in llm_config:

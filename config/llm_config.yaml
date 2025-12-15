@@ -8,12 +8,17 @@ ollama:
   # - Can be set here, or via OLLAMA_API_BASE environment variable
   # - If not set, defaults to http://localhost:11434
   # - Protocol (http://) will be added automatically if missing
-  endpoint: "http://localhost:11434"  # e.g., "http://localhost:11434" or "192.168.1.100:11434"
+  endpoint: "localhost:11434"  # e.g., "http://localhost:11434" or "192.168.1.100:11434"
 
   # Default Ollama model for RAG-LLM classification
   # - Model name with or without "ollama/" prefix (will be normalized automatically)
   # - Examples: "llama3.1:8b", "ollama/llama3.1:8b", "qwen2.5:14b"
-  default_model: "ollama/llama3.1:8b"
+  default_model: "ollama/qwen2.5:14b"
+
+  # Default Ollama model for embeddings (used via litellm + Ollama)
+  # - This is typically an embedding-optimised model such as qwen3-embedding:latest
+  # - Can be overridden via OLLAMA_EMBEDDING_MODEL environment variable
+  embedding_model: "ollama/qwen3-embedding:latest"
 
 # OpenAI Configuration
 openai:
