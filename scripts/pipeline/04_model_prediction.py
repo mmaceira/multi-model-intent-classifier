@@ -38,11 +38,14 @@ prediction_module_path = Path(__file__).parent.parent.parent / "intent_classifie
 if str(prediction_module_path.parent) not in sys.path:
     sys.path.insert(0, str(prediction_module_path.parent))
 from intent_classifier.prediction import run_prediction  # noqa: E402
+from intent_classifier.utils.method_logger import get_logger  # noqa: E402
 from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 from intent_classifier.utils.model_utils import load_model_paths  # noqa: E402
 
 
 def main():
+    # Disable method logging during prediction
+    get_logger().disable()
     """Main function to run predictions."""
 
     print("=" * 60)

@@ -12,6 +12,7 @@ import cloudpickle
 from sklearn.base import clone as safe_clone
 
 from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.method_logger import get_logger
 
 
 def run_training(
@@ -61,6 +62,9 @@ def run_training(
           validation set. The validation set is provided for models that support early stopping
           or for future extensibility.
     """
+    # Disable method logging during training
+    get_logger().disable()
+
     # Validate validation set consistency
     if (X_val is None) != (y_val is None):
         raise ValueError("X_val and y_val must both be provided or both be None")

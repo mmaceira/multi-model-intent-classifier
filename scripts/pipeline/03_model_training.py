@@ -25,10 +25,13 @@ from config.notebook_setup import (  # noqa: E402
 # Import dataset and training modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.training import run_training  # noqa: E402
+from intent_classifier.utils.method_logger import get_logger  # noqa: E402
 from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():
+    # Disable method logging during training
+    get_logger().disable()
     """Main function to train models."""
 
     print("=" * 60)

@@ -16,6 +16,7 @@ from intent_classifier.prediction.base import BasePredictionRunner
 from intent_classifier.prediction.multilabel import MultiLabelPredictionRunner
 from intent_classifier.prediction.singlelabel import SingleLabelPredictionRunner
 from intent_classifier.utils.label_utils import is_multilabel
+from intent_classifier.utils.method_logger import get_logger
 
 
 def run_prediction(
@@ -64,6 +65,9 @@ def run_prediction(
         - All operations are performed sequentially for each model
         - Label type (single-label vs multi-label) is automatically detected
     """
+    # Disable method logging during prediction
+    get_logger().disable()
+
     # Validate data consistency
     if (X_train is None) != (y_train is None):
         raise ValueError("X_train and y_train must both be provided or both be None")

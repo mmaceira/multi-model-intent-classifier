@@ -22,6 +22,7 @@ import pandas as pd
 from sklearn.preprocessing import label_binarize  # noqa: F401 – kept for future use
 
 from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.method_logger import get_logger
 
 from .metrics import analyze_text_features, compute_metrics  # noqa: F401 – API surface
 from .utils import (
@@ -212,6 +213,9 @@ def run_evaluations(
     Returns:
         Dictionary mapping model names to their metrics
     """
+    # Disable method logging during evaluation
+    get_logger().disable()
+
     from intent_classifier.evaluation.base import BaseEvaluationRunner
     from intent_classifier.evaluation.multilabel import MultiLabelEvaluationRunner
     from intent_classifier.evaluation.singlelabel import SingleLabelEvaluationRunner

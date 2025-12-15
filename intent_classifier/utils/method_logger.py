@@ -100,6 +100,14 @@ class MethodLogger:
                     cls._instance = cls(log_dir=log_dir, enabled=enabled)
         return cls._instance
 
+    def disable(self) -> None:
+        """Disable logging."""
+        self.enabled = False
+
+    def enable(self) -> None:
+        """Enable logging."""
+        self.enabled = True
+
     @staticmethod
     def _get_log_dir_from_config() -> Path | None:
         """Get log directory from config for saving logs."""

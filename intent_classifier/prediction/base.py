@@ -312,6 +312,31 @@ class BasePredictionRunner(ABC):
                             model_name=name,
                         )
 
+                        # Save repair metadata for RAG-LLM models
+                        if hasattr(estimator, "get_repair_metadata"):
+                            try:
+                                repair_metadata = estimator.get_repair_metadata()
+                                if repair_metadata:
+                                    import json
+
+                                    repair_file = model_dir / f"{prefix}_repair_metadata.jsonl"
+                                    with open(repair_file, "w", encoding="utf-8") as f:
+                                        for entry in repair_metadata:
+                                            json.dump(entry, f, ensure_ascii=False)
+                                            f.write("\n")
+                                    if self.verbose:
+                                        print(
+                                            f"   Saved repair metadata: "
+                                            f"{len(repair_metadata)} entries",
+                                            flush=True,
+                                        )
+                            except Exception as e:
+                                if self.verbose:
+                                    print(
+                                        f"   Warning: Could not save repair metadata: {e}",
+                                        flush=True,
+                                    )
+
             except Exception as e:
                 if self.verbose:
                     print(f"\n❌ Error running predictions for algorithm '{name}': {e}", flush=True)

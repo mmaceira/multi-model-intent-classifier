@@ -404,9 +404,25 @@ def classify_single(
 
     content = _call_llm(messages, model=model)
 
+    # Initialize repair tracking metadata
+    repair_metadata = {
+        "repair_attempted": False,
+        "original_invalid_label": None,
+        "repair_succeeded": None,
+        "label_source": "original",
+        "fallback_label": None,
+        "repair_error": None,
+        "json_parse_repair_attempted": False,
+        "json_parse_repair_succeeded": False,
+    }
+
     try:
         parsed = _extract_json_object(content)
+        repair_metadata["json_parse_repair_attempted"] = False
+        repair_metadata["json_parse_repair_succeeded"] = True
     except Exception:
+        # JSON parsing failed - attempt to repair
+        repair_metadata["json_parse_repair_attempted"] = True
         if is_multilabel:
             repair_prompt = (
                 "You previously returned an invalid label.\n"
@@ -431,19 +447,42 @@ def classify_single(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": repair_prompt},
         ]
-        repaired = _call_llm(repair_messages, model=model)
-        parsed = _extract_json_object(repaired)
+        try:
+            repaired = _call_llm(repair_messages, model=model)
+            parsed = _extract_json_object(repaired)
+            repair_metadata["json_parse_repair_succeeded"] = True
+        except Exception as repair_error:
+            # JSON repair also failed - use fallback
+            repair_metadata["json_parse_repair_succeeded"] = False
+            repair_metadata["repair_error"] = f"JSON parse repair failed: {repair_error}"
+            top_label = retrieved[0][0].label
+            repair_metadata["label_source"] = "fallback"
+            repair_metadata["fallback_label"] = top_label
+            logger.warning(
+                "Failed to extract JSON from LLM response after repair attempt, using fallback"
+            )
+            return {
+                "label": top_label,
+                "confidence": 0.5,
+                "allowed_labels": allowed_labels,
+                "shots_used": len(retrieved),
+                "repair_metadata": repair_metadata,
+            }
 
     label = parsed.get("label")
+
     if label is None:
         # Fallback to top retrieved label if parsing failed
         top_label = retrieved[0][0].label
         logger.warning("Failed to extract label from LLM response, using fallback")
+        repair_metadata["label_source"] = "fallback"
+        repair_metadata["fallback_label"] = top_label
         return {
             "label": top_label,
             "confidence": 0.5,
             "allowed_labels": allowed_labels,
             "shots_used": len(retrieved),
+            "repair_metadata": repair_metadata,
         }
 
     # Normalize the returned label for comparison
@@ -452,6 +491,10 @@ def classify_single(
     # Check if normalized label matches any allowed label
     if normalized_label not in normalized_to_original:
         # Try to repair: ask LLM to fix the label
+        repair_metadata["repair_attempted"] = True
+        repair_metadata["original_invalid_label"] = str(label)
+        repair_metadata["label_source"] = "fallback"  # Default, will be updated if repair succeeds
+
         if is_multilabel:
             repair_label_prompt = (
                 f"You returned label '{label}' which is not in the allowed set.\n"
@@ -483,10 +526,15 @@ def classify_single(
                 # Repair succeeded
                 original_label = normalized_to_original[repaired_normalized]
                 parsed["label"] = original_label
+                repair_metadata["repair_succeeded"] = True
+                repair_metadata["label_source"] = "repaired"
                 logger.info(f"Successfully repaired invalid label '{label}' to '{original_label}'")
             else:
                 # Repair failed, use fallback
                 top_label = retrieved[0][0].label
+                repair_metadata["repair_succeeded"] = False
+                repair_metadata["label_source"] = "fallback"
+                repair_metadata["fallback_label"] = top_label
                 logger.warning(
                     f"Invalid label '{label}' not in allowed set {allowed_labels}. "
                     f"Repair attempt also failed. Using fallback label '{top_label}' "
@@ -496,6 +544,10 @@ def classify_single(
         except Exception as e:
             # Repair attempt failed, use fallback
             top_label = retrieved[0][0].label
+            repair_metadata["repair_succeeded"] = False
+            repair_metadata["label_source"] = "fallback"
+            repair_metadata["fallback_label"] = top_label
+            repair_metadata["repair_error"] = str(e)
             logger.warning(
                 f"Invalid label '{label}' not in allowed set {allowed_labels}. "
                 f"Repair attempt failed: {e}. Using fallback label '{top_label}' "
@@ -505,6 +557,7 @@ def classify_single(
     else:
         # Use the original (correctly formatted) label from allowed_labels
         original_label = normalized_to_original[normalized_label]
+        repair_metadata["label_source"] = "original"
 
     try:
         confidence = float(parsed.get("confidence", 0.0))
@@ -515,6 +568,7 @@ def classify_single(
     parsed["confidence"] = max(0.0, min(1.0, confidence))
     parsed["allowed_labels"] = allowed_labels
     parsed["shots_used"] = len(retrieved)
+    parsed["repair_metadata"] = repair_metadata
     return parsed
 
 
@@ -631,6 +685,8 @@ class RagLLM(RagClassifierBase):
         self.examples = retriever.examples
         self.label_defs = label_defs or {}
         self.prompt_style = prompt_style
+        # Store repair metadata for each prediction
+        self._repair_metadata: list[dict[str, Any]] = []
 
     @classmethod
     def load_default(
@@ -692,6 +748,9 @@ class RagLLM(RagClassifierBase):
         method_logger = get_method_logger()
         results: list[str] = []
 
+        # Clear repair metadata from previous predictions
+        self._repair_metadata = []
+
         # Log model call start (only for batches)
         if len(docs) > 1:
             logger.info(f"Starting classification with {self.model} for {len(docs)} documents")
@@ -710,7 +769,7 @@ class RagLLM(RagClassifierBase):
             else docs
         )
 
-        for doc in iterator:
+        for idx, doc in enumerate(iterator):
             try:
                 result = classify_single(
                     model=self.model,
@@ -722,10 +781,29 @@ class RagLLM(RagClassifierBase):
                     prompt_style=self.prompt_style,
                 )
                 prediction = result["label"]
+
+                # Build metadata including repair information
+                metadata = {
+                    "confidence": result.get("confidence"),
+                    "model": self.model,
+                }
+                # Get repair metadata (always present in result)
+                repair_meta = result.get("repair_metadata", {})
+                metadata["repair_metadata"] = repair_meta
+                # Store repair metadata for saving to output folder (for all predictions)
+                self._repair_metadata.append(
+                    {
+                        "index": idx,
+                        "document": doc,
+                        "predicted_label": prediction,
+                        "repair_metadata": repair_meta,
+                    }
+                )
+
                 method_logger.log_prediction(
                     input=doc,
                     output=prediction,
-                    metadata={"confidence": result.get("confidence"), "model": self.model},
+                    metadata=metadata,
                 )
                 results.append(prediction)
             except Exception as e:  # pragma: no cover - defensive logging
@@ -747,6 +825,19 @@ class RagLLM(RagClassifierBase):
             logger.info(f"Completed classification: {len(results)} predictions")
 
         return results
+
+    def get_repair_metadata(self) -> list[dict[str, Any]]:
+        """Get repair metadata collected during the last predict() call.
+
+        Returns:
+            List of dictionaries containing repair metadata for each prediction.
+            Each entry contains:
+            - index: Index of the document in the input sequence
+            - document: The input document text
+            - predicted_label: The final predicted label
+            - repair_metadata: Dictionary with repair details
+        """
+        return self._repair_metadata.copy()
 
     @log_method()
     def predict_proba(self, docs: Sequence[str], **kwargs: Any) -> np.ndarray:
