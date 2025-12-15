@@ -21,68 +21,218 @@ Automated intent classification supporting:
 uv sync --extra all
 
 # Run end-to-end pipeline (single-label)
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run python scripts/pipeline/run_all.py
 
 # Run end-to-end pipeline (multi-label)
-uv run python scripts/pipeline/run_all.py --config config/dataset/nlu_plus/tiny.yaml
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run python scripts/pipeline/run_all.py
 ```
 
 Datasets download automatically from HuggingFace/GitHub. The pipeline trains models, generates predictions, and evaluates performance.
 
-## Documentation
+### Using Configuration Files
 
-- [Installation](docs/installation.md) - Setup and dependencies
-- [Pipeline](docs/pipeline.md) - Pipeline steps and data flow
-- [Algorithms](docs/algorithms.md) - Model implementations
-- [Configuration](docs/configuration.md) - Config files and settings
-- [Running Experiments](docs/running_experiments.md) - How to run experiments
-- [Development](docs/development.md) - Development setup
+All commands that support configuration can use the `CONFIG_FILE` environment variable:
 
+```bash
+# Train models (same as run_all.py)
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run intent-train
+
+# Run with hyperparameter tuning
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run intent-train --tune
+
+# Serve API with specific config and experiment output
+EXPERIMENT_NAME="multilabel/nlu_plus/tiny" \
+  CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+  uv run api-serve --host 0.0.0.0 --port 8000
+
+# Once running, you can test it with:
+#   curl http://localhost:8000/health
+#   curl http://localhost:8000/ready
+#   curl http://localhost:8000/v1/models
+#
+# And make a prediction (example using the Linear SVM model):
+#   curl -X POST http://localhost:8000/v1/predict \
+#     -H "Content-Type: application/json" \
+#     -d '{"model_id": "linear_svm", "text": "what is my account balance?"}'
+#
+# Or open http://localhost:8000/docs in your browser for the interactive UI.
+
+# Hyperparameter tuning (uses --config flag, tunes all models by default)
+uv run intent-tune --config config/dataset/nlu_plus/tiny.yaml
+```
+
+## Project Structure
+
+```
+multi-model-intent-classifier/
+├── intent_classifier/          # Core package
+│   ├── algorithms/             # Model implementations
+│   ├── api/                    # FastAPI server
+│   ├── cli/                    # CLI commands (classify, rag)
+│   ├── datasets/               # Dataset loaders
+│   ├── evaluation/             # Evaluation metrics and visualization
+│   ├── pipeline/               # Training pipeline orchestrator
+│   ├── prediction/             # Prediction interfaces
+│   ├── rag/                    # RAG implementations
+│   └── utils/                  # Shared utilities
+├── scripts/                    # Utility scripts
+│   ├── demos/                  # Interactive demos
+│   ├── dev/                    # Development utilities
+│   └── pipeline/               # Pipeline step scripts
+├── config/                     # Configuration files
+│   ├── dataset/               # Dataset configurations
+│   └── algorithm/             # Model configurations
+├── tests/                      # Test suite
+└── docs/                       # Documentation
+```
 
 ## Commands
 
 ### Classify via CLI
 
 ```bash
-# Single-label
-uv run intent-classify --model-path output/experiment/models/Linear\ SVM/ --text "what's my account balance?"
+# Single-label (CLINC150 tiny, Linear SVM)
+uv run intent-classify \
+  --model-path "output/singlelabel/clinc150/tiny/models/Linear SVM/" \
+  --text "what's my account balance?"
 
-# Multi-label
-uv run intent-classify --model-path output/experiment_nlu_plus/models/Linear\ SVM/ --text "check my account balance and transfer money"
+# Multi-label (NLU+ tiny, RAG-CentroidNN)
+uv run intent-classify \
+  --model-path "output/multilabel/nlu_plus/tiny/models/RAG-CentroidNN/" \
+  --text "check my balance and block my card"
 ```
 
-### Train Models
+See [Classification CLI](docs/classification.md) for all options and examples (JSON/text output, batch mode, direct `.pkl` paths, and more).
+
+### RAG-LLM Classification (Exploration CLI)
+
+`rag-explore` is an **exploratory RAG‑LLM CLI**: it reloads training examples and label
+definitions from the current dataset configuration and `config/llm_config.yaml` on
+each run, so you can quickly try different providers, models, retrieval sizes, and
+prompt styles **before** baking those choices into your training config.
 
 ```bash
-# Single-label
-uv run intent-train --config config/dataset/clinc150/tiny.yaml
+# Prerequisite: run the multi-label pipeline for NLU+ tiny config
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run python scripts/pipeline/run_all.py
 
-# Multi-label
-uv run intent-train --config config/dataset/nlu_plus/tiny.yaml
+# Using Ollama (default provider) with training config defaults
+# - Endpoint/model come from config/llm_config.yaml and the dataset config used for training
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run rag-explore --provider ollama --model qwen2.5:14b --k 10 --prompt-style short --text "reset my card pin"
+
+# Using OpenAI with default prompt
+export OPENAI_API_KEY=sk-...
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run rag-explore --provider openai --model gpt-4o-mini --k 10 --text "reset my card pin"
+
+# Using n8n prompt style (Catalan, email cleaning) with Ollama
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run rag-explore --provider ollama --model qwen2.5:14b --k 10 --prompt-style n8n_prompt --text "reset my card pin"
 ```
+
+The `rag-explore` command accepts:
+- `--provider`: LLM provider (`openai` or `ollama`, default: `ollama`)
+- `--model`: LLM model identifier (e.g., `gpt-4o-mini` for OpenAI, `llama3.1:8b` for Ollama)
+- `--k`: Number of similar examples to retrieve (default: 10)
+- `--prompt-style`: Prompt style (`default`, `short`, or `n8n_prompt`, default: `default`)
+  - `default`: Full detailed prompt with all instructions
+  - `short`: Concise prompt for faster/cheaper inference
+  - `n8n_prompt`: Email cleaning + classification prompt (Catalan)
+- `--text`: Text to classify
+
+### Training & Hyperparameter Tuning
+
+The main README shows the basic training and tuning commands in **Quickstart** and **Using Configuration Files**.
+For all training options, experiment flows, and Ray Tune configuration details, see:
+- [Running Experiments](docs/running_experiments.md)
+- [Hyperparameter Tuning](docs/hyperparameter_tuning.md)
 
 ### Serve API
 
 ```bash
-# Install API dependencies
+# Install API dependencies (required before first use)
 uv sync --extra api
 
-# Start server
+# Start server (single-label)
 CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run api-serve --host 0.0.0.0 --port 8000
+
+# Start server (multi-label)
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run api-serve --host 0.0.0.0 --port 8000
+```
+
+The server will:
+- Load models from `output/{label_type}/{dataset_name}/{config_name}/models/`
+- Start on `http://0.0.0.0:8000`
+- Provide interactive API docs at `http://localhost:8000/docs`
+- Enable CORS and rate limiting (100 requests per 60s)
+
+**Testing the API:**
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Check if ready (shows number of models loaded)
+curl http://localhost:8000/ready
+
+# List available models
+curl http://localhost:8000/v1/models
+
+# Get model details
+curl http://localhost:8000/v1/models/Linear%20SVM
+
+# Make a prediction
+curl -X POST http://localhost:8000/v1/predict \
+  -H "Content-Type: application/json" \
+  -d '{"model_id": "Linear SVM", "text": "what is my account balance?"}'
+
+# Interactive API documentation
+# Open in browser: http://localhost:8000/docs
 ```
 
 ### Run Demos
 
+The demos provide Gradio-based UIs for exploring the trained models and embeddings.
+They require the `ui` extra (or `all`) and a completed pipeline run so models and
+embeddings exist under `output/` and `embeddings/`:
+
 ```bash
-# Intent classifier demo
+# Install UI dependencies once (if you didn’t use --extra all)
+uv sync --extra ui
+
+# Intent classifier demo – interactive intent classification & RAG over trained models
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+MODELS_PATH=output/multilabel/nlu_plus/tiny/models \
+EMBEDDINGS_PATH=output/multilabel/nlu_plus/tiny/embeddings \
 uv run python scripts/demos/intent_classifier_demo.py
 
-# Semantic search demo
+# Semantic search demo – semantic search over CLINC150 utterances using FAISS + SBERT
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+EMBEDDINGS_PATH=output/multilabel/nlu_plus/tiny/embeddings \
 uv run python scripts/demos/semantic_search_demo.py
 
-# Intent trend analyzer
+# Intent trend analyzer – LLM‑based trend analysis over retrieved similar utterances
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+EMBEDDINGS_PATH=output/multilabel/nlu_plus/tiny/embeddings \
 uv run python scripts/demos/intent_trend_analyzer.py
 ```
+
+### Development Utilities
+
+Development and testing utilities are available in `scripts/dev/`:
+
+```bash
+# Test single-label classification
+uv run python scripts/dev/test_single_label.py
+
+# Test multi-label classification
+uv run python scripts/dev/test_multi_label.py
+
+# Test LLM connections
+uv run python scripts/dev/test_llm_connection.py
+
+# Check configuration loaders
+uv run python scripts/dev/check_config_loaders.py
+```
+
+See `scripts/dev/README.md` for a complete list of development utilities.
 
 ## Models
 
@@ -106,10 +256,10 @@ See [Algorithms](docs/algorithms.md) for details.
 
 ```bash
 # Single-label
-uv run intent-train --config config/dataset/clinc150/tiny.yaml
+CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run intent-train
 
 # Multi-label
-uv run intent-train --config config/dataset/nlu_plus/tiny.yaml
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml uv run intent-train
 ```
 
 Enable/disable models in `config/algorithm/models_config.yaml`. See [Configuration](docs/configuration.md) for details.
@@ -142,3 +292,14 @@ uv run pytest -q
 # Run specific test
 uv run pytest tests/test_algorithms.py -q
 ```
+
+## Documentation
+
+- [Installation](docs/installation.md) - Setup and dependencies
+- [Pipeline](docs/pipeline.md) - Pipeline steps and data flow
+- [Algorithms](docs/algorithms.md) - Model implementations
+- [Classification CLI](docs/classification.md) - CLI usage and examples
+- [Configuration](docs/configuration.md) - Config files and settings
+- [Running Experiments](docs/running_experiments.md) - How to run experiments
+- [Hyperparameter Tuning](docs/hyperparameter_tuning.md) - Hyperparameter optimization with Ray Tune
+- [Development](docs/development.md) - Development setup

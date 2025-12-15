@@ -1,4 +1,4 @@
-"""Tests for the FastAPI service in `scripts.api.main_api`.
+"""Tests for the FastAPI service in `intent_classifier.api.server`.
 
 If FastAPI is not installed (i.e., API extras not installed), this module is skipped.
 """
@@ -14,15 +14,15 @@ try:
 except ImportError:  # pragma: no cover
     pytest.skip("fastapi not installed; skipping API tests", allow_module_level=True)
 
-from scripts.api.main_api import MODELS_INFO, app
+from intent_classifier.api.server import MODELS_INFO, app
 
 
 @pytest.fixture
 def client(monkeypatch: Any) -> TestClient:
     """Create a TestClient with a stubbed `_get_model` to avoid loading real models."""
 
-    from scripts import api as api_pkg  # noqa: F401
-    from scripts.api import main_api as main_api_module
+    from intent_classifier import api as api_pkg  # noqa: F401
+    from intent_classifier.api import server as server_module
 
     class DummyModel:  # pylint: disable=missing-class-docstring
         def __init__(self) -> None:
@@ -39,7 +39,7 @@ def client(monkeypatch: Any) -> TestClient:
     def fake_get_model(model_identifier: str) -> Any:
         return DummyModel()
 
-    monkeypatch.setattr(main_api_module, "_get_model", fake_get_model)
+    monkeypatch.setattr(server_module, "_get_model", fake_get_model)
 
     return TestClient(app)
 

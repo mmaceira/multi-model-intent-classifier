@@ -5,13 +5,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
-# Import path utilities
-from intent_classifier.utils.paths import get_repo_root
+import cloudpickle
 
-# Add project root to path
-repo_root = get_repo_root()
-sys.path.insert(0, str(repo_root))
+from intent_classifier.utils.label_utils import is_multilabel
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -55,7 +53,7 @@ Examples:
     return parser
 
 
-def get_model_labels(model) -> list:
+def get_model_labels(model: object) -> list[str]:
     """Extract label names from a model.
 
     Args:
@@ -76,7 +74,7 @@ def get_model_labels(model) -> list:
     return []
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     # Import heavy dependencies inside function for fast --help
     parser = build_arg_parser()
@@ -102,16 +100,12 @@ def main():
     try:
         # Try to load as a direct model file first
         if model_path.is_file():
-            import cloudpickle
-
             with open(model_path, "rb") as f:
                 model = cloudpickle.load(f)
         else:
             # Try loading as a model directory (e.g., "Linear SVM/model.pkl")
             model_file = model_path / "model.pkl"
             if model_file.exists():
-                import cloudpickle
-
                 with open(model_file, "rb") as f:
                     model = cloudpickle.load(f)
             else:
@@ -145,26 +139,51 @@ def main():
     try:
         predictions = model.predict(texts)
 
+        # Detect if model is multi-label
+        is_multilabel_model = False
+        if hasattr(model, "_is_multilabel"):
+            is_multilabel_model = bool(getattr(model, "_is_multilabel", False))
+        elif len(predictions) > 0:
+            # Detect from prediction format
+            is_multilabel_model = is_multilabel(predictions)
+
         # Get probabilities if available
-        probas_list = None
+        probas_list: list[dict[str, float]] | None = None
         labels = get_model_labels(model)
 
         if hasattr(model, "predict_proba"):
             try:
-                probas_array = model.predict_proba(texts)
-                if probas_array is not None and probas_array.shape[0] > 0:
+                probas_raw = model.predict_proba(texts)
+
+                # Handle different probability formats
+                if isinstance(probas_raw, list):
+                    # Multi-label: list of arrays (one per label)
                     probas_list = []
                     for i in range(len(texts)):
-                        if labels and len(labels) == probas_array.shape[1]:
-                            probas = {
-                                label: float(probas_array[i, j]) for j, label in enumerate(labels)
-                            }
-                        else:
-                            probas = {
-                                f"class_{j}": float(probas_array[i, j])
-                                for j in range(probas_array.shape[1])
-                            }
+                        probas = {}
+                        for j, label in enumerate(labels):
+                            if j < len(probas_raw):
+                                # Get probability of positive class
+                                if probas_raw[j].shape[1] > 1:
+                                    probas[label] = float(probas_raw[j][i, 1])
+                                else:
+                                    probas[label] = float(probas_raw[j][i, 0])
                         probas_list.append(probas)
+                elif probas_raw is not None and hasattr(probas_raw, "shape"):
+                    # Single-label: 2D array (n_samples, n_classes)
+                    if probas_raw.shape[0] > 0:
+                        probas_list = []
+                        for i in range(len(texts)):
+                            if labels and len(labels) == probas_raw.shape[1]:
+                                probas = {
+                                    label: float(probas_raw[i, j]) for j, label in enumerate(labels)
+                                }
+                            else:
+                                probas = {
+                                    f"class_{j}": float(probas_raw[i, j])
+                                    for j in range(probas_raw.shape[1])
+                                }
+                            probas_list.append(probas)
             except Exception:
                 pass
 
@@ -172,32 +191,78 @@ def main():
         if args.output == "json":
             if len(texts) == 1:
                 # Single prediction
-                output = {
-                    "label": predictions[0],
-                    "confidence": None,
-                }
-                if probas_list and probas_list[0]:
-                    # Get confidence from top probability
-                    top_prob = max(probas_list[0].values())
-                    output["confidence"] = top_prob
-                    output["probabilities"] = probas_list[0]
+                pred = predictions[0]
+                output: dict[str, Any]
+                if is_multilabel_model:
+                    # Multi-label: pred is a list
+                    if not isinstance(pred, (list, tuple)):
+                        pred = [pred] if pred else []
+                    output = {
+                        "labels": list(pred),
+                        "confidence": None,
+                    }
+                    if probas_list and probas_list[0]:
+                        # Get confidence from top probability
+                        top_prob = max(probas_list[0].values())
+                        probas_json = {str(k): float(v) for k, v in probas_list[0].items()}
+                        output["confidence"] = float(top_prob)
+                        output["probabilities"] = probas_json
+                else:
+                    # Single-label: pred is a string
+                    output = {
+                        "label": str(pred),
+                        "confidence": None,
+                    }
+                    if probas_list and probas_list[0]:
+                        # Get confidence from top probability
+                        top_prob = max(probas_list[0].values())
+                        # Normalize probability keys/values to JSON-safe types
+                        probas_json = {str(k): float(v) for k, v in probas_list[0].items()}
+                        output["confidence"] = float(top_prob)
+                        output["probabilities"] = probas_json
                 print(json.dumps(output, ensure_ascii=False, indent=2))
             else:
                 # Batch predictions
-                results = []
+                results: list[dict[str, Any]] = []
                 for i, (text, pred) in enumerate(zip(texts, predictions, strict=False)):
-                    result = {"text": text, "label": pred, "confidence": None}
+                    if is_multilabel_model:
+                        # Multi-label: pred is a list
+                        if not isinstance(pred, (list, tuple)):
+                            pred = [pred] if pred else []
+                        result: dict[str, Any] = {
+                            "text": text,
+                            "labels": list(pred),
+                            "confidence": None,
+                        }
+                    else:
+                        # Single-label: pred is a string
+                        result = {"text": text, "label": str(pred), "confidence": None}
+
                     if probas_list and probas_list[i]:
                         top_prob = max(probas_list[i].values())
-                        result["confidence"] = top_prob
-                        result["probabilities"] = probas_list[i]
+                        probas_json = {str(k): float(v) for k, v in probas_list[i].items()}
+                        result["confidence"] = float(top_prob)
+                        result["probabilities"] = probas_json
                     results.append(result)
                 print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
             # Text output
             for i, (text, pred) in enumerate(zip(texts, predictions, strict=False)):
                 print(f"Text: {text}")
-                print(f"Label: {pred}")
+                if is_multilabel_model:
+                    # Multi-label: pred is a list
+                    if not isinstance(pred, (list, tuple)):
+                        pred = [pred] if pred else []
+                    if len(pred) == 0:
+                        print("Labels: []")
+                    elif len(pred) == 1:
+                        print(f"Label: {pred[0]}")
+                    else:
+                        print(f"Labels: {', '.join(str(p) for p in pred)}")
+                else:
+                    # Single-label: pred is a string
+                    print(f"Label: {pred}")
+
                 if probas_list and probas_list[i]:
                     print("Top Probabilities:")
                     sorted_probas = sorted(probas_list[i].items(), key=lambda x: x[1], reverse=True)

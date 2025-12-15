@@ -33,7 +33,7 @@ from sklearn.svm import LinearSVC
 from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg
 from intent_classifier.algorithms.transformer_logreg import TransformerLogReg
 from intent_classifier.datasets.dataset import get_dataset
-from intent_classifier.rag import _OPENAI_DIR, _SBERT_DIR, load_centroid, load_kmajority, load_llm
+from intent_classifier.rag import get_index_paths, load_centroid, load_kmajority, load_llm
 from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
 from intent_classifier.rag.vector_store import VectorStore
 
@@ -153,12 +153,11 @@ def ensure_embeddings_built(
     Returns:
         True if embeddings exist or were built successfully
     """
-    if use_openai:
-        index_path = _OPENAI_DIR / "index.faiss"
-        meta_path = _OPENAI_DIR / "meta.jsonl"
-    else:
-        index_path = _SBERT_DIR / "index.faiss"
-        meta_path = _SBERT_DIR / "meta.jsonl"
+    # Resolve index/meta paths using current RAG configuration.
+    # This respects EMBEDDINGS_DIR / RAG_EMBEDDINGS_DIR and any recent calls
+    # to set_artifacts_dir, so tuning uses the same layout as the main pipeline
+    # (e.g. output/experiment_tiny_dataset/embeddings/...).
+    index_path, meta_path = get_index_paths(use_openai=use_openai)
 
     # Check if embeddings already exist
     if index_path.exists() and meta_path.exists() and not force_rebuild:
@@ -214,11 +213,8 @@ def ensure_embeddings_built(
             meta.append({"id": i, "label": label, "text": txt, "vector": vec.tolist()})
 
         print("Building FAISS index...")
-        (
-            _SBERT_DIR.mkdir(parents=True, exist_ok=True)
-            if not use_openai
-            else _OPENAI_DIR.mkdir(parents=True, exist_ok=True)
-        )
+        # Ensure parent directory exists before writing artifacts
+        index_path.parent.mkdir(parents=True, exist_ok=True)
         VectorStore.build(vectors, meta, vectors.shape[1], index_path, meta_path)
         print(f"✅ Embeddings built and saved at {index_path}")
         return True
@@ -253,12 +249,8 @@ def train_rag_kmajority(config: dict[str, Any], data: tuple | None = None) -> No
     # Embeddings should already be built in main() before tuning starts
     # Just verify they exist (they should, since we built them with train-only data)
     use_openai = False  # Using SBERT embeddings for hyperparameter tuning
-    if use_openai:
-        index_path = _OPENAI_DIR / "index.faiss"
-        meta_path = _OPENAI_DIR / "meta.jsonl"
-    else:
-        index_path = _SBERT_DIR / "index.faiss"
-        meta_path = _SBERT_DIR / "meta.jsonl"
+    # Resolve embeddings paths using current RAG configuration
+    index_path, meta_path = get_index_paths(use_openai=use_openai)
 
     if not (index_path.exists() and meta_path.exists()):
         print(f"Warning: Embeddings not found at {index_path}")
@@ -306,12 +298,8 @@ def train_rag_centroid(config: dict[str, Any], data: tuple | None = None) -> Non
     # Embeddings should already be built in main() before tuning starts
     # Just verify they exist (they should, since we built them with train-only data)
     use_openai = False  # Using SBERT embeddings for hyperparameter tuning
-    if use_openai:
-        index_path = _OPENAI_DIR / "index.faiss"
-        meta_path = _OPENAI_DIR / "meta.jsonl"
-    else:
-        index_path = _SBERT_DIR / "index.faiss"
-        meta_path = _SBERT_DIR / "meta.jsonl"
+    # Resolve embeddings paths using current RAG configuration
+    index_path, meta_path = get_index_paths(use_openai=use_openai)
 
     if not (index_path.exists() and meta_path.exists()):
         print(f"Warning: Embeddings not found at {index_path}")
@@ -459,12 +447,8 @@ def train_rag_llm(config: dict[str, Any], data: tuple | None = None) -> None:
     # Embeddings should already be built in main() before tuning starts
     # Just verify they exist (they should, since we built them with train-only data)
     use_openai = False  # Using SBERT embeddings for hyperparameter tuning
-    if use_openai:
-        index_path = _OPENAI_DIR / "index.faiss"
-        meta_path = _OPENAI_DIR / "meta.jsonl"
-    else:
-        index_path = _SBERT_DIR / "index.faiss"
-        meta_path = _SBERT_DIR / "meta.jsonl"
+    # Resolve embeddings paths using current RAG configuration
+    index_path, meta_path = get_index_paths(use_openai=use_openai)
 
     if not (index_path.exists() and meta_path.exists()):
         print(f"Warning: Embeddings not found at {index_path}")

@@ -175,7 +175,7 @@ class PipelineOrchestrator:
                     print("\n⚠️  No hyperparameters returned from tuning")
             except ImportError:
                 print("⚠️  Warning: Hyperparameter tuning module not available")
-                print("   Install with: pip install -e '.[tune]'")
+                print('   Install with: uv pip install "ray[tune]>=2.0,<3"')
             except Exception as e:
                 print(f"\n❌ Hyperparameter tuning failed: {e}")
                 print("   Continuing with default hyperparameters...")

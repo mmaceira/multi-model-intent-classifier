@@ -35,6 +35,8 @@ import yaml
 from litellm import completion
 from sentence_transformers import SentenceTransformer
 
+from intent_classifier.utils.paths import get_config_path
+
 # Configure logging
 logging.basicConfig(
     format="%(levelname)s | %(message)s",
@@ -45,8 +47,9 @@ logging.basicConfig(
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
+# Use centralized path resolution so both "config/..." and absolute paths work.
 config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
-config_path = project_root / "config" / config_file
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -70,13 +73,16 @@ run_name = config["general"]["run_name"]
 embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
 embeddings_path = str(project_root / embeddings_path)
 
+# Allow overriding the embeddings root when launching the demo
+EMBEDDINGS_ROOT = os.environ.get("EMBEDDINGS_PATH", embeddings_path)
+
 # Default configuration
 DEFAULT_CONFIG = {
     "model_name": config.get("model", {}).get(
         "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
     ),
-    "index_path": str(Path(embeddings_path) / "sbert" / "index.faiss"),
-    "meta_path": str(Path(embeddings_path) / "sbert" / "meta.jsonl"),
+    "index_path": str(Path(EMBEDDINGS_ROOT) / "sbert" / "index.faiss"),
+    "meta_path": str(Path(EMBEDDINGS_ROOT) / "sbert" / "meta.jsonl"),
     "top_k": 5,
     "max_tokens": 512,
     "relevance_labels": ("high", "medium", "low"),

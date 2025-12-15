@@ -2,6 +2,7 @@ import logging
 import os
 import uuid
 from collections import OrderedDict, defaultdict
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -9,7 +10,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 # Import unified model loader
@@ -55,7 +56,9 @@ RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))  # seconds
 
 
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
+async def rate_limit_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Simple rate limiting middleware."""
     # Skip rate limiting for health/ready endpoints
     if request.url.path in ["/health", "/ready", "/metrics"]:
@@ -206,28 +209,61 @@ EMBEDDINGS_DIR = get_embeddings_dir(experiment_name) if experiment_name else get
 logger.info(f"Using models directory: {MODELS_DIR}")
 logger.info(f"Using embeddings directory: {EMBEDDINGS_DIR}")
 
-# Model info mapping
+# Model info mapping (keep in sync with config/algorithm/models_config.yaml)
 MODELS_INFO = {
+    # Text classification models
     "naive_bayes": {"name": "Naive Bayes", "dir": "Naive Bayes", "type": "classifier"},
     "linear_svm": {"name": "Linear SVM", "dir": "Linear SVM", "type": "classifier"},
-    "tfidf_svm": {"name": "TF-IDF + SVM", "dir": "TF-IDF bigrams + SVM", "type": "classifier"},
-    "minilm_logreg": {"name": "MiniLM + LogReg", "dir": "MiniLM + LogReg", "type": "classifier"},
-    "rag_centroid": {"name": "RAG CentroidNN", "dir": "RAG-CentroidNN", "type": "rag"},
-    "rag_kmajority": {"name": "RAG k-Majority", "dir": "RAG-kMajority", "type": "rag"},
+    "linear_svm_bigrams": {
+        "name": "TF-IDF bigrams + SVM",
+        "dir": "TF-IDF bigrams + SVM",
+        "type": "classifier",
+    },
+    "transformer_logreg": {
+        "name": "MiniLM + LogReg",
+        "dir": "MiniLM + LogReg",
+        "type": "classifier",
+    },
+    "embedding_logreg": {
+        "name": "Embedding + LogReg",
+        "dir": "Embedding + LogReg",
+        "type": "classifier",
+    },
+    # RAG-based models
+    "rag_kmajority": {
+        "name": "RAG-kMajority",
+        "dir": "RAG-kMajority",
+        "type": "rag",
+    },
+    "rag_centroid": {
+        "name": "RAG-CentroidNN",
+        "dir": "RAG-CentroidNN",
+        "type": "rag",
+    },
     "rag_llm_local": {
-        "name": "RAG LLM (Local)",
-        "dir": "RAG-LLM (local-embeddings)",
+        "name": "RAG-LLM (local-embeddings, default prompt)",
+        "dir": "RAG-LLM (local-embeddings, default prompt)",
+        "type": "rag",
+    },
+    "rag_llm_local_short": {
+        "name": "RAG-LLM (local-embeddings, short prompt)",
+        "dir": "RAG-LLM (local-embeddings, short prompt)",
+        "type": "rag",
+    },
+    "rag_llm_local_n8n": {
+        "name": "RAG-LLM (local-embeddings, n8n prompt)",
+        "dir": "RAG-LLM (local-embeddings, n8n prompt)",
         "type": "rag",
     },
     "rag_llm_openai": {
-        "name": "RAG LLM (OpenAI)",
+        "name": "RAG-LLM (OpenAI-embeddings)",
         "dir": "RAG-LLM (OpenAI-embeddings)",
         "type": "rag",
     },
 }
 
 
-def _get_model(model_identifier: str):
+def _get_model(model_identifier: str) -> Any:
     """Get model from cache or load it with LRU eviction."""
     if model_identifier not in _model_cache:
         logger.info(f"Loading model: {model_identifier}")
@@ -247,7 +283,7 @@ def _get_model(model_identifier: str):
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health():
+async def health() -> HealthResponse:
     """Health check endpoint."""
     return HealthResponse(
         status="healthy",
@@ -257,14 +293,14 @@ async def health():
 
 
 @app.get("/ready", response_model=ReadyResponse)
-async def ready():
+async def ready() -> ReadyResponse:
     """Readiness check endpoint."""
     models_loaded = len(_model_cache)
     return ReadyResponse(ready=True, models_loaded=models_loaded)
 
 
 @app.get("/v1/models", response_model=list[ModelInfo])
-def list_models():
+def list_models() -> list[ModelInfo]:
     """List all available models."""
     models = []
 
@@ -299,7 +335,7 @@ def list_models():
 
 
 @app.get("/v1/models/{model_id}", response_model=ModelDetailResponse)
-def get_model_info(model_id: str):
+def get_model_info(model_id: str) -> ModelDetailResponse:
     """Get detailed information about a specific model."""
     model_info = MODELS_INFO.get(model_id)
     if not model_info:
@@ -337,7 +373,7 @@ def get_model_info(model_id: str):
 
 
 @app.post("/v1/predict", response_model=PredictResponse)
-async def predict(req: PredictRequest, request: Request):
+async def predict(req: PredictRequest, request: Request) -> PredictResponse:
     """Classify text using a specified model."""
     if not req.model_id:
         raise HTTPException(
@@ -448,7 +484,7 @@ async def predict(req: PredictRequest, request: Request):
         ) from e
 
 
-def cli():
+def cli() -> None:
     """CLI entry point for the API server (for console script)."""
     import argparse
 
@@ -488,7 +524,7 @@ def cli():
     )
 
 
-def main():
+def main() -> None:
     """Main entry point for the API server (backward compatibility)."""
     cli()
 

@@ -21,13 +21,13 @@ Key Features:
 
 Usage:
     # Tune all models
-    python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --all
+    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --all
 
     # Tune specific model
-    python scripts/tune_hyperparams.py --config config/config.yaml --algo nb --num-samples 30
+    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
 
     # Tune with custom search space
-    python scripts/tune_hyperparams.py --config config/config.yaml --algo svm --num-samples 50
+    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo svm --num-samples 50
 
 This script follows ML best practices:
 - Uses validation set for hyperparameter selection (not test set)
@@ -37,21 +37,16 @@ This script follows ML best practices:
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import ray
 import yaml
 from ray import tune
 
-# Import path utilities
-from intent_classifier.utils.paths import get_repo_root
-
-# Get repo root and add to path for imports
-repo_root = get_repo_root()
-
-# Import model-specific tuning strategies
-from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
-from intent_classifier.hparam.strategies import (  # noqa: E402
+# Import path utilities and model-specific tuning strategies
+from intent_classifier.datasets.dataset import get_dataset
+from intent_classifier.hparam.strategies import (
     ensure_embeddings_built,
     train_embedding_logreg,
     train_nb,
@@ -62,9 +57,13 @@ from intent_classifier.hparam.strategies import (  # noqa: E402
     train_svm_bigrams,
     train_transformer_logreg,
 )
+from intent_classifier.utils.paths import get_repo_root
+
+# Get repo root
+repo_root = get_repo_root()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Hyperparameter tuning for text classification models"
     )
@@ -167,8 +166,17 @@ def main():
     # Package data as tuple for passing to trials
     data = (X_train, y_train, X_val, y_val, X_test, y_test)
 
-    # Initialize Ray
-    ray.init(ignore_reinit_error=True, include_dashboard=False)
+    # Initialize Ray (deps should already be installed via uv extras)
+    ray.init(
+        ignore_reinit_error=True,
+        include_dashboard=False,
+        runtime_env={
+            # Reuse the current interpreter/venv so workers see installed deps (including ray)
+            "executable": sys.executable,
+            # Avoid shipping large git object blobs when packaging the working dir
+            "excludes": [".git/objects"],
+        },
+    )
 
     results = {}
 

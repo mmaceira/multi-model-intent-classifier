@@ -297,25 +297,54 @@ def load_persisted_model(
     else:
         embeddings_dir = Path(embeddings_dir).resolve()
 
-    # Model info mapping (same as API loader)
+    # Model info mapping (same as API loader, kept in sync with models_config.yaml)
     MODELS_INFO = {
+        # Text classification models
         "naive_bayes": {"name": "Naive Bayes", "dir": "Naive Bayes", "type": "classifier"},
         "linear_svm": {"name": "Linear SVM", "dir": "Linear SVM", "type": "classifier"},
-        "tfidf_svm": {"name": "TF-IDF + SVM", "dir": "TF-IDF bigrams + SVM", "type": "classifier"},
-        "minilm_logreg": {
+        "linear_svm_bigrams": {
+            "name": "TF-IDF bigrams + SVM",
+            "dir": "TF-IDF bigrams + SVM",
+            "type": "classifier",
+        },
+        "transformer_logreg": {
             "name": "MiniLM + LogReg",
             "dir": "MiniLM + LogReg",
             "type": "classifier",
         },
-        "rag_centroid": {"name": "RAG CentroidNN", "dir": "RAG-CentroidNN", "type": "rag"},
-        "rag_kmajority": {"name": "RAG k-Majority", "dir": "RAG-kMajority", "type": "rag"},
+        "embedding_logreg": {
+            "name": "Embedding + LogReg",
+            "dir": "Embedding + LogReg",
+            "type": "classifier",
+        },
+        # RAG-based models
+        "rag_kmajority": {
+            "name": "RAG-kMajority",
+            "dir": "RAG-kMajority",
+            "type": "rag",
+        },
+        "rag_centroid": {
+            "name": "RAG-CentroidNN",
+            "dir": "RAG-CentroidNN",
+            "type": "rag",
+        },
         "rag_llm_local": {
-            "name": "RAG LLM (Local)",
-            "dir": "RAG-LLM (local-embeddings)",
+            "name": "RAG-LLM (local-embeddings, default prompt)",
+            "dir": "RAG-LLM (local-embeddings, default prompt)",
+            "type": "rag",
+        },
+        "rag_llm_local_short": {
+            "name": "RAG-LLM (local-embeddings, short prompt)",
+            "dir": "RAG-LLM (local-embeddings, short prompt)",
+            "type": "rag",
+        },
+        "rag_llm_local_n8n": {
+            "name": "RAG-LLM (local-embeddings, n8n prompt)",
+            "dir": "RAG-LLM (local-embeddings, n8n prompt)",
             "type": "rag",
         },
         "rag_llm_openai": {
-            "name": "RAG LLM (OpenAI)",
+            "name": "RAG-LLM (OpenAI-embeddings)",
             "dir": "RAG-LLM (OpenAI-embeddings)",
             "type": "rag",
         },

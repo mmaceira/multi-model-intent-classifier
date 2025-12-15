@@ -53,13 +53,20 @@ uv run python scripts/demos/intent_trend_analyzer.py
 ### Hyperparameter Tuning
 
 ```bash
-uv run python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --all
+# Tune all models
+uv run intent-tune --config config/dataset/clinc150/tiny.yaml --all
+
+# Tune specific model
+uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
 ```
 
 ## Directories
 
-- **api/**: FastAPI implementation
 - **demos/**: Interactive Gradio demos
 - **pipeline/**: Training pipeline scripts
+
+Note: CLI commands and the API server are now part of the `intent_classifier` package:
+- CLI: `intent_classifier/cli/` (`intent-classify`, `intent-tune`, `rag-explore`)
+- API: `intent_classifier/api/` (`api-serve`)
 
 See individual README files in each directory for details.

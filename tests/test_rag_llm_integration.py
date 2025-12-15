@@ -314,12 +314,12 @@ class TestClassifySingle:
 
 
 class TestCLI:
-    """Test the RAG CLI interface (`scripts/rag_cli.py`)."""
+    """Test the RAG exploration CLI interface (`rag-explore`)."""
 
     def test_cli_help(self) -> None:
         """Test that CLI shows help message."""
         result = subprocess.run(
-            [sys.executable, "scripts/rag_cli.py", "--help"],
+            [sys.executable, "-m", "intent_classifier.cli.rag_explore", "--help"],
             capture_output=True,
             text=True,
             cwd=project_root,
@@ -332,7 +332,7 @@ class TestCLI:
     @patch("intent_classifier.rag.rag_llm.classifier._load_examples")
     def test_cli_basic_execution(self, mock_load: Any, mock_llm: Any, tmp_path: Any) -> None:
         """Test basic CLI execution with mocked dependencies."""
-        from scripts.rag_cli import build_arg_parser, main
+        from intent_classifier.cli.rag_explore import build_arg_parser, main
 
         # Mock data loading
         examples = [
@@ -345,12 +345,6 @@ class TestCLI:
         # Mock LLM
         mock_llm.return_value = '{"label": "weather", "confidence": 0.9}'
 
-        # Create a temporary labels file
-        labels_path = tmp_path / "labels.json"
-        import json as _json
-
-        labels_path.write_text(_json.dumps(label_defs), encoding="utf-8")
-
         # Create args and call main directly (not via subprocess)
         parser = build_arg_parser()
         args = parser.parse_args(
@@ -359,8 +353,6 @@ class TestCLI:
                 "openai",
                 "--model",
                 "gpt-4o-mini",
-                "--labels",
-                str(labels_path),
                 "--k",
                 "5",
                 "--text",
@@ -380,8 +372,6 @@ class TestCLI:
                     args.provider,
                     "--model",
                     args.model,
-                    "--labels",
-                    args.labels,
                     "--k",
                     str(args.k),
                     "--text",
@@ -399,7 +389,7 @@ class TestCLI:
     def test_cli_missing_required_args(self) -> None:
         """Test that missing required arguments cause error."""
         result = subprocess.run(
-            [sys.executable, "scripts/rag_cli.py", "--text", "test"],
+            [sys.executable, "-m", "intent_classifier.cli.rag_explore", "--text", "test"],
             capture_output=True,
             text=True,
             cwd=project_root,

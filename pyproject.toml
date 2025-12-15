@@ -30,10 +30,11 @@ dependencies = [
 ]
 
 [project.scripts]
-intent-train   = "intent_classifier.scripts.pipeline.run_all:main"
-intent-classify= "intent_classifier.scripts.classify_cli:main"
-rag-cli        = "intent_classifier.scripts.rag_cli:main"
-api-serve      = "intent_classifier.scripts.api.main_api:cli"
+intent-train   = "scripts.pipeline.run_all:main"
+intent-classify= "intent_classifier.cli.classify:main"
+intent-tune    = "intent_classifier.cli.tune:main"
+rag-explore    = "intent_classifier.cli.rag_explore:main"
+api-serve      = "intent_classifier.api.server:cli"
 
 [project.optional-dependencies]
 api = [
@@ -44,6 +45,7 @@ api = [
 ui = [
     "gradio>=5,<6",
 ]
+convert = []
 dev = [
     "pre-commit>=3.7,<4",
     "pytest>=8.3,<9",
@@ -55,10 +57,14 @@ dev = [
     "pandas-stubs>=2.2.0,<3",
     "types-tqdm>=4.0.0,<5",
 ]
+tune = [
+    "ray[tune]>=2.0,<3",
+]
 all = [
     "multi-model-intent-classifier[api]",
     "multi-model-intent-classifier[ui]",
     "multi-model-intent-classifier[dev]",
+    "multi-model-intent-classifier[tune]",
 ]
 
 [build-system]
@@ -67,7 +73,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["intent_classifier*"]          # Package owns scripts module path
+include = ["intent_classifier*", "scripts*"]
 exclude = ["tests*", "setup*"]
 
 # ---------- Formatting / Linting ----------
@@ -134,6 +140,8 @@ module = [
   "pydantic", "pydantic.*",
   "yaml", "yaml.*",
   "cloudpickle", "cloudpickle.*",
+  "fastapi", "fastapi.*",
+  "fastapi.middleware.cors", "fastapi.middleware.cors.*",
   "mlflow", "mlflow.*",
   "torch", "torch.*",
   "numpy", "numpy.*",
@@ -149,9 +157,11 @@ module = [
   "dotenv", "dotenv.*",
   "faiss", "faiss.*",
   "openai", "openai.*",
+  "prometheus_fastapi_instrumentator", "prometheus_fastapi_instrumentator.*",
   "sentence_transformers", "sentence_transformers.*",
   "sklearn", "sklearn.*",
   "ray", "ray.*",
+  "uvicorn", "uvicorn.*",
 ]
 ignore_missing_imports = true
 

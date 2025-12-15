@@ -29,11 +29,14 @@ import gradio as gr
 import yaml
 from sentence_transformers import SentenceTransformer
 
+from intent_classifier.utils.paths import get_config_path
+
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
+# Use centralized path resolution so both "config/..." and absolute paths work.
 config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
-config_path = project_root / "config" / config_file
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -56,9 +59,13 @@ def substitute_vars(value: str, cfg: dict) -> str:
 embeddings_path_str = substitute_vars(config["paths"]["embeddings_dir"], config)
 embeddings_path = project_root / embeddings_path_str
 
+# Allow overriding the embeddings root when launching the demo
+_default_embeddings_root = str(embeddings_path)
+EMBEDDINGS_ROOT = os.environ.get("EMBEDDINGS_PATH", _default_embeddings_root)
+
 # Default paths
-DEFAULT_INDEX_PATH = str(embeddings_path / "sbert" / "index.faiss")
-DEFAULT_META_PATH = str(embeddings_path / "sbert" / "meta.jsonl")
+DEFAULT_INDEX_PATH = str(Path(EMBEDDINGS_ROOT) / "sbert" / "index.faiss")
+DEFAULT_META_PATH = str(Path(EMBEDDINGS_ROOT) / "sbert" / "meta.jsonl")
 DEFAULT_MODEL_NAME = config.get("model", {}).get(
     "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
 )

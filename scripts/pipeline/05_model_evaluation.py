@@ -17,11 +17,7 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 # Import config setup
-from config.notebook_setup import (  # noqa: E402
-    PREDICTIONS_DIR,
-    RESULTS_DIR,
-    config_vars,
-)
+from config.notebook_setup import PREDICTIONS_DIR, RESULTS_DIR, config_vars  # noqa: E402
 
 # Import dataset and evaluation modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402

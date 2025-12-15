@@ -36,6 +36,7 @@ import numpy as np
 import yaml
 
 from intent_classifier.utils.model_utils import find_model_file
+from intent_classifier.utils.paths import get_config_path
 
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
@@ -44,8 +45,9 @@ from intent_classifier.utils.model_utils import find_model_file
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
+# Use centralized path resolution so both "config/..." and absolute paths work.
 config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
-config_path = project_root / "config" / config_file
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -69,14 +71,18 @@ run_name = config["general"]["run_name"]
 models_path = substitute_vars(config["paths"]["models_dir"], config)
 embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
 
-# Convert to absolute paths
-DEFAULT_MODELS_PATH = str(project_root / models_path)
-DEFAULT_EMBEDDINGS_PATH = str(project_root / embeddings_path)
+# Convert to absolute paths, but allow environment overrides when launching the demo
+_default_models_path = str(project_root / models_path)
+_default_embeddings_path = str(project_root / embeddings_path)
+
+DEFAULT_MODELS_PATH = os.environ.get("MODELS_PATH", _default_models_path)
+DEFAULT_EMBEDDINGS_PATH = os.environ.get("EMBEDDINGS_PATH", _default_embeddings_path)
 
 # --------------------------------------------------------------------------- #
-# 1. Model‑info table                                                         #
+# 1. Model‑info table (kept in sync with config/algorithm/models_config.yaml) #
 # --------------------------------------------------------------------------- #
 MODELS_INFO = {
+    # Text classification models
     "naive_bayes": {
         "name": "Naive Bayes",
         "description": (
@@ -94,49 +100,69 @@ MODELS_INFO = {
         "dir": "Linear SVM",
         "type": "classifier",
     },
-    "tfidf_svm": {
-        "name": "TF-IDF + SVM",
+    "linear_svm_bigrams": {
+        "name": "TF-IDF bigrams + SVM",
         "description": (
-            "SVM classifier using TF-IDF bigram features. "
-            "Strong performance on intent classification."
+            "Linear SVM trained on TF-IDF bigram features. "
+            "Stronger performance for nuanced intent expressions."
         ),
         "dir": "TF-IDF bigrams + SVM",
         "type": "classifier",
     },
-    "minilm_logreg": {
+    "transformer_logreg": {
         "name": "MiniLM + LogReg",
         "description": (
-            "Transformer embeddings with Logistic Regression. "
-            "Leverages semantic understanding from MiniLM."
+            "MiniLM transformer embeddings with Logistic Regression. "
+            "High-accuracy semantic intent classification."
         ),
         "dir": "MiniLM + LogReg",
         "type": "classifier",
     },
+    "embedding_logreg": {
+        "name": "Embedding + LogReg",
+        "description": (
+            "Generic embedding backend (SBERT/OpenAI) with Logistic Regression. "
+            "Use for flexible, backend-agnostic intent classification."
+        ),
+        "dir": "Embedding + LogReg",
+        "type": "classifier",
+    },
+    # RAG-based models
+    "rag_kmajority": {
+        "name": "RAG-kMajority",
+        "description": "RAG model with k-majority voting to determine the most relevant intents.",
+        "dir": "RAG-kMajority",
+        "type": "rag",
+    },
     "rag_centroid": {
-        "name": "RAG CentroidNN",
+        "name": "RAG-CentroidNN",
         "description": (
             "Retrieval Augmented Generation using centroid-based nearest neighbors search."
         ),
         "dir": "RAG-CentroidNN",
         "type": "rag",
     },
-    "rag_kmajority": {
-        "name": "RAG k-Majority",
-        "description": "RAG model with k-majority voting to determine the most relevant intents.",
-        "dir": "RAG-kMajority",
+    "rag_llm_local": {
+        "name": "RAG-LLM (local-embeddings, default prompt)",
+        "description": "RAG model using local SBERT embeddings and the default LLM prompt.",
+        "dir": "RAG-LLM (local-embeddings, default prompt)",
         "type": "rag",
     },
-    "rag_llm_local": {
-        "name": "RAG LLM (Local)",
-        "description": "RAG model using locally computed embeddings for document retrieval.",
-        "dir": "RAG-LLM (local-embeddings)",
+    "rag_llm_local_short": {
+        "name": "RAG-LLM (local-embeddings, short prompt)",
+        "description": "RAG model using local SBERT embeddings and a concise LLM prompt.",
+        "dir": "RAG-LLM (local-embeddings, short prompt)",
+        "type": "rag",
+    },
+    "rag_llm_local_n8n": {
+        "name": "RAG-LLM (local-embeddings, n8n prompt)",
+        "description": "RAG model using local SBERT embeddings and the n8n-style email prompt.",
+        "dir": "RAG-LLM (local-embeddings, n8n prompt)",
         "type": "rag",
     },
     "rag_llm_openai": {
-        "name": "RAG LLM (OpenAI)",
-        "description": (
-            "RAG model using OpenAI embeddings for improved semantic search capabilities."
-        ),
+        "name": "RAG-LLM (OpenAI-embeddings)",
+        "description": ("RAG model using OpenAI embeddings and an OpenAI LLM for classification."),
         "dir": "RAG-LLM (OpenAI-embeddings)",
         "type": "rag",
     },
@@ -378,11 +404,22 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
 
 
 def _format_top_probas(model, probas: np.ndarray, top: int = 3) -> str:
+    """Return a markdown list of top-k intent names with probabilities."""
     classes = getattr(model, "classes_", None)
     if classes is None:
         return ""
+
+    # Ensure we always work with a list of strings
+    if hasattr(classes, "tolist"):
+        classes = classes.tolist()
+    classes = [str(c) for c in classes]
+
     idx = np.argsort(probas)[-top:][::-1]
-    return "\n".join(f"- {classes[i]}: {probas[i]:.2%}" for i in idx)
+    lines = []
+    for i in idx:
+        label = classes[i] if i < len(classes) else f"class_{i}"
+        lines.append(f"- {label}: {probas[i]:.2%}")
+    return "\n".join(lines)
 
 
 def predict(
@@ -409,49 +446,52 @@ def predict(
     m_type = MODELS_INFO[model_choice]["type"]
     if m_type == "rag":
         # -------- Retrieval‑Augmented Generation ---------------------------- #
-        model["index"]
-        passages: list[str] = model["passages"]
-        clf = model["model"]  # optional
+        passages: list[str] = model.get("passages") or []
+        clf = model.get("model")
 
         # Get classification if available
-        classification = ""
-        if clf is not None:
-            try:
-                if hasattr(clf, "predict"):
-                    label = clf.predict([text])[0]
-                    classification = f"**Predicted intent:** {label}\n\n"
+        result_lines: list[str] = []
+        try:
+            if clf is not None and hasattr(clf, "predict"):
+                raw_pred = clf.predict([text])
+                label = raw_pred[0] if raw_pred is not None else ""
+                # Normalize possible list/array outputs to a single label string
+                if isinstance(label, (list, tuple)):
+                    label = label[0] if label else ""
+                result_lines.append(f"**Predicted intent:** {label}")
 
-                    if hasattr(clf, "predict_proba"):
-                        probas = clf.predict_proba([text])[0]
-                        max_proba = max(probas)
-                        classification += f"**Confidence:** {max_proba:.2%}\n\n"
+                if hasattr(clf, "predict_proba"):
+                    probas = clf.predict_proba([text])[0]
+                    max_proba = float(np.max(probas))
+                    result_lines.append(f"**Confidence:** {max_proba:.2%}")
+                    result_lines.append("")
+                    # Top‑k labeled intents
+                    result_lines.append("**Top predictions:**")
+                    result_lines.append(_format_top_probas(clf, probas, top=3))
+                    result_lines.append("")
+        except Exception as e:  # pragma: no cover - defensive
+            print(f"[predict] RAG classifier failed: {e}")
+            import traceback
 
-                        if hasattr(clf, "classes_"):
-                            classes = clf.classes_
-                            top_indices = probas.argsort()[-3:][::-1]
-
-                            classification += "**Top predictions:**\n"
-                            for idx in top_indices:
-                                classification += f"- {classes[idx]}: {probas[idx]:.2%}\n"
-                            classification += "\n"
-            except Exception as e:
-                print(f"[predict] RAG classifier failed: {e}")
-                import traceback
-
-                traceback.print_exc()
+            traceback.print_exc()
 
         # Get retrieved documents
         retrieved = passages[:top_k] if passages else []
         documents = "\n\n".join(f"• {p[:400]}..." for p in retrieved) or "No documents found."
 
         # Combine classification and documents
-        answer = f"{classification}**Retrieved Similar Utterances:**\n\n{documents}"
-        return answer
+        result_lines.append("**Retrieved Similar Utterances:**")
+        result_lines.append("")
+        result_lines.append(documents)
+        return "\n".join(result_lines)
 
     # -------------------- Plain classification ----------------------------- #
     try:
         pred = model.predict([text])
         label = pred[0] if pred is not None else "unknown"
+        # Normalize potential list/array outputs to a single label string
+        if isinstance(label, (list, tuple)):
+            label = label[0] if label else "unknown"
 
         result_lines = [f"**Predicted intent:** {label}"]
         if hasattr(model, "predict_proba"):
@@ -460,6 +500,7 @@ def predict(
                 probas = probas[0]
                 result_lines.append(f"**Confidence:** {probas.max():.2%}")
                 result_lines.append("")
+                result_lines.append("**Top predictions:**")
                 result_lines.append(_format_top_probas(model, probas, 3))
 
         return "\n".join(result_lines)

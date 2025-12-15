@@ -1,44 +1,45 @@
 #!/usr/bin/env python3
 """
-RAG-LLM Classifier CLI
+RAG-LLM Exploration CLI
 
-This script provides a command-line interface for RAG-LLM classification.
-It uses the shared implementation under intent_classifier.rag.rag_llm.
+This script provides a command-line interface for exploring RAG-LLM behaviour.
+It uses the shared implementation under intent_classifier.rag.rag_llm and
+reloads training examples and label definitions from the current dataset
+configuration on each run.
 """
 
 import argparse
 import json
 import sys
-from pathlib import Path
-
-# Import path utilities
-from intent_classifier.utils.paths import get_repo_root
-
-# Add project root to path so `rag_llm` can be imported when installed or run from source.
-repo_root = get_repo_root()
-sys.path.insert(0, str(repo_root))
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build the argument parser for the RAG-LLM CLI.
+    """Build the argument parser for the RAG-LLM exploration CLI.
 
     Exposed primarily for tests; console scripts should call :func:`main`.
     """
     parser = argparse.ArgumentParser(
-        description="RAG-LLM classifier CLI for intent classification.",
+        description=(
+            "RAG-LLM classifier CLI for intent classification "
+            "(explore retrieval-augmented LLM predictions)."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  # OpenAI\n"
+            "  # OpenAI with default prompt\n"
             "  export OPENAI_API_KEY=sk-...\n"
             "  %(prog)s --provider openai --model gpt-4o-mini "
-            "--labels data/labels.json --k 10 "
-            '--text "reset my card pin"\n\n'
-            "  # Ollama (local)\n"
+            "--k 10 "
+            '--text "reset my card pin"\\n\\n'
+            "  # Ollama with short prompt (faster/cheaper)\n"
             "  export OLLAMA_HOST=http://localhost:11434\n"
             "  %(prog)s --provider ollama --model llama3.1:8b "
-            "--labels data/labels.json --k 10 "
-            '--text "reset my card pin"\n'
+            "--k 10 --prompt-style short "
+            '--text "reset my card pin"\\n\\n'
+            "  # Using n8n prompt style (Catalan, email cleaning)\n"
+            "  %(prog)s --provider ollama --model llama3.1:8b "
+            "--k 10 --prompt-style n8n_prompt "
+            '--text "reset my card pin"\\n'
         ),
     )
     parser.add_argument(
@@ -53,15 +54,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="LLM model identifier (e.g., 'gpt-4o-mini' for OpenAI, 'llama3.1:8b' for Ollama)",
     )
     parser.add_argument(
-        "--labels",
-        required=True,
-        help='Path to JSON file with label definitions (format: {"label_name": "description"})',
-    )
-    parser.add_argument(
         "--k",
         type=int,
         default=10,
         help="Number of similar examples to retrieve (default: 10)",
+    )
+    parser.add_argument(
+        "--prompt-style",
+        choices=["default", "short", "n8n_prompt"],
+        default="default",
+        help=(
+            'Prompt style to use: "default" (full detailed), '
+            '"short" (concise), or "n8n_prompt" '
+            "(email cleaning + classification, Catalan). "
+            "(default: default)"
+        ),
     )
     parser.add_argument(
         "--text",
@@ -72,7 +79,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None):
+def main(argv: list[str] | None = None) -> None:
     """Main CLI entry point."""
     # Import heavy dependencies inside function for fast --help
     parser = build_arg_parser()
@@ -85,29 +92,10 @@ def main(argv: list[str] | None = None):
         print(f"❌ Error: Could not import RAG-LLM implementation: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Load labels from JSON file
-    labels_path = Path(args.labels)
-    if not labels_path.exists():
-        print(f"❌ Error: Labels file not found: {labels_path}", file=sys.stderr)
-        sys.exit(1)
-
+    # Load training examples and label definitions from dataset
     try:
-        with open(labels_path, encoding="utf-8") as f:
-            label_defs = json.load(f)
-        if not isinstance(label_defs, dict):
-            print(
-                "❌ Error: Labels file must contain a JSON object (dict)",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"❌ Error: Invalid JSON in labels file: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    # Load training examples
-    try:
-        examples, _ = _load_examples()
-    except Exception as e:
+        examples, label_defs = _load_examples()
+    except Exception as e:  # pragma: no cover - defensive
         print(f"❌ Error loading training examples: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -133,6 +121,7 @@ def main(argv: list[str] | None = None):
             label_defs=label_defs,
             k=args.k,
             m=4,  # Minimum labels (fixed for now)
+            prompt_style=args.prompt_style,
         )
 
         # Output result as JSON

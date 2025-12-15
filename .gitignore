@@ -128,6 +128,9 @@ config/dataset/*
 logs/
 *.log.*
 
+# Runtime method call and prediction logs
+method_logs/
+
 # Cache
 .cache/
 .mypy_cache/
