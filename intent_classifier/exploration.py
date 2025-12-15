@@ -591,9 +591,21 @@ def comprehensive_analysis(
 
         for class_name in label_names:
             # Filter texts for this class
-            class_texts = [
-                text for text, label in zip(texts, labels, strict=False) if label == class_name
-            ]
+            # Handle both single-label (str) and multi-label (list/str with commas) formats
+            class_texts = []
+            for text, label in zip(texts, labels, strict=False):
+                # Handle multilabel: if label is a list or comma-separated string
+                if isinstance(label, (list, tuple)):
+                    if class_name in label:
+                        class_texts.append(text)
+                elif isinstance(label, str) and "," in label:
+                    # Comma-separated multilabel string
+                    label_set = {tag.strip() for tag in label.split(",") if tag.strip()}
+                    if class_name in label_set:
+                        class_texts.append(text)
+                elif label == class_name:
+                    # Single-label match
+                    class_texts.append(text)
 
             if not class_texts:
                 continue
@@ -629,6 +641,59 @@ def comprehensive_analysis(
             results["advanced_class"] = pd.DataFrame()
 
         if create_csv:
+            # Guard rail: ensure we write at least a header if DataFrame is empty
+            if results["advanced_class"].empty:
+                # Create a proper structure: one row per class with top words
+                # If no class-specific data, create a single info row
+                info_df = pd.DataFrame(
+                    [
+                        {
+                            "class": "__info__",
+                            "word": "No tokens passed the advanced filters",
+                            "count": 0,
+                        }
+                    ]
+                )
+                results["advanced_class"] = info_df
+            else:
+                # Convert the wide format (columns = classes) to long format
+                # Each class column contains strings like "word (count)"
+                long_rows = []
+                for class_name in results["advanced_class"].columns:
+                    words_col = results["advanced_class"][class_name]
+                    for word_str in words_col:
+                        if word_str and word_str.strip():
+                            # Parse "word (count)" format
+                            import re
+
+                            match = re.match(r"^(.+?)\s*\((\d+)\)$", str(word_str))
+                            if match:
+                                word, count_str = match.groups()
+                                long_rows.append(
+                                    {
+                                        "class": class_name,
+                                        "word": word.strip(),
+                                        "count": int(count_str),
+                                    }
+                                )
+                            else:
+                                # Fallback: treat as word without count
+                                long_rows.append(
+                                    {"class": class_name, "word": str(word_str).strip(), "count": 0}
+                                )
+                if long_rows:
+                    results["advanced_class"] = pd.DataFrame(long_rows)
+                else:
+                    # Fallback if parsing fails
+                    results["advanced_class"] = pd.DataFrame(
+                        [
+                            {
+                                "class": "__info__",
+                                "word": "Failed to parse class-specific words",
+                                "count": 0,
+                            }
+                        ]
+                    )
             results["advanced_class"].to_csv(  # type: ignore[attr-defined]
                 os.path.join(output_dir, "advanced_class_words.csv"), index=False
             )

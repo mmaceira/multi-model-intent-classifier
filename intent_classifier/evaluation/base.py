@@ -96,6 +96,17 @@ class BaseEvaluationRunner(ABC):
         artefacts_root: str | Path = "artefacts",
         output_dir: str | Path = "results",
     ) -> dict[str, dict[str, Any]]:
+        """Run evaluations and save results.
+
+        Args:
+            model_names: List of model names to evaluate, dict of models (keys will be used),
+                        or None/empty list to evaluate all models with predictions
+            artefacts_root: Root directory containing prediction files
+            output_dir: Directory to save evaluation results
+
+        Returns:
+            Dictionary mapping model names to their metrics
+        """
         """Compute metrics from persisted predictions and render rich reports.
 
         Args:
@@ -184,7 +195,7 @@ class BaseEvaluationRunner(ABC):
             results[name] = model_results
 
         # Summary & cross-model visualizations
-        self._generate_summary(results, predictions_dict, output_dir, model_names)
+        self._generate_summary(results, predictions_dict, output_dir, model_names, artefacts_root)
 
         return results
 
@@ -274,6 +285,7 @@ class BaseEvaluationRunner(ABC):
         predictions_dict: dict[str, dict[str, pd.DataFrame]],
         output_dir: Path,
         model_names: list[str],
+        artefacts_root: Path | None = None,
     ) -> None:
         """Generate summary tables and cross-model visualizations.
 
@@ -322,3 +334,43 @@ class BaseEvaluationRunner(ABC):
             analyze_text_features(predictions_dict).to_csv(
                 output_dir / "text_features_analysis.csv", index=False
             )
+
+        # Additional analysis for multilabel tasks
+        from intent_classifier.evaluation.metrics import (
+            analyze_coverage_per_label,
+            analyze_label_count_distribution,
+            analyze_optimal_thresholds,
+            analyze_per_bucket_metrics,
+        )
+
+        # Check if this is multilabel by looking at first prediction
+        test_df = predictions_dict[first_model]["test"]
+        if "y_true" in test_df.columns:
+            sample_y_true = str(test_df["y_true"].iloc[0])
+            is_multilabel = "," in sample_y_true or (
+                isinstance(sample_y_true, str) and len(sample_y_true.split(",")) > 1
+            )
+
+            if is_multilabel:
+                # Per-bucket metrics (by number of labels)
+                per_bucket_df = analyze_per_bucket_metrics(predictions_dict)
+                if not per_bucket_df.empty:
+                    per_bucket_df.to_csv(output_dir / "per_label_count_metrics.csv", index=False)
+
+                # Coverage analysis per label
+                coverage_df = analyze_coverage_per_label(predictions_dict)
+                if not coverage_df.empty:
+                    coverage_df.to_csv(output_dir / "prediction_coverage.csv", index=False)
+
+                # Label count distribution
+                dist_df = analyze_label_count_distribution(predictions_dict)
+                if not dist_df.empty:
+                    dist_df.to_csv(output_dir / "label_count_distribution.csv", index=False)
+
+                # Optimal thresholds analysis (if probability files exist)
+                if artefacts_root is not None:
+                    thresholds_df = analyze_optimal_thresholds(
+                        predictions_dict, Path(artefacts_root)
+                    )
+                    if not thresholds_df.empty:
+                        thresholds_df.to_csv(output_dir / "optimal_thresholds.csv", index=False)

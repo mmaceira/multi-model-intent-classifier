@@ -308,11 +308,19 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
         if isinstance(label, (list, tuple)):
             if len(label) == 0:
                 return ""
-            return ",".join(
-                str(item)
-                for item in label
-                if item is not None and not (isinstance(item, float) and np.isnan(item))
+            # Strip, filter empty/None/NaN, sort for consistency, and join
+            cleaned_labels = sorted(
+                {
+                    str(item).strip()
+                    for item in label
+                    if item is not None
+                    and not (isinstance(item, float) and np.isnan(item))
+                    and str(item).strip()
+                }
             )
+            # Join with comma, ensuring no trailing comma
+            result = ",".join(cleaned_labels)
+            return result.rstrip(",")
 
         # Handle numpy arrays
         if isinstance(label, np.ndarray):
@@ -370,7 +378,15 @@ class MultiLabelPredictionRunner(BasePredictionRunner):
         y_true_str = [self.normalize_label_for_saving(label) for label in y_true]
         y_pred_str = [self.normalize_label_for_saving(label) for label in y_pred]
 
-        df = pd.DataFrame({"y_true": y_true_str, "y_pred": y_pred_str}, dtype=str)
+        # Include text column for analysis
+        df = pd.DataFrame(
+            {
+                "text": [str(x) for x in X],
+                "y_true": y_true_str,
+                "y_pred": y_pred_str,
+            },
+            dtype=str,
+        )
 
         # Ensure no NaN values in the DataFrame (replace with empty strings)
         df = df.fillna("").astype(str)

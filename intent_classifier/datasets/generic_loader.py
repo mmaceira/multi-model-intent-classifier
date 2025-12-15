@@ -20,6 +20,18 @@ from sklearn.model_selection import train_test_split
 
 from intent_classifier.utils.paths import get_repo_root
 
+try:
+    from intent_classifier.datasets.tandem_go.label_normalization import (
+        analyze_normalization,
+        normalize_labels,
+        print_normalization_report,
+    )
+except ImportError:
+    # Fallback if module doesn't exist yet
+    normalize_labels = None  # type: ignore[assignment]
+    analyze_normalization = None  # type: ignore[assignment]
+    print_normalization_report = None  # type: ignore[assignment]
+
 
 def load_dataset_from_config(
     dataset_name: str,
@@ -98,12 +110,51 @@ def load_dataset_from_config(
     fields_config = config["fields"]
     all_texts, all_labels = _extract_fields(raw_data, fields_config, is_multilabel, config)
 
+    # Apply label normalization if enabled
+    label_processing = config.get("label_processing", {})
+    if (
+        is_multilabel
+        and label_processing.get("normalize_labels")
+        and normalize_labels is not None
+        and analyze_normalization is not None
+        and print_normalization_report is not None
+    ):
+        # Store raw labels for reporting
+        raw_labels_for_report = [
+            list(label_list) if isinstance(label_list, list) else [label_list]
+            for label_list in all_labels
+        ]
+
+        # Apply normalization
+        normalized_labels = []
+        for label_list in all_labels:
+            if isinstance(label_list, list):
+                normalized = normalize_labels(label_list)
+            else:
+                normalized = normalize_labels([label_list])
+            # Keep empty lists (don't filter out samples with no labels after normalization)
+            normalized_labels.append(normalized)
+
+        all_labels = normalized_labels
+
+        # Generate and print normalization report
+        normalization_report = analyze_normalization(raw_labels_for_report)
+        print_normalization_report(
+            normalization_report["raw_label_counts"],
+            normalization_report["normalized_label_counts"],
+            normalization_report["merge_counts"],
+            normalization_report["skipped_time_labels"],
+        )
+
     # Apply filters
     filters_config = config.get("filters", {})
+    # For Tandem dataset, skip min_samples_per_label filtering if normalize_labels is enabled
     if filters_config.get("min_samples_per_label"):
-        all_texts, all_labels = _filter_by_min_samples(
-            all_texts, all_labels, filters_config["min_samples_per_label"], is_multilabel
-        )
+        # Only apply filtering if normalization is not enabled (to preserve all normalized labels)
+        if not (is_multilabel and label_processing.get("normalize_labels")):
+            all_texts, all_labels = _filter_by_min_samples(
+                all_texts, all_labels, filters_config["min_samples_per_label"], is_multilabel
+            )
 
     # Handle OOS filtering
     if config.get("has_oos") and not use_oos:

@@ -1,1 +1,1 @@
-Multi-label intent classifier. Return JSON only.
+Classificador multi-etiqueta. Retorna NOMÉS JSON.

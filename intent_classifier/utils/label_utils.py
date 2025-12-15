@@ -206,6 +206,7 @@ def multilabel_predictions_from_proba(
     proba: np.ndarray,
     classes: Sequence[str],
     threshold: float = 0.5,
+    per_label_thresholds: dict[str, float] | None = None,
 ) -> list[list[str]]:
     """Extract multi-label predictions from probability matrix using threshold.
 
@@ -213,6 +214,8 @@ def multilabel_predictions_from_proba(
         proba: Probability matrix of shape (n_samples, n_classes)
         classes: List of class labels corresponding to columns
         threshold: Probability threshold for including a label (default: 0.5)
+        per_label_thresholds: Optional dict mapping label names to per-label thresholds.
+                            If provided, overrides global threshold for each label.
 
     Returns:
         List of lists, where each inner list contains labels with prob >= threshold
@@ -225,12 +228,87 @@ def multilabel_predictions_from_proba(
     """
     predictions = []
     for row in proba:
-        # Get indices where probability >= threshold
-        indices = np.where(row >= threshold)[0]
-        # Convert to labels
-        labels = [classes[i] for i in indices]
+        labels = []
+        for i, class_name in enumerate(classes):
+            # Use per-label threshold if available, otherwise use global threshold
+            label_threshold = (
+                per_label_thresholds.get(class_name, threshold)
+                if per_label_thresholds
+                else threshold
+            )
+            if row[i] >= label_threshold:
+                labels.append(class_name)
         predictions.append(labels)
     return predictions
+
+
+def calibrate_per_label_thresholds(
+    y_true_binary: np.ndarray,
+    y_proba: np.ndarray,
+    classes: Sequence[str],
+    metric: str = "f1",
+    threshold_range: tuple[float, float] = (0.2, 0.8),
+    n_steps: int = 20,
+) -> dict[str, float]:
+    """Calibrate per-label thresholds to optimize a metric.
+
+    Searches over a range of thresholds for each label independently to maximize
+    the specified metric (e.g., F1, Jaccard).
+
+    Args:
+        y_true_binary: Binary matrix of true labels (n_samples, n_classes)
+        y_proba: Probability matrix (n_samples, n_classes)
+        classes: List of class labels corresponding to columns
+        metric: Metric to optimize ("f1", "jaccard", "f1_macro")
+        threshold_range: (min, max) range to search over
+        n_steps: Number of threshold values to try
+
+    Returns:
+        Dictionary mapping label names to optimal thresholds
+
+    Examples:
+        >>> y_true = np.array([[1, 0], [0, 1], [1, 1]])
+        >>> y_proba = np.array([[0.8, 0.3], [0.4, 0.9], [0.7, 0.6]])
+        >>> classes = ["class1", "class2"]
+        >>> thresholds = calibrate_per_label_thresholds(y_true, y_proba, classes)
+    """
+    from sklearn.metrics import f1_score, jaccard_score
+
+    thresholds = {}
+    threshold_values = np.linspace(threshold_range[0], threshold_range[1], n_steps)
+
+    for i, class_name in enumerate(classes):
+        y_true_class = y_true_binary[:, i]
+        y_proba_class = y_proba[:, i]
+
+        # Skip if class has no positive examples
+        if y_true_class.sum() == 0:
+            thresholds[class_name] = threshold_range[1]  # High threshold
+            continue
+
+        best_threshold = threshold_range[0]
+        best_score = -1.0
+
+        for thresh in threshold_values:
+            y_pred_class = (y_proba_class >= thresh).astype(int)
+
+            if metric == "f1":
+                score = f1_score(y_true_class, y_pred_class, zero_division=0)
+            elif metric == "jaccard":
+                score = jaccard_score(y_true_class, y_pred_class, zero_division=0)
+            elif metric == "f1_macro":
+                # For macro, we'd need all classes, so use f1 for this class
+                score = f1_score(y_true_class, y_pred_class, zero_division=0)
+            else:
+                raise ValueError(f"Unknown metric: {metric}")
+
+            if score > best_score:
+                best_score = score
+                best_threshold = thresh
+
+        thresholds[class_name] = best_threshold
+
+    return thresholds
 
 
 def multilabel_predictions_from_binary(

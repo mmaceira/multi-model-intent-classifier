@@ -283,7 +283,15 @@ class SingleLabelPredictionRunner(BasePredictionRunner):
         # Single-label: normalize but keep as single values
         y_true_normalized = [self.normalize_label_for_saving(label) for label in y_true]
         y_pred_normalized = [self.normalize_label_for_saving(label) for label in y_pred]
-        df = pd.DataFrame({"y_true": y_true_normalized, "y_pred": y_pred_normalized}, dtype=str)
+        # Include text column for analysis
+        df = pd.DataFrame(
+            {
+                "text": [str(x) for x in X],
+                "y_true": y_true_normalized,
+                "y_pred": y_pred_normalized,
+            },
+            dtype=str,
+        )
 
         # Ensure no NaN values in the DataFrame (replace with empty strings)
         df = df.fillna("").astype(str)

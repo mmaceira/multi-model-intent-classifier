@@ -1,9 +1,13 @@
-Labels: {allowed_labels}
-Examples:
+Etiquetes: {allowed_labels}
+Exemples:
 {few_shots}
 
-Query: {query}
+Missatge: {query}
 
-Return: {{ "label": "<comma-separated>", "confidence": 0.0-1.0 }}
-CRITICAL: Use EXACTLY one label from the Labels list above. Copy it exactly as shown. Do not create new combinations.
-Format: comma-separated, no spaces (e.g., 'Alta,asseguranca').
+Retorna (JSON):
+{{
+  "label": "<etiquetes_separades_per_comes_sense_espais>",
+  "confidence": <0..1>
+}}
+
+No inventis etiquetes. Usa només les de la llista i copia-les exactament.

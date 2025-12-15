@@ -1,17 +1,21 @@
-Allowed labels: {allowed_labels}
-Label definitions:
+Etiquetes permeses: {allowed_labels}
+Definicions d'etiquetes:
 {defs_block}
 
-Retrieved labeled examples:
+Exemples etiquetats recuperats:
 {few_shots}
 
-CLASSIFY THIS QUERY:
+CLASSIFICA AQUEST MISSATGE:
 {query}
 
-Return exactly this JSON schema:
-{{ "label": "<allowed label>", "confidence": <number 0..1> }}
-Rules:
-- Choose exactly ONE label from Allowed labels.
-- Match the EXACT case and format of labels in Allowed labels.
-- If unsure, pick the best label and set a low confidence.
-- confidence must be between 0 and 1.
+Format de sortida (JSON exactament així):
+{{
+  "label": "<etiqueta permesa>",
+  "confidence": <número 0..1>
+}}
+
+Regles:
+- Tria EXACTAMENT UNA etiqueta de la llista "Etiquetes permeses".
+- Copia l'etiqueta EXACTAMENT tal com apareix (mateix cas i format).
+- Si tens dubtes, escull la millor i posa una confiança baixa.
+- No afegeixis cap altre camp ni text.

@@ -1,20 +1,11 @@
 Etiquetes permeses: {allowed_labels}
-Definicions d'etiquetes:
+Definicions:
 {defs_block}
 
-Exemples etiquetats recuperats:
+Exemples:
 {few_shots}
 
-# Correu a netejar i classificar:
+# Correu a NETEJAR i CLASSIFICAR
 {query}
 
-Retorna exactament aquest esquema JSON:
-{{ "label": "<etiquetes separades per comes>", "confidence": <número 0..1> }}
-REGLES CRÍTIQUES:
-- L'etiqueta HA DE SER EXACTAMENT una de les etiquetes de la llista "Etiquetes permeses".
-- Copia l'etiqueta EXACTAMENT com apareix a la llista d'etiquetes permeses (mateix cas, mateix format, mateixa col·locació de comes).
-- NO creïs noves combinacions d'etiquetes - només utilitza etiquetes que existeixin a la llista d'etiquetes permeses.
-- NO afegeixis etiquetes duplicades o modifiquis el format.
-- Si calen múltiples etiquetes, utilitza el format EXACTE de les etiquetes permeses: separades per comes, SENSE espais (ex: 'Alta,asseguranca').
-- Si no estàs segur, tria la millor etiqueta de la llista d'etiquetes permeses i estableix una confiança baixa.
-- La confiança ha de ser entre 0 i 1.
+Retorna només el JSON amb el format especificat.
