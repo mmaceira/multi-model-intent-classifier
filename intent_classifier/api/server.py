@@ -116,10 +116,30 @@ class PredictRequest(BaseModel):  # pylint: disable=missing-class-docstring
         return v.strip()
 
 
+# NOTE: Multi-label behavior
+# - For single-label models, `label` is a single class name.
+# - For multi-label models, `label` may be a string representation of a list of labels.
+#   We keep this for backward compatibility. A dedicated multi-label response
+#   (with `labels: list[str]`) can be added in a future version.
 class PredictResponse(BaseModel):  # pylint: disable=missing-class-docstring
     label: str = Field(
         ..., description="Predicted class label (or '__ABSTAIN__' if confidence too low)"
     )
+    confidence: float | None = Field(None, ge=0.0, le=1.0, description="Prediction confidence")
+    probabilities: dict[str, float] | None = Field(
+        None, description="All class probabilities (if available)"
+    )
+    abstained: bool = Field(
+        default=False, description="Whether the model abstained from prediction"
+    )
+    request_id: str | None = Field(None, description="Request ID for tracing")
+
+
+# TODO: Future multi-label endpoint
+# This model is defined for a future `/v1/predict-multilabel` endpoint.
+# Do not use this model in the current `/v1/predict` endpoint to maintain backward compatibility.
+class MultiLabelPredictResponse(BaseModel):  # pylint: disable=missing-class-docstring
+    labels: list[str] = Field(..., description="List of predicted class labels")
     confidence: float | None = Field(None, ge=0.0, le=1.0, description="Prediction confidence")
     probabilities: dict[str, float] | None = Field(
         None, description="All class probabilities (if available)"

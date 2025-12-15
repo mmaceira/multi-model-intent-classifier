@@ -45,7 +45,7 @@ def load_all_prediction_files(experiment_dir: str | Path) -> dict[str, dict[str,
     exp = Path(experiment_dir)
     dfs: dict[str, dict[str, pd.DataFrame]] = {}
 
-    # Find all model directories
+    # Find all model directories (now all at same depth since names are sanitized)
     model_dirs = [d for d in exp.glob("*") if d.is_dir()]
 
     for model_dir in model_dirs:

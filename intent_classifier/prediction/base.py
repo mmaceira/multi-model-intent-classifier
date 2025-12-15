@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 
 from intent_classifier.model import TextClassifier
-from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.file_ops import ensure_dir, sanitize_model_name
 from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
 
 # Suppress Pydantic warnings before any imports that might trigger them
@@ -270,13 +270,13 @@ class BasePredictionRunner(ABC):
                     if idx < total_models:
                         print(f"   Progress: {idx}/{total_models} algorithms completed\n")
 
-                model_dir = ensure_dir(output_dir / name)
+                # Sanitize model name for filesystem use (prevents nested directories)
+                safe_dir_name = sanitize_model_name(name)
+                model_dir = ensure_dir(output_dir / safe_dir_name)
 
                 # Save individual execution time
                 # Use a filesystem‑safe file name (model names may contain "/" etc.)
-                import os
-
-                safe_name = name.replace(os.sep, "_").replace("/", "_")
+                safe_name = sanitize_model_name(name)
                 with open(
                     model_dir / f"{safe_name}_prediction_time.txt", "w", encoding="utf-8"
                 ) as f:

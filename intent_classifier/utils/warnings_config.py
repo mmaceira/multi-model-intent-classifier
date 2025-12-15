@@ -72,14 +72,6 @@ def suppress_pydantic_warnings() -> None:
     os.environ["PYDANTIC_WARNINGS"] = "none"
 
 
-def restore_warnings() -> None:
-    """Restore original warnings handler if we replaced it."""
-    global _ORIG_HANDLER
-    if _ORIG_HANDLER is not None:
-        warnings.showwarning = _ORIG_HANDLER
-        _ORIG_HANDLER = None
-
-
 def configure_logging(level: str = "INFO", suppress_warnings: bool = True) -> None:
     """Configure logging with sensible defaults.
 

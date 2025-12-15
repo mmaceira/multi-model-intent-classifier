@@ -72,15 +72,6 @@ def _get_repo_root_cached() -> Path:
     return _REPO_ROOT
 
 
-def get_config_dir() -> Path:
-    """Get the config directory path.
-
-    Returns:
-        Path to config directory
-    """
-    return _get_repo_root_cached() / "config"
-
-
 def get_config_path(config_file: str | Path) -> Path:
     """Get the path to a config file.
 

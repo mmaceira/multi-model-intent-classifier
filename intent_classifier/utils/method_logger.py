@@ -409,4 +409,5 @@ def get_logger(log_dir: Path | None = None, enabled: bool = True) -> MethodLogge
     Returns:
         MethodLogger: Logger instance
     """
-    return MethodLogger.get_instance(log_dir=log_dir, enabled=enabled)
+    instance = MethodLogger.get_instance(log_dir=log_dir, enabled=enabled)
+    return instance

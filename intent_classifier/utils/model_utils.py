@@ -6,6 +6,8 @@ This module provides utility functions for working with serialized models in dif
 from pathlib import Path
 from typing import Any
 
+from intent_classifier.utils.file_ops import sanitize_model_name
+
 # Standard model file names to check
 ALLOWED_MODEL_FILENAMES = [
     "model.pkl",
@@ -25,7 +27,7 @@ def find_model_file(model_dir: str | Path, model_name: str) -> str | None:
 
     Args:
         model_dir: Base directory containing model subdirectories
-        model_name: Name of the model subdirectory
+        model_name: Name of the model subdirectory (will be sanitized for filesystem use)
 
     Returns:
         Path to the model file as a string, or None if no model file is found
@@ -34,7 +36,9 @@ def find_model_file(model_dir: str | Path, model_name: str) -> str | None:
         >>> path = find_model_file("models", "naive_bayes")
         >>> # Will look for models/naive_bayes/model.pkl, models/naive_bayes/model.joblib, etc.
     """
-    base_dir = Path(model_dir) / model_name
+    # Sanitize model name to match how directories are created
+    safe_dir_name = sanitize_model_name(model_name)
+    base_dir = Path(model_dir) / safe_dir_name
 
     if not base_dir.exists():
         return None
