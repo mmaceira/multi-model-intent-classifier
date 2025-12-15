@@ -23,6 +23,9 @@ model:
   embedding_backend: "sbert"                  # [sbert | openai]
   sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
   openai_model_name: "text-embedding-3-small"
+  # Optional Ollama embedding model (Qwen embeddings via litellm + Ollama)
+  # Used by Qwen/Ollama embedding variants (keeps SBERT as default backend)
+  ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
 
   # Classifier options
   classifier: "linear_svm"                    # [linear_svm | naive_bayes | transformer_logreg]

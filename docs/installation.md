@@ -5,7 +5,6 @@
 Install dependencies using `uv` (recommended) or `pip`.
 
 ## Quickstart
-
 ```bash
 # Install all dependencies
 uv sync --extra all
@@ -25,13 +24,8 @@ uv run pytest tests/test_dataset_clinc150.py -q
 
 ## Development Setup
 
-```bash
-# Install dev dependencies
-uv sync --extra dev
-
-# Set up pre-commit hooks
-pre-commit install
-```
+For contributing and local development (pre-commit, formatting, full test suite), see
+`development.md`.
 
 ## Requirements
 

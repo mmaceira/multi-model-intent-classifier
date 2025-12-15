@@ -3,6 +3,7 @@
 ## Overview
 
 High-level overview of models: what they do, how they represent text, and when to use them.
+For implementation details and resource requirements, see `model_architecture.md`.
 
 - **Multinomial Naive Bayes**: Bag-of-words baseline
 - **Linear SVM**: Linear classifier on TF-IDF features
@@ -33,7 +34,7 @@ High-level overview of models: what they do, how they represent text, and when t
 ### 4. Embedding + Logistic Regression
 
 - **Core idea**: Pluggable embedding backends + logistic regression
-- **Text representation**: SBERT (local) or OpenAI (API) embeddings
+- **Text representation**: SBERT (local), OpenAI (API), or Ollama/Qwen (via litellm + Ollama) embeddings
 - **Use when**: Need flexibility in embedding backend, trade latency/cost/privacy
 
 ### 5. RAG Models

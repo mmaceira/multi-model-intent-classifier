@@ -84,7 +84,7 @@ pre-commit run --all-files
 
 ## Git Workflow
 
-1. Create feature branch: `git checkout -b feature/my-feature`
+1. Create feature branch: `git checkout -b feat/short-topic` (or `fix/short-topic`, `chore/short-topic`, etc.)
 2. Make changes and commit using Commitizen: `cz c`
 3. Run tests and formatting: `uv run pytest -q && uv run black intent_classifier/ scripts/`
 4. Push and create pull request

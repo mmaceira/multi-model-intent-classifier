@@ -157,7 +157,9 @@ def run_training(
             model_dir = ensure_dir(output_dir / name)
 
             # Save individual execution time
-            with open(model_dir / f"{name}_execution_time.txt", "w", encoding="utf-8") as f:
+            # Use a filesystem‑safe file name (model names may contain "/" etc.)
+            safe_name = name.replace(os.sep, "_").replace("/", "_")
+            with open(model_dir / f"{safe_name}_execution_time.txt", "w", encoding="utf-8") as f:
                 f.write(f"Training time: {execution_time:.2f} seconds")
 
             # Log to MLflow if enabled

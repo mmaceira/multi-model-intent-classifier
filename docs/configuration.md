@@ -10,8 +10,11 @@ Config files in `config/dataset/{dataset_name}/{config_name}.yaml`:
 
 - `general.run_name`, `general.seed`
 - `dataset.name`, `dataset.use_oos`, `dataset.max_classes`, `dataset.max_train_samples`
-- `model.embedding_backend` (`"sbert"` or `"openai"`)
-- `model.llm_model` (default: `"ollama/llama3.1:8b"`)
+- `model.embedding_backend` (`"sbert"` or `"openai"`) – SBERT is the default
+- `model.sbert_model_name` (local SentenceTransformer model)
+- `model.openai_model_name` (OpenAI embedding model)
+- `model.ollama_embedding_model_name` (Ollama embedding model, e.g. Qwen3 embeddings via litellm)
+- `model.llm_model` (default: value from `config/llm_config.yaml`, typically an Ollama model)
 - `model.rag_top_k` (number of neighbors)
 
 ## Model Selection

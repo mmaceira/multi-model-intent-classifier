@@ -95,19 +95,28 @@ def main():
     print("=" * 60)
 
     # Define the desired model order
-    # Note: Use actual model names from configuration
-    # (may include suffixes like "(local-embeddings, default prompt)")
+    # Note: Use actual model names from configuration and prediction directories
+    # so that all trained variants appear in the comparison tables.
     model_order = [
         "Naive Bayes",
         "Linear SVM",
         "TF-IDF bigrams + SVM",
         "MiniLM + LogReg",
-        "Embedding + LogReg",
+        # Embedding-based baselines
+        "Embedding + LogReg (SBERT)",
+        "Embedding + LogReg (Qwen/Ollama)",
+        # RAG baselines (embedding-backed)
         "RAG-CentroidNN",
-        "RAG-kMajority",
-        "RAG-LLM (local-embeddings, default prompt)",  # RAG-LLM with local SBERT
-        "RAG-LLM (local-embeddings, short prompt)",  # RAG-LLM with local SBERT
-        "RAG-LLM (OpenAI-embeddings)",  # RAG-LLM with OpenAI embeddings
+        "RAG-kMajority (SBERT)",
+        "RAG-kMajority (Qwen/Ollama)",
+        # RAG‑LLM (TF‑IDF, then embedding-backed retrieval)
+        "RAG-LLM (TF-IDF, default prompt)",
+        "RAG-LLM (SBERT embeddings, default prompt)",
+        "RAG-LLM (Qwen embeddings, default prompt)",
+        "RAG-LLM (TF-IDF, short prompt)",
+        "RAG-LLM (TF-IDF, n8n prompt)",
+        # Optional RAG‑LLM with OpenAI embeddings
+        "RAG-LLM (OpenAI-embeddings)",
     ]
 
     # Display results in the specified order

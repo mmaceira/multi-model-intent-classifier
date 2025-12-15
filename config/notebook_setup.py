@@ -87,6 +87,14 @@ if EMB_DIR is not None:
 if MODELS_DIR is not None:
     os.environ.setdefault("MODELS_DIR", str(MODELS_DIR))
 
+# Expose Ollama endpoint and embedding model to downstream components (e.g. embedders)
+ollama_endpoint = config_vars.get("MODEL_OLLAMA_ENDPOINT")
+if ollama_endpoint is not None:
+    # Dedicated env var used by embedding backends
+    os.environ.setdefault("MODEL_OLLAMA_ENDPOINT", str(ollama_endpoint))
+    # Also populate standard Ollama base var if not already set
+    os.environ.setdefault("OLLAMA_API_BASE", str(ollama_endpoint))
+
 # Disable HuggingFace tokenizers parallelism
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

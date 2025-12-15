@@ -11,6 +11,8 @@ Six sequential steps transform raw data into trained models and evaluations.
 5. **Model Prediction** - Generate predictions on test set
 6. **Model Evaluation** - Evaluate and compare model performance
 
+For concrete commands and preconfigured configs, see `running_experiments.md`.
+
 ## Commands
 
 ```bash

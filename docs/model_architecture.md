@@ -2,7 +2,8 @@
 
 ## Overview
 
-Model architectures and technical specifications.
+Model architectures, technical specifications, and resource requirements.
+For a conceptual “when to use what” guide, see `algorithms.md`.
 
 ## Models
 

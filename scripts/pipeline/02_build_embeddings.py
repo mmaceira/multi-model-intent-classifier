@@ -30,12 +30,36 @@ from config.notebook_setup import config_vars  # noqa: E402
 
 # Import dataset and embedding modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
-from intent_classifier.rag import _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
+from intent_classifier.rag import (  # noqa: E402
+    _EMBEDDINGS_DIR,
+    _OLLAMA_DIR,
+    _OPENAI_DIR,
+    _SBERT_DIR,
+)
 from intent_classifier.rag.vector_store import VectorStore  # noqa: E402
+from intent_classifier.utils.config_loader import load_config  # noqa: E402
+from intent_classifier.utils.embeddings import LitellmOllamaEmbedder  # noqa: E402
 
 # Parameters
 SBERT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 OPENAI_MODEL = "text-embedding-3-small"
+
+
+def _get_ollama_embedding_model() -> str:
+    """Resolve the Ollama embedding model name from config/env."""
+    cfg = load_config(apply_variable_substitution=True)
+    # Dataset config may override the default model
+    model_cfg = cfg.get("model", {})
+    from_env = os.getenv("OLLAMA_EMBEDDING_MODEL")
+    if from_env:
+        return from_env
+    if "ollama_embedding_model_name" in model_cfg:
+        return str(model_cfg["ollama_embedding_model_name"])
+    # Fallback to centralized LLM config if merged in
+    if "ollama_embedding_model" in model_cfg:
+        return str(model_cfg["ollama_embedding_model"])
+    # Final hard-coded fallback (matches llm_config default)
+    return "ollama/qwen3-embedding:latest"
 
 
 def main():
@@ -51,6 +75,7 @@ def main():
     print(f"\nEmbeddings root: {_EMBEDDINGS_DIR}")
     _SBERT_DIR.mkdir(parents=True, exist_ok=True)
     _OPENAI_DIR.mkdir(parents=True, exist_ok=True)
+    _OLLAMA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load dataset
     print("\nLoading dataset...")
@@ -174,6 +199,61 @@ def main():
     else:
         print("OPENAI_API_KEY not set - skipping OpenAI embeddings.")
         print("   (This is fine - SBERT embeddings are sufficient for most use cases)")
+
+    # Build Ollama/Qwen embeddings (optional - only if litellm/Ollama are available)
+    print("\n" + "=" * 60)
+    print("Building Ollama/Qwen Embeddings (Optional)")
+    print("=" * 60)
+
+    OLLAMA_INDEX = _OLLAMA_DIR / "index.faiss"
+    OLLAMA_META = _OLLAMA_DIR / "meta.jsonl"
+
+    try:
+        FORCE_REBUILD = os.getenv("FORCE_REBUILD", "0").lower() in ("1", "true", "yes")
+        if (OLLAMA_INDEX.exists() and OLLAMA_META.exists()) and not FORCE_REBUILD:
+            print("⏭️  Ollama/Qwen index already exists, skipping. Use FORCE_REBUILD=1 to rebuild.")
+        else:
+            ollama_model = _get_ollama_embedding_model()
+            print(f"Using Ollama embedding model: {ollama_model}")
+
+            # Base URL can be configured via main config or standard Ollama env vars.
+            cfg = load_config(apply_variable_substitution=True)
+            model_cfg = cfg.get("model", {})
+            base_url = (
+                model_cfg.get("ollama_endpoint")
+                or os.getenv("OLLAMA_API_BASE")
+                or os.getenv("OLLAMA_HOST")
+            )
+
+            try:
+                embedder = LitellmOllamaEmbedder(model=ollama_model, base_url=base_url)
+            except ImportError as exc:
+                print("⚠️  litellm not available - skipping Ollama/Qwen embeddings.")
+                print(f"    Details: {exc}")
+            else:
+                print("Encoding utterances with Ollama/Qwen embeddings via litellm...")
+                batch_size = int(os.getenv("OLLAMA_BATCH", "32"))
+                vectors_list = []
+                for i in range(0, len(X_train), batch_size):
+                    batch = X_train[i : i + batch_size]
+                    vectors_list.append(embedder.encode(batch, batch_size=batch_size))
+                    print(
+                        f"  Processed {min(i + batch_size, len(X_train))}/"
+                        f"{len(X_train)} utterances..."
+                    )
+
+                vectors = np.vstack(vectors_list).astype("float32")
+                print(f"Generated embeddings with shape: {vectors.shape}")
+
+                meta_ollama = []
+                for i, (txt, label) in enumerate(zip(X_train, y_train, strict=False)):
+                    meta_ollama.append({"id": i, "label": label, "text": txt})
+
+                VectorStore.build(vectors, meta_ollama, vectors.shape[1], OLLAMA_INDEX, OLLAMA_META)
+                print(f"✅ Ollama/Qwen index saved at {OLLAMA_INDEX}")
+    except Exception as e:  # pragma: no cover - best-effort path
+        print(f"⚠️  Failed to build Ollama/Qwen embeddings: {e}")
+        print("   Continuing with existing embeddings.")
 
     print("\n✅ Embedding build complete!")
     print(f"Results saved to: {_EMBEDDINGS_DIR}")

@@ -4,6 +4,7 @@ Embedding-based Logistic Regression module for text classification (scaled + C�
 This module provides a flexible text classification pipeline that can use either:
 - OpenAI embeddings (via API, requires OPENAI_API_KEY)
 - SBERT embeddings (local, no API key needed)
+- Ollama-hosted embeddings (e.g. Qwen3 embeddings via litellm + Ollama)
 
 The implementation mirrors `TransformerLogReg` but supports multiple embedding backends.
 Everything else – scaling, C‑grid search, TextClassifier interface – is identical.
@@ -51,7 +52,7 @@ logger.setLevel(logging.INFO)
 
 @register_model("EmbeddingLogReg")
 class EmbeddingLogReg(TextClassifier):
-    """Flexible embedding-based Logistic Regression (OpenAI or SBERT embeddings).
+    """Flexible embedding-based Logistic Regression (OpenAI, SBERT or Ollama embeddings).
 
     Supports both OpenAI API embeddings and local SBERT embeddings. The embedding
     backend is selected via the `use_openai` parameter.
@@ -95,15 +96,22 @@ class EmbeddingLogReg(TextClassifier):
         cv: int = 5,
         n_jobs: int = 2,
         scoring: str = "f1_macro",
+        backend: str | None = None,
     ) -> None:
         # ------------------------------------------------------------------
         # Store parameters without mutating (clone‑safe)
         # ------------------------------------------------------------------
-        self.use_openai = use_openai
+        # backend takes precedence over legacy use_openai flag
+        self.backend = backend or ("openai" if use_openai else "sbert")
+        self.use_openai = self.backend == "openai"
+
         # Set default model based on embedding backend
         if model is None:
-            if use_openai:
+            if self.backend == "openai":
                 model = "text-embedding-3-small"
+            elif self.backend == "ollama":
+                # Default to Qwen3 embeddings; can be overridden via config
+                model = "ollama/qwen3-embedding:latest"
             else:
                 model = "sentence-transformers/all-MiniLM-L6-v2"
         self.model = model
@@ -119,7 +127,7 @@ class EmbeddingLogReg(TextClassifier):
         # ------------------------------------------------------------------
         # Initialize embedder based on backend
         # ------------------------------------------------------------------
-        if use_openai:
+        if self.backend == "openai":
             from intent_classifier.utils.embeddings import EmbeddingGenerator
 
             # Check for API key
@@ -127,11 +135,21 @@ class EmbeddingLogReg(TextClassifier):
                 api_key = os.getenv("OPENAI_API_KEY")
                 if api_key is None:
                     raise ValueError(
-                        "use_openai=True requires OPENAI_API_KEY environment variable "
-                        "or api_key parameter"
+                        "use_openai=True or backend='openai' requires OPENAI_API_KEY "
+                        "environment variable or api_key parameter"
                     )
             embedder: Any = EmbeddingGenerator(
                 api_key=api_key, model=model or "text-embedding-3-small", batch_size=batch_size
+            )
+        elif self.backend == "ollama":
+            # Use Ollama/Qwen embeddings via litellm + LitellmOllamaEmbedder
+            from intent_classifier.utils.embeddings import LitellmOllamaEmbedder
+
+            base_url = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_HOST")
+            embedder = LitellmOllamaEmbedder(
+                model=model or "ollama/qwen3-embedding:latest",
+                base_url=base_url,
+                batch_size=batch_size,
             )
         else:
             # Use SBERT embeddings (local, no API key needed)
@@ -171,6 +189,7 @@ class EmbeddingLogReg(TextClassifier):
     def get_params(self, deep: bool = True) -> dict[str, Any]:
         params = {
             "use_openai": self.use_openai,
+            "backend": self.backend,
             "model": self.model,
             "api_key": self.api_key,
             "batch_size": self.batch_size,
@@ -474,6 +493,7 @@ class EmbeddingLogReg(TextClassifier):
         state: dict[str, Any] = {
             # --- bare hyper‑parameters ----------------------------------
             "use_openai": self.use_openai,
+            "backend": getattr(self, "backend", "openai" if self.use_openai else "sbert"),
             "model": self.model,
             "api_key": None,  # never persist secrets
             "batch_size": self.batch_size,
@@ -528,19 +548,43 @@ class EmbeddingLogReg(TextClassifier):
 
         # ------------- resurrect the embedder (fresh instance) -------
         self.api_key = None  # supply at runtime if needed
-        if state["use_openai"]:
+
+        # Determine backend with backward compatibility for older pickles
+        backend = state.get("backend")
+        if backend is None:
+            if state.get("use_openai"):
+                backend = "openai"
+            elif isinstance(state.get("model"), str) and (
+                state["model"].startswith("ollama/") or "qwen3-embedding" in state["model"]
+            ):
+                backend = "ollama"
+            else:
+                backend = "sbert"
+
+        self.backend = backend
+
+        if backend == "openai":
             from intent_classifier.utils.embeddings import EmbeddingGenerator
 
             # Get API key from environment if not set
             api_key = self.api_key or os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError(
-                    "use_openai=True requires OPENAI_API_KEY environment variable "
-                    "or api_key parameter"
+                    "use_openai=True or backend='openai' requires OPENAI_API_KEY environment "
+                    "variable or api_key parameter"
                 )
             embedder: Any = EmbeddingGenerator(
                 api_key=api_key,
                 model=self.model or "text-embedding-3-small",
+                batch_size=self.batch_size,
+            )
+        elif backend == "ollama":
+            from intent_classifier.utils.embeddings import LitellmOllamaEmbedder
+
+            base_url = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_HOST")
+            embedder = LitellmOllamaEmbedder(
+                model=self.model or "ollama/qwen3-embedding:latest",
+                base_url=base_url,
                 batch_size=self.batch_size,
             )
         else:

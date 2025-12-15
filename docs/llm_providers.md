@@ -87,7 +87,47 @@ See [litellm documentation](https://docs.litellm.ai/) for full list.
 - Requires `OPENAI_API_KEY`
 - Set `use_openai: true` in model configuration
 
-## Commands
+## RAG‑LLM Exploration (`rag-explore`)
+
+Use the `rag-explore` CLI for interactive RAG‑LLM experiments before baking choices into
+your training configuration. It reloads label definitions and training examples from the
+current dataset config and `config/llm_config.yaml` on each run.
+
+```bash
+# Prerequisite: run the multi-label pipeline for NLU+ tiny
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+  uv run python scripts/pipeline/run_all.py
+
+# Using Ollama (default provider) with explicit model and prompt style
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+  uv run rag-explore \
+    --provider ollama \
+    --model qwen2.5:14b \
+    --k 10 \
+    --prompt-style short \
+    --text "reset my card pin"
+
+# Using OpenAI
+export OPENAI_API_KEY=sk-...
+CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+  uv run rag-explore \
+    --provider openai \
+    --model gpt-4o-mini \
+    --k 10 \
+    --text "reset my card pin"
+```
+
+Key options:
+
+- `--provider`: `ollama` (default) or `openai`
+- `--model`: provider-specific model ID (e.g. `qwen2.5:14b`, `gpt-4o-mini`)
+- `--k`: number of similar examples to retrieve (default: 10)
+- `--prompt-style`: `default`, `short`, or `n8n_prompt`
+- `--text`: text to classify
+
+LLM defaults (provider, base model, temperature, etc.) live in `config/llm_config.yaml`.
+
+## Commands (switching providers)
 
 ```bash
 # Switch to OpenAI

@@ -2,7 +2,7 @@
 
 ## Overview
 
-How to run the training pipeline. For background on data splits and algorithms, see `pipeline.md` and `experiments.md`.
+How to run the training pipeline. For background on data splits and pipeline steps, see `pipeline.md`. For dataset details, see `experiments.md`.
 
 ## Quickstart
 

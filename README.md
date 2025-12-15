@@ -236,16 +236,20 @@ See `scripts/dev/README.md` for a complete list of development utilities.
 
 ## Models
 
-| Model | Architecture | Use Case |
-|-------|--------------|----------|
-| Multinomial Naive Bayes | TF-IDF + Naive Bayes | Fast, lightweight classification |
-| Linear SVM | TF-IDF + SVM | Balanced speed and accuracy |
-| MiniLM + LogReg | Transformer + Logistic Regression | High-accuracy classification |
-| Embedding + LogReg | Flexible embeddings (SBERT/OpenAI) + Logistic Regression | High-accuracy with flexible embedding backend |
-| RAG-CentroidNN | FAISS + Nearest Neighbors | Semantic search and classification |
-| RAG-LLM | FAISS + LLM (Ollama/OpenAI) | Context-aware classification |
+| Model | Embeddings / Features | Notes |
+|-------|------------------------|-------|
+| Multinomial Naive Bayes | TF-IDF (unigrams) | Fast, lightweight baseline |
+| Linear SVM | TF-IDF (unigrams) | Balanced speed and accuracy |
+| TF-IDF bigrams + SVM | TF-IDF (uni + bi-grams) | Strong bag-of-words baseline |
+| MiniLM + LogReg | MiniLM SentenceTransformer | High-accuracy semantic classifier |
+| Embedding + LogReg (SBERT) | SBERT SentenceTransformer | Dense local embeddings, no API |
+| Embedding + LogReg (Qwen/Ollama) | Qwen/Ollama embedding model (HTTP) | Same head as SBERT variant with Qwen embeddings |
+| RAG-CentroidNN | SBERT FAISS index | Centroid-based RAG over embeddings |
+| RAG-kMajority (SBERT/Qwen) | SBERT / Qwen FAISS index | k-NN majority-vote RAG over embeddings |
+| RAG-LLM (TF-IDF) | TF-IDF bi-gram retriever + Qwen LLM | Context-aware LLM classifier without embedding index |
+| RAG-LLM (SBERT/Qwen embeddings) | SBERT / Qwen FAISS index + Qwen LLM | Embedding-backed RAG-LLM with prompts (default/short/n8n) |
 
-See [Algorithms](docs/algorithms.md) for details.
+See [Algorithms](docs/algorithms.md) and [Classification CLI](docs/classification.md) for details.
 
 
 
@@ -297,9 +301,13 @@ uv run pytest tests/test_algorithms.py -q
 
 - [Installation](docs/installation.md) - Setup and dependencies
 - [Pipeline](docs/pipeline.md) - Pipeline steps and data flow
-- [Algorithms](docs/algorithms.md) - Model implementations
+- [Experiments](docs/experiments.md) - Datasets and experiment configs
+- [Algorithms](docs/algorithms.md) - Conceptual model overview
+- [Model Architecture](docs/model_architecture.md) - Technical specs and resources
 - [Classification CLI](docs/classification.md) - CLI usage and examples
 - [Configuration](docs/configuration.md) - Config files and settings
 - [Running Experiments](docs/running_experiments.md) - How to run experiments
 - [Hyperparameter Tuning](docs/hyperparameter_tuning.md) - Hyperparameter optimization with Ray Tune
+- [LLM Providers](docs/llm_providers.md) - Ollama/OpenAI/Anthropic + embeddings
+- [API Server](docs/api.md) - FastAPI serving for trained models
 - [Development](docs/development.md) - Development setup

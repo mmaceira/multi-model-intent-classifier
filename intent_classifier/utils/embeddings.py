@@ -1,14 +1,22 @@
 """Embedding generation utilities.
 
-This module provides functionality for generating text embeddings using OpenAI's
-API. It includes batch processing capabilities and retry logic for handling
-API rate limits and temporary failures.
+This module provides functionality for generating text embeddings using:
 
-Classes:
+- OpenAI's API (via the official SDK)
+- Ollama-hosted embedding models (via the native HTTP API, treated as an embedding backend)
+
+It includes batch processing capabilities and retry logic for handling
+API rate limits and temporary failures where appropriate.
+
+Classes
+-------
 - EmbeddingGenerator: Handles the generation of text embeddings using OpenAI's API
+- LitellmOllamaEmbedder: SentenceTransformer-compatible wrapper around the Ollama
+  HTTP embeddings API (e.g. qwen3-embedding:latest)
 """
 
 import logging
+import os
 from typing import Any
 
 import numpy as np
@@ -206,3 +214,113 @@ class EmbeddingGenerator:
             Array of embeddings, one for each input text.
         """
         return self.generate_embeddings(texts, show_progress=kwargs.get("show_progress_bar", False))
+
+
+class LitellmOllamaEmbedder:
+    """Embedder for Ollama-hosted embedding models.
+
+    This wrapper exposes a SentenceTransformer-compatible ``encode`` method so it can
+    be dropped into places that expect a local encoder, while internally delegating
+    to Ollama's native HTTP ``/api/embeddings`` endpoint.
+
+    Parameters
+    ----------
+    model : str
+        Embedding model identifier (e.g. ``\"qwen3-embedding:latest\"`` or
+        ``\"ollama/qwen3-embedding:latest\"``). Any optional ``\"ollama/\"`` prefix
+        is stripped before calling the Ollama API.
+    base_url : str | None, optional
+        Base URL for the Ollama HTTP endpoint. If ``None``, will rely on litellm's
+        default resolution (including ``OLLAMA_API_BASE`` / ``OLLAMA_HOST``).
+    batch_size : int, default=32
+        Number of texts to send per embedding request.
+    """
+
+    def __init__(
+        self,
+        model: str,
+        base_url: str | None = None,
+        batch_size: int = 32,
+    ) -> None:
+        # Normalise model name for Ollama API (strip optional "ollama/" prefix)
+        self.model = model.replace("ollama/", "")
+        # Resolve base URL: explicit arg > standard env vars > config‑derived env > localhost
+        # Priority:
+        #   1) Explicit base_url argument
+        #   2) OLLAMA_API_BASE (standard Ollama env var)
+        #   3) OLLAMA_HOST (alternate standard env var)
+        #   4) MODEL_OLLAMA_ENDPOINT (exported from llm_config + dataset config)
+        #   5) Fallback: http://localhost:11434
+        resolved_base = (
+            base_url
+            or os.getenv("OLLAMA_API_BASE")
+            or os.getenv("OLLAMA_HOST")
+            or os.getenv("MODEL_OLLAMA_ENDPOINT")
+        )
+        if resolved_base is None:
+            resolved_base = "http://localhost:11434"
+        if not resolved_base.startswith("http://") and not resolved_base.startswith("https://"):
+            resolved_base = f"http://{resolved_base}"
+        self.base_url = resolved_base.rstrip("/")
+        self.batch_size = batch_size
+
+    def _embed_batch(self, texts: list[str]) -> np.ndarray:
+        clean_texts: list[str] = []
+        for t in texts:
+            if not isinstance(t, str):
+                t = str(t)
+            t = t.strip()
+            clean_texts.append(t or " ")
+
+        # Call Ollama embeddings API once per text (API currently expects a single prompt)
+        import json
+        from urllib import error, request
+
+        url = f"{self.base_url}/api/embeddings"
+        vectors: list[np.ndarray] = []
+
+        for text in clean_texts:
+            payload = json.dumps({"model": self.model, "prompt": text}).encode("utf-8")
+            req = request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            try:
+                with request.urlopen(req, timeout=600) as resp:
+                    body = resp.read().decode("utf-8")
+                data = json.loads(body)
+            except error.URLError as exc:
+                logger.error("Error calling Ollama embeddings at %s: %s", url, exc)
+                raise
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Unexpected response from Ollama embeddings at %s: %s", url, exc)
+                raise
+
+            if "embedding" not in data:
+                logger.error("Ollama embedding response missing 'embedding' field: %r", data)
+                raise RuntimeError("Invalid Ollama embeddings response (no 'embedding' field)")
+
+            vectors.append(np.asarray(data["embedding"], dtype="float32"))
+
+        return np.vstack(vectors)
+
+    def encode(
+        self,
+        texts: list[str],
+        batch_size: int | None = None,
+        show_progress_bar: bool | None = None,  # kept for API compatibility, currently ignored
+        **_: Any,
+    ) -> np.ndarray:
+        """Encode a list of texts into embeddings.
+
+        The signature mirrors SentenceTransformer.encode so existing call sites can
+        pass ``batch_size`` and ``show_progress_bar`` without errors.
+        """
+        if not texts:
+            return np.empty((0, 0), dtype="float32")
+
+        bs = batch_size or self.batch_size
+        all_vecs: list[np.ndarray] = []
+        for i in range(0, len(texts), bs):
+            batch = texts[i : i + bs]
+            all_vecs.append(self._embed_batch(batch))
+
+        # Ensure we return a single 2D array
+        return np.vstack(all_vecs)

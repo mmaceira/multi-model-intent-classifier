@@ -273,7 +273,13 @@ class BasePredictionRunner(ABC):
                 model_dir = ensure_dir(output_dir / name)
 
                 # Save individual execution time
-                with open(model_dir / f"{name}_prediction_time.txt", "w", encoding="utf-8") as f:
+                # Use a filesystem‑safe file name (model names may contain "/" etc.)
+                import os
+
+                safe_name = name.replace(os.sep, "_").replace("/", "_")
+                with open(
+                    model_dir / f"{safe_name}_prediction_time.txt", "w", encoding="utf-8"
+                ) as f:
                     f.write(f"Prediction time: {execution_time:.2f} seconds")
 
                 # Persist predictions

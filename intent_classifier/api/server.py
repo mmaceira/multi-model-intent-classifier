@@ -241,23 +241,33 @@ MODELS_INFO = {
         "type": "rag",
     },
     "rag_llm_local": {
-        "name": "RAG-LLM (local-embeddings, default prompt)",
-        "dir": "RAG-LLM (local-embeddings, default prompt)",
+        "name": "RAG-LLM (TF-IDF, default prompt)",
+        "dir": "RAG-LLM (TF-IDF, default prompt)",
         "type": "rag",
     },
     "rag_llm_local_short": {
-        "name": "RAG-LLM (local-embeddings, short prompt)",
-        "dir": "RAG-LLM (local-embeddings, short prompt)",
+        "name": "RAG-LLM (TF-IDF, short prompt)",
+        "dir": "RAG-LLM (TF-IDF, short prompt)",
         "type": "rag",
     },
     "rag_llm_local_n8n": {
-        "name": "RAG-LLM (local-embeddings, n8n prompt)",
-        "dir": "RAG-LLM (local-embeddings, n8n prompt)",
+        "name": "RAG-LLM (TF-IDF, n8n prompt)",
+        "dir": "RAG-LLM (TF-IDF, n8n prompt)",
         "type": "rag",
     },
     "rag_llm_openai": {
         "name": "RAG-LLM (OpenAI-embeddings)",
         "dir": "RAG-LLM (OpenAI-embeddings)",
+        "type": "rag",
+    },
+    "rag_llm_sbert_embeddings": {
+        "name": "RAG-LLM (SBERT embeddings, default prompt)",
+        "dir": "RAG-LLM (SBERT embeddings, default prompt)",
+        "type": "rag",
+    },
+    "rag_llm_ollama_embeddings": {
+        "name": "RAG-LLM (Qwen embeddings, default prompt)",
+        "dir": "RAG-LLM (Qwen embeddings, default prompt)",
         "type": "rag",
     },
 }

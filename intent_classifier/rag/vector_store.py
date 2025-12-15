@@ -57,7 +57,7 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from intent_classifier.utils.embeddings import EmbeddingGenerator
+from intent_classifier.utils.embeddings import EmbeddingGenerator, LitellmOllamaEmbedder
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class VectorStore:
         _meta (List[Dict]): Legacy metadata format for backward compatibility
     """
 
-    embedder: EmbeddingGenerator | None
+    embedder: EmbeddingGenerator | LitellmOllamaEmbedder | None
     vectors: dict[str, np.ndarray]
     metadata: dict[str, dict[str, Any]]
     _meta: list[dict[str, Any]]
@@ -121,9 +121,10 @@ class VectorStore:
                 for line in f:
                     self._meta.append(json.loads(line))
 
-            # Determine embedding type from path (sbert vs openai)
-            # If path contains "sbert", use SBERT embeddings; otherwise check for OpenAI
-            use_openai_embeddings = "openai" in str(index_path).lower()
+            # Determine embedding type from path (sbert vs openai vs ollama)
+            lower_path = str(index_path).lower()
+            use_openai_embeddings = "openai" in lower_path
+            use_ollama_embeddings = "ollama" in lower_path
 
             if use_openai_embeddings:
                 # Initialize OpenAI embedder for search functionality
@@ -133,6 +134,13 @@ class VectorStore:
                 self.embedder = EmbeddingGenerator(
                     api_key=api_key, model="text-embedding-3-small", batch_size=100, max_retries=3
                 )
+            elif use_ollama_embeddings:
+                # Initialize Ollama/Qwen embedder for search functionality via litellm
+                base_url = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_HOST")
+                embed_model = kwargs.get("embed_model")
+                env_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "ollama/qwen3-embedding:latest")
+                model_name: str = str(embed_model or env_model)
+                self.embedder = LitellmOllamaEmbedder(model=model_name, base_url=base_url)
             else:
                 # Use SBERT embeddings - no API key needed
                 # We'll use the static embed method when needed
@@ -203,7 +211,12 @@ class VectorStore:
         """
         if self.embedder is None:
             raise ValueError("Embedder not initialized. Cannot generate embeddings.")
-        embeddings = self.embedder.generate_embeddings(documents)
+
+        # Support both OpenAI-based and Ollama-based embedders
+        if isinstance(self.embedder, LitellmOllamaEmbedder):
+            embeddings = self.embedder.encode(documents)
+        else:
+            embeddings = self.embedder.generate_embeddings(documents)
 
         for i, (doc, embedding) in enumerate(zip(documents, embeddings, strict=False)):
             self.vectors[doc] = embedding
@@ -237,8 +250,11 @@ class VectorStore:
         # Handle both string queries and embedding vectors
         if isinstance(query, str):
             if self.embedder is not None:
-                # Use OpenAI embedder
-                query_embedding = self.embedder.generate_embeddings([query])[0]
+                # Use configured embedder (OpenAI or Ollama)
+                if isinstance(self.embedder, LitellmOllamaEmbedder):
+                    query_embedding = self.embedder.encode([query])[0]
+                else:
+                    query_embedding = self.embedder.generate_embeddings([query])[0]
             else:
                 # Use SBERT embeddings
                 query_embedding = self.embed(self._embed_model, [query])[0]

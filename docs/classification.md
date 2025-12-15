@@ -1,5 +1,27 @@
 ## Classification CLI
 
+### Model overview: embeddings and features
+
+The main models shipped in this project use the following embeddings / features:
+
+- **Classic TF-IDF models**
+  - Naive Bayes: TF-IDF (unigrams)
+  - Linear SVM: TF-IDF (unigrams)
+  - TF-IDF bigrams + SVM: TF-IDF (unigrams + bigrams)
+- **Transformer / dense embeddings**
+  - MiniLM + LogReg: MiniLM SentenceTransformer embeddings
+  - Embedding + LogReg (SBERT): SBERT SentenceTransformer embeddings
+  - Embedding + LogReg (Qwen/Ollama): Qwen/Ollama embedding model via HTTP
+- **RAG over embeddings**
+  - RAG-kMajority (SBERT): SBERT FAISS index (`sbert/index.faiss`, `meta.jsonl`)
+  - RAG-kMajority (Qwen/Ollama): Ollama/Qwen FAISS index if present, else SBERT
+  - RAG-CentroidNN: SBERT FAISS index (centroids per label)
+- **RAG-LLM (retrieval + LLM via Qwen/Ollama)**
+  - RAG-LLM (TF-IDF, default/short/n8n): TF-IDF bi-gram retriever over raw texts
+  - RAG-LLM (SBERT embeddings, default prompt): SBERT FAISS index
+  - RAG-LLM (Qwen embeddings, default prompt): Ollama/Qwen FAISS index if present, else SBERT
+  - RAG-LLM (OpenAI-embeddings): OpenAI embeddings + OpenAI LLM (disabled by default)
+
 ### Overview
 
 Use the `intent-classify` command to run intent classification with any trained model (single-label or multi-label).

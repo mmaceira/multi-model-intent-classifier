@@ -37,8 +37,8 @@ models:
       cv: 3  # Reduced from 5 for full dataset stability
 
   embedding_logreg:
-    enabled: true  # Disabled by default. Can use SBERT (local, no API key) or OpenAI (requires OPENAI_API_KEY)
-    name: "Embedding + LogReg"
+    enabled: true
+    name: "Embedding + LogReg (SBERT)"
     class: "EmbeddingLogReg"
     params:
       # Embedding backend configuration:
@@ -48,15 +48,34 @@ models:
       model: "${model.sbert_model_name}"  # SBERT model when use_openai: false
       # model: "${model.openai_model_name}"  # OpenAI model when use_openai: true (uncomment if needed)
 
+  embedding_logreg_qwen:
+    enabled: true
+    name: "Embedding + LogReg (Qwen/Ollama)"
+    class: "EmbeddingLogReg"
+    params:
+      # Use Ollama/Qwen embeddings via litellm + Ollama
+      backend: "ollama"
+      model: "${model.ollama_embedding_model_name}"
+
   # RAG-based models
   rag_kmajority:
     enabled: true
-    name: "RAG-kMajority"
+    name: "RAG-kMajority (SBERT)"
     class: "RagSklearnAdapter"
     params:
       method: "kmajority"
       top_k: "${model.rag_top_k}"
       use_openai: false
+
+  rag_kmajority_qwen:
+    enabled: true
+    name: "RAG-kMajority (Qwen/Ollama)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "kmajority"
+      top_k: "${model.rag_top_k}"
+      # Retriever will pick up the Ollama/Qwen index; classifier will still use
+      # the same FAISS-backed store, so no additional flags are needed here.
 
   rag_centroid:
     enabled: true
@@ -67,8 +86,8 @@ models:
       top_k: "${model.rag_top_k}"
 
   rag_llm_local:
-    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
-    name: "RAG-LLM (local-embeddings, default prompt)"
+    enabled: true  # TF-IDF retrieval + LLM (default prompt)
+    name: "RAG-LLM (TF-IDF, default prompt)"
     class: "RagSklearnAdapter"
     params:
       method: "llm"
@@ -88,8 +107,8 @@ models:
       prompt_style: "default"  # Options: "default", "short", "n8n_prompt"
 
   rag_llm_local_short:
-    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
-    name: "RAG-LLM (local-embeddings, short prompt)"
+    enabled: true  # TF-IDF retrieval + LLM (short prompt)
+    name: "RAG-LLM (TF-IDF, short prompt)"
     class: "RagSklearnAdapter"
     params:
       method: "llm"
@@ -109,8 +128,8 @@ models:
       prompt_style: "short"  # Options: "default", "short", "n8n_prompt"
 
   rag_llm_local_n8n:
-    enabled: true  # Disabled - too slow for full dataset. Enable for quick testing only.
-    name: "RAG-LLM (local-embeddings, n8n prompt)"
+    enabled: true  # TF-IDF retrieval + LLM (n8n prompt)
+    name: "RAG-LLM (TF-IDF, n8n prompt)"
     class: "RagSklearnAdapter"
     params:
       method: "llm"
@@ -142,4 +161,25 @@ models:
       model: "gpt-4o-mini"  # Using OpenAI LLM (requires OPENAI_API_KEY)
       # Embedding configuration: Uses OpenAI embeddings (requires OPENAI_API_KEY)
       use_openai: true  # Always true for OpenAI embeddings
-      # Note: OpenAI embeddings must be built first (run 02_build_embeddings.py with OPENAI_API_KEY set)
+
+  rag_llm_sbert_embeddings:
+    enabled: true
+    name: "RAG-LLM (SBERT embeddings, default prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${model.llm_model}"
+      backend: "sbert"
+      prompt_style: "default"
+
+  rag_llm_ollama_embeddings:
+    enabled: true
+    name: "RAG-LLM (Qwen embeddings, default prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${model.llm_model}"
+      backend: "ollama"
+      prompt_style: "default"

@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 from ...utils.method_logger import get_logger as get_method_logger, log_method
 from ..classifier_base import RagClassifierBase
+from ..retrieval import Retriever as FaissRetriever
 
 # Load environment variables from .env file
 load_dotenv()
@@ -56,7 +57,7 @@ class Example:
     label: str
 
 
-class Retriever:
+class TfIdfRetriever:
     """TF-IDF bi-gram retriever with min-label constraint."""
 
     def __init__(self, examples: Sequence[Example]):
@@ -87,6 +88,64 @@ class Retriever:
             score = float(scores[int(idx)])
             selected.append((example, score))
             seen_labels.add(example.label)
+
+            if len(selected) >= k and len(seen_labels) >= m:
+                break
+
+        if len(selected) > k and len(seen_labels) >= m:
+            selected = selected[:k]
+
+        return selected
+
+
+class EmbeddingRetriever:
+    """FAISS/VectorStore-backed retriever with min-label constraint.
+
+    This adapter wraps the generic RAG ``Retriever`` (which operates on
+    embeddings) and exposes the same ``select_topk_with_min_labels`` API
+    as the TF-IDF retriever so it can be plugged into ``RagLLM`` without
+    changing its public interface.
+    """
+
+    def __init__(self, faiss_retriever: FaissRetriever):
+        self.faiss_retriever = faiss_retriever
+        # Build Example list from metadata for compatibility with TF-IDF path
+        examples: list[Example] = []
+        for meta in self.faiss_retriever.store.meta:
+            text = str(meta.get("text", "")).strip()
+            label = str(meta.get("label", "")).strip()
+            if text and label:
+                examples.append(Example(text=text, label=label))
+        if not examples:
+            raise ValueError("EmbeddingRetriever requires non-empty metadata with text/label.")
+        self.examples = examples
+
+    def select_topk_with_min_labels(
+        self, query: str, k: int, m: int
+    ) -> list[tuple[Example, float]]:
+        """Return top-k most similar examples using FAISS search."""
+        if k <= 0:
+            raise ValueError("k must be positive.")
+        if m <= 0:
+            raise ValueError("m must be positive.")
+
+        # Heuristic: ask FAISS for a slightly larger pool to satisfy min-label constraint
+        pool_size = max(k * 3, m * 3)
+        results = self.faiss_retriever.store.search(query, k=pool_size)
+
+        selected: list[tuple[Example, float]] = []
+        seen_labels: set[str] = set()
+
+        for res in results:
+            text = str(res.get("text", "")).strip()
+            label = str(res.get("label", "")).strip()
+            if not text or not label:
+                continue
+
+            ex = Example(text=text, label=label)
+            score = float(res.get("score", 0.0))
+            selected.append((ex, score))
+            seen_labels.add(ex.label)
 
             if len(selected) >= k and len(seen_labels) >= m:
                 break
@@ -287,7 +346,7 @@ def classify_single(
     *,
     model: str,
     query: str,
-    retriever: Retriever,
+    retriever: TfIdfRetriever | EmbeddingRetriever,
     label_defs: dict[str, str] | None = None,
     k: int = 10,
     m: int = 4,
@@ -555,7 +614,7 @@ class RagLLM(RagClassifierBase):
 
     def __init__(
         self,
-        retriever: Retriever,
+        retriever: TfIdfRetriever | EmbeddingRetriever,
         labels: Sequence[str],
         *,
         model: str = "ollama/llama3.1:8b",
@@ -582,12 +641,40 @@ class RagLLM(RagClassifierBase):
         top_k: int = 10,
         min_labels: int = 4,
         prompt_style: str = "default",
+        backend: str | None = None,
         **kwargs: Any,
     ) -> RagLLM:
-        """Create a classifier with default configuration."""
-        examples, label_defs = _load_examples()
-        retriever = Retriever(examples)
-        labels = sorted({ex.label for ex in examples})
+        """Create a classifier with default configuration.
+
+        backend: str | None = None,
+            - None or \"tfidf\": use TF-IDF bi-gram retrieval on raw texts.
+            - \"sbert\" | \"ollama\" | \"openai\": use FAISS-backed retrieval
+              via the existing RAG ``Retriever`` and ``VectorStore`` indices.
+        """
+        backend_normalized = (backend or "tfidf").lower()
+
+        retriever: TfIdfRetriever | EmbeddingRetriever
+
+        if backend_normalized in ("tfidf", "local", "legacy"):
+            examples, label_defs = _load_examples()
+            retriever = TfIdfRetriever(examples)
+            labels = sorted({ex.label for ex in examples})
+        else:
+            # Embedding-backed retrieval using existing FAISS indices
+            if backend_normalized not in ("sbert", "ollama", "openai"):
+                raise ValueError(
+                    f"Unsupported backend '{backend}'. Expected one of "
+                    f"'tfidf', 'sbert', 'ollama', 'openai', or None."
+                )
+            faiss_retriever = FaissRetriever.from_default(
+                use_openai=backend_normalized == "openai",
+                backend=backend_normalized if backend_normalized != "tfidf" else None,
+            )
+            retriever = EmbeddingRetriever(faiss_retriever)
+            labels = sorted({ex.label for ex in retriever.examples})
+            # Build simple label definitions from examples
+            for ex in retriever.examples:
+                label_defs.setdefault(ex.label, ex.text[:160])
 
         return cls(
             retriever=retriever,

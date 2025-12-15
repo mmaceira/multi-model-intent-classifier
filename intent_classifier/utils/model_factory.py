@@ -70,13 +70,12 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
                 logger.warning(
                     f"LLM model not found in params or config, using fallback: {model_name}"
                 )
-        use_openai = params.get(
-            "use_openai", False
-        )  # Kept for compatibility, but new impl uses TF-IDF
+        use_openai = params.get("use_openai", False)  # Kept for compatibility (OpenAI embeddings)
         min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
         prompt_style = params.get(
             "prompt_style", "default"
         )  # Prompt style: "default", "short", "n8n_prompt", etc.
+        backend = params.get("backend")  # Optional embedding backend for retrieval
 
         logger.info(
             f"Creating LLM RAG model with top_k={top_k}, model={model_name}, "
@@ -90,6 +89,7 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
                 use_openai=use_openai,  # Kept for compatibility
                 min_labels=min_labels,
                 prompt_style=prompt_style,
+                backend=backend,
             )
         )
 
