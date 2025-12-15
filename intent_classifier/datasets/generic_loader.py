@@ -147,7 +147,7 @@ def load_dataset_from_config(
         )
 
     # Apply filters
-    filters_config = config.get("filters", {})
+    filters_config = config.get("filters") or {}
     # For Tandem dataset, skip min_samples_per_label filtering if normalize_labels is enabled
     if filters_config.get("min_samples_per_label"):
         # Only apply filtering if normalization is not enabled (to preserve all normalized labels)
