@@ -109,12 +109,17 @@ def test_evaluation_single_label(single_label_predictions):
     """Test evaluation with single-label predictions."""
     pred_dir, models = single_label_predictions
 
-    # Run evaluation
-    with tempfile.TemporaryDirectory() as results_dir:
+    # Run evaluation with new eval_dir/compare_dir structure
+    with tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -122,24 +127,29 @@ def test_evaluation_single_label(single_label_predictions):
         assert len(results) > 0
         assert "linear_svm" in results
 
-        # Check that metrics files exist
-        results_path = Path(results_dir)
-        assert (results_path / "linear_svm" / "test" / "test_metrics.json").exists()
+        # Check that per-model metrics exist in eval/<model_id>/
+        model_id = "linear_svm"  # slugified name
+        assert (eval_dir / model_id / "test" / "test_metrics.json").exists()
 
-        # Check that summary exists
-        assert (results_path / "summary_metrics.csv").exists()
+        # Check that summary exists in compare/
+        assert (compare_dir / "summary_metrics.csv").exists()
 
 
 def test_evaluation_multilabel(multilabel_predictions):
     """Test evaluation with multi-label predictions."""
     pred_dir, models = multilabel_predictions
 
-    # Run evaluation
-    with tempfile.TemporaryDirectory() as results_dir:
+    # Run evaluation with new eval_dir/compare_dir structure
+    with tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -147,23 +157,28 @@ def test_evaluation_multilabel(multilabel_predictions):
         assert len(results) > 0
         assert "linear_svm" in results
 
-        # Check that metrics files exist
-        results_path = Path(results_dir)
-        assert (results_path / "linear_svm" / "test" / "test_metrics.json").exists()
+        # Check that per-model metrics exist in eval/<model_id>/
+        model_id = "linear_svm"  # slugified name
+        assert (eval_dir / model_id / "test" / "test_metrics.json").exists()
 
-        # Check that summary exists
-        assert (results_path / "summary_metrics.csv").exists()
+        # Check that summary exists in compare/
+        assert (compare_dir / "summary_metrics.csv").exists()
 
 
 def test_evaluation_metrics_content_single_label(single_label_predictions):
     """Test that evaluation metrics contain expected values for single-label."""
     pred_dir, models = single_label_predictions
 
-    with tempfile.TemporaryDirectory() as results_dir:
+    with tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -176,11 +191,16 @@ def test_evaluation_metrics_content_multilabel(multilabel_predictions):
     """Test that evaluation metrics contain expected values for multi-label."""
     pred_dir, models = multilabel_predictions
 
-    with tempfile.TemporaryDirectory() as results_dir:
+    with tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -197,13 +217,18 @@ def test_evaluation_with_missing_predictions():
     """Test that evaluation handles missing predictions gracefully."""
     model_names = ["linear_svm"]
 
-    with tempfile.TemporaryDirectory() as pred_dir, tempfile.TemporaryDirectory() as results_dir:
+    with tempfile.TemporaryDirectory() as pred_dir, tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         # Try to evaluate with non-existent predictions directory
         # Should return empty dict (not raise)
         results = run_evaluations(
             model_names=model_names,
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
         # Should return empty dict when no predictions found
@@ -215,18 +240,23 @@ def test_evaluation_summary_table(single_label_predictions):
     """Test that evaluation generates summary table."""
     pred_dir, models = single_label_predictions
 
-    with tempfile.TemporaryDirectory() as results_dir:
+    with tempfile.TemporaryDirectory() as base_dir:
+        base_path = Path(base_dir)
+        eval_dir = base_path / "eval"
+        compare_dir = base_path / "compare"
+
         run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
         # Check that summary CSV exists and is readable
-        summary_path = Path(results_dir) / "summary_metrics.csv"
+        summary_path = compare_dir / "summary_metrics.csv"
         if summary_path.exists():
-            df = pd.read_csv(summary_path)
+            df = pd.read_csv(summary_path, index_col=0)
             assert len(df) > 0
             # Summary CSV has model names as index, not a "model" column
             assert len(df.index) > 0

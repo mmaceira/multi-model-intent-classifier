@@ -100,6 +100,23 @@ def compute_multilabel_metrics(
     # Compute aggregated metrics
     metrics = _compute_aggregated_metrics(y_true_binary, y_pred_binary, split_name)
 
+    # Compute and save per-sample metrics (TP, FN, FP per prediction)
+    per_sample_metrics = _compute_per_sample_metrics(
+        y_true_binary, y_pred_binary, y_true_filtered, y_pred_filtered
+    )
+    if per_sample_metrics:
+        per_sample_df = pd.DataFrame(per_sample_metrics)
+        per_sample_df.to_csv(
+            output_dir / f"{split_name}_per_sample_metrics.csv",
+            index=False,
+        )
+        logger.info(
+            f"Saved per-sample metrics for {split_name} ({len(per_sample_metrics)} samples)"
+        )
+
+        # Add summary statistics to aggregated metrics
+        metrics.update(_compute_per_sample_summary_stats(per_sample_df, split_name))
+
     # Compute and save per-label metrics
     per_label_metrics = _compute_per_label_metrics(y_true_binary, y_pred_binary, all_classes)
 
@@ -193,6 +210,104 @@ def _compute_aggregated_metrics(
     }
 
 
+def _compute_per_sample_metrics(
+    y_true_binary: np.ndarray,
+    y_pred_binary: np.ndarray,
+    y_true_labels: Sequence[Sequence[str]],
+    y_pred_labels: Sequence[Sequence[str]],
+) -> list[dict[str, Any]]:
+    """Compute per-sample metrics (TP, FN, FP for each prediction).
+
+    Parameters
+    ----------
+    y_true_binary : np.ndarray
+        Binary matrix of true labels (n_samples, n_classes).
+    y_pred_binary : np.ndarray
+        Binary matrix of predicted labels (n_samples, n_classes).
+    y_true_labels : Sequence[Sequence[str]]
+        True labels in multi-label format (list of lists).
+    y_pred_labels : Sequence[Sequence[str]]
+        Predicted labels in multi-label format (list of lists).
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of dictionaries with per-sample metrics.
+    """
+    per_sample_metrics = []
+
+    for i in range(len(y_true_binary)):
+        true_binary = y_true_binary[i]
+        pred_binary = y_pred_binary[i]
+
+        # True Positives: labels that are both in true and predicted
+        tp = np.logical_and(true_binary, pred_binary).sum()
+
+        # False Negatives: labels that are in true but not in predicted (missed tags)
+        fn = np.logical_and(true_binary, np.logical_not(pred_binary)).sum()
+
+        # False Positives: labels that are in predicted but not in true (incorrectly predicted)
+        fp = np.logical_and(np.logical_not(true_binary), pred_binary).sum()
+
+        # True Negatives: labels that are neither in true nor predicted
+        tn = np.logical_and(np.logical_not(true_binary), np.logical_not(pred_binary)).sum()
+
+        # Counts
+        n_true_labels = int(true_binary.sum())
+        n_pred_labels = int(pred_binary.sum())
+
+        # Exact match (all labels correct)
+        exact_match = bool(tp == n_true_labels and fp == 0 and fn == 0)
+
+        per_sample_metrics.append(
+            {
+                "sample_idx": i,
+                "n_true_labels": n_true_labels,
+                "n_pred_labels": n_pred_labels,
+                "true_positives": int(tp),
+                "false_negatives": int(fn),
+                "false_positives": int(fp),
+                "true_negatives": int(tn),
+                "exact_match": exact_match,
+                "true_labels": ",".join(y_true_labels[i]) if y_true_labels[i] else "",
+                "pred_labels": ",".join(y_pred_labels[i]) if y_pred_labels[i] else "",
+            }
+        )
+
+    return per_sample_metrics
+
+
+def _compute_per_sample_summary_stats(
+    per_sample_df: pd.DataFrame, split_name: str
+) -> dict[str, float]:
+    """Compute summary statistics from per-sample metrics.
+
+    Parameters
+    ----------
+    per_sample_df : pd.DataFrame
+        DataFrame with per-sample metrics.
+    split_name : str
+        Name of the split for metric keys.
+
+    Returns
+    -------
+    Dict[str, float]
+        Dictionary of summary statistics.
+    """
+    return {
+        f"{split_name}_mean_tp_per_sample": float(per_sample_df["true_positives"].mean()),
+        f"{split_name}_mean_fn_per_sample": float(per_sample_df["false_negatives"].mean()),
+        f"{split_name}_mean_fp_per_sample": float(per_sample_df["false_positives"].mean()),
+        f"{split_name}_median_tp_per_sample": float(per_sample_df["true_positives"].median()),
+        f"{split_name}_median_fn_per_sample": float(per_sample_df["false_negatives"].median()),
+        f"{split_name}_median_fp_per_sample": float(per_sample_df["false_positives"].median()),
+        f"{split_name}_std_tp_per_sample": float(per_sample_df["true_positives"].std()),
+        f"{split_name}_std_fn_per_sample": float(per_sample_df["false_negatives"].std()),
+        f"{split_name}_std_fp_per_sample": float(per_sample_df["false_positives"].std()),
+        f"{split_name}_exact_match_rate": float(per_sample_df["exact_match"].mean()),
+    }
+
+
 def _compute_per_label_metrics(
     y_true_binary: np.ndarray,
     y_pred_binary: np.ndarray,
@@ -279,6 +394,10 @@ def get_multilabel_summary_metrics() -> list[str]:
         "test_jaccard_macro",
         "test_precision_macro",
         "test_recall_macro",
+        "test_mean_tp_per_sample",
+        "test_mean_fn_per_sample",
+        "test_mean_fp_per_sample",
+        "test_exact_match_rate",
     ]
 
 

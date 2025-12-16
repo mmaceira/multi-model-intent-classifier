@@ -657,6 +657,7 @@ def compute_multilabel_pr_summary(
     summaries: list[dict[str, Any]] = []
 
     for model_name, splits in predictions_dict.items():
+        # model_name here is already slugified (from prediction step)
         # Prefer validation split when available, otherwise use test.
         split_to_use = "val" if "val" in splits else "test"
         if split_to_use not in splits:

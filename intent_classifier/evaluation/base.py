@@ -9,7 +9,8 @@ from typing import Any
 import pandas as pd
 
 from intent_classifier.evaluation.utils import load_all_prediction_files, setup_logging
-from intent_classifier.utils.file_ops import ensure_dir, sanitize_model_name
+from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.slugify import slugify_model_id
 
 
 class BaseEvaluationRunner(ABC):
@@ -94,7 +95,8 @@ class BaseEvaluationRunner(ABC):
         model_names: list[str] | dict[str, Any] | None,
         *,
         artefacts_root: str | Path = "artefacts",
-        output_dir: str | Path = "results",
+        eval_dir: str | Path,
+        compare_dir: str | Path,
     ) -> dict[str, dict[str, Any]]:
         """Run evaluations and save results.
 
@@ -102,24 +104,16 @@ class BaseEvaluationRunner(ABC):
             model_names: List of model names to evaluate, dict of models (keys will be used),
                         or None/empty list to evaluate all models with predictions
             artefacts_root: Root directory containing prediction files
-            output_dir: Directory to save evaluation results
-
-        Returns:
-            Dictionary mapping model names to their metrics
-        """
-        """Compute metrics from persisted predictions and render rich reports.
-
-        Args:
-            model_names: List of model names to evaluate, dict of models (keys will be used),
-                        or None/empty list to evaluate all models with predictions
-            artefacts_root: Root directory containing prediction files
-            output_dir: Directory to save evaluation results
+            eval_dir: Directory for per-model evaluation results (eval/<model_id>/)
+            compare_dir: Directory for cross-model comparison summaries (compare/)
 
         Returns:
             Dictionary mapping model names to their metrics
         """
         results: dict[str, dict[str, Any]] = {}
-        artefacts_root, output_dir = Path(artefacts_root), ensure_dir(output_dir)
+        artefacts_root = Path(artefacts_root)
+        eval_dir = ensure_dir(eval_dir)
+        compare_dir = ensure_dir(compare_dir)
 
         predictions_dict = load_all_prediction_files(artefacts_root)
         if not predictions_dict:
@@ -138,8 +132,8 @@ class BaseEvaluationRunner(ABC):
         # ------------------------------------------------------------------
         # Normalise requested model names to prediction directory keys
         # ------------------------------------------------------------------
-        # predictions_dict is keyed by *sanitised* model names (see
-        # intent_classifier.utils.file_ops.sanitize_model_name), whereas
+        # predictions_dict is keyed by *slugified* model names (see
+        # intent_classifier.utils.slugify.slugify_model_id), whereas
         # callers may provide human‑readable display names. To ensure we
         # evaluate the correct models (including those whose names contain
         # path separators such as "Qwen/Ollama"), we build a mapping from
@@ -162,14 +156,14 @@ class BaseEvaluationRunner(ABC):
             else:
                 normalised_model_names = list(model_names)
 
-            # Build helper map from sanitised name -> original display name
+            # Build helper map from slugified name -> original display name
             safe_to_display: dict[str, str] = {}
             for name in normalised_model_names:
-                safe = sanitize_model_name(name)
+                safe = slugify_model_id(name)
                 # Prefer the first occurrence if there are collisions
                 if safe not in safe_to_display:
                     safe_to_display[safe] = name
-                # Also allow exact (unsanitised) matches
+                # Also allow exact (unslugified) matches
                 if name not in safe_to_display:
                     safe_to_display[name] = name
 
@@ -181,7 +175,7 @@ class BaseEvaluationRunner(ABC):
 
         # As a safety net, ensure that *all* models with predictions are
         # considered, even if their names do not exactly match the ones
-        # passed in model_names (e.g. due to unexpected sanitisation).
+        # passed in model_names (e.g. due to unexpected slugification).
         # Any such models fall back to using their prediction directory name
         # as display label so they are visible in summaries instead of being
         # silently skipped.
@@ -198,8 +192,9 @@ class BaseEvaluationRunner(ABC):
 
             display_name = display_name_by_pred_key[pred_key]
 
-            # Keep filesystem layout based on prediction key (already sanitised)
-            model_out_dir = ensure_dir(output_dir / pred_key)
+            # Use pred_key (already slugified from prediction step) for directory structure
+            # This ensures consistency with how predictions are stored
+            model_out_dir = ensure_dir(eval_dir / pred_key)
             self.logger.info("Processing model %s", display_name)
 
             model_results: dict[str, float] = {}
@@ -252,7 +247,8 @@ class BaseEvaluationRunner(ABC):
         self._generate_summary(
             results,
             predictions_dict,
-            output_dir,
+            eval_dir,
+            compare_dir,
             selected_display_names,
             artefacts_root,
         )
@@ -343,7 +339,8 @@ class BaseEvaluationRunner(ABC):
         self,
         results: dict[str, dict[str, Any]],
         predictions_dict: dict[str, dict[str, pd.DataFrame]],
-        output_dir: Path,
+        eval_dir: Path,
+        compare_dir: Path,
         model_names: list[str],
         artefacts_root: Path | None = None,
     ) -> None:
@@ -352,7 +349,8 @@ class BaseEvaluationRunner(ABC):
         Args:
             results: Dictionary of model results
             predictions_dict: Dictionary of predictions
-            output_dir: Directory to save summaries
+            eval_dir: Directory for per-model evaluation results (eval/<model_id>/)
+            compare_dir: Directory to save comparison summaries (compare/)
             model_names: List of model names
         """
         import pandas as pd
@@ -375,24 +373,24 @@ class BaseEvaluationRunner(ABC):
                     summary_df[f"{metric}_best"] = summary_df[metric] == summary_df[metric].min()
                 else:
                     summary_df[f"{metric}_best"] = summary_df[metric] == summary_df[metric].max()
-        summary_df.to_csv(output_dir / "summary_metrics.csv")
+        summary_df.to_csv(compare_dir / "summary_metrics.csv")
 
         if len(model_names) > 1:
-            plot_model_comparisons(predictions_dict, output_dir)
+            plot_model_comparisons(predictions_dict, compare_dir)
 
         # Global error analysis
         error_patterns = analyse_error_patterns(predictions_dict)
-        error_patterns.to_csv(output_dir / "common_error_patterns.csv", index=False)
+        error_patterns.to_csv(compare_dir / "common_error_patterns.csv", index=False)
         misclass_examples = consistently_misclassified(
             predictions_dict, min_models=len(predictions_dict)
         )
         if not misclass_examples.empty:
-            misclass_examples.to_csv(output_dir / "consistently_misclassified.csv", index=False)
+            misclass_examples.to_csv(compare_dir / "consistently_misclassified.csv", index=False)
 
         first_model = next(iter(predictions_dict))
         if "text" in predictions_dict[first_model]["test"].columns:
             analyze_text_features(predictions_dict).to_csv(
-                output_dir / "text_features_analysis.csv", index=False
+                compare_dir / "text_features_analysis.csv", index=False
             )
 
         # Additional analysis for multilabel tasks
@@ -435,17 +433,17 @@ class BaseEvaluationRunner(ABC):
                 # Per-bucket metrics (by number of labels)
                 per_bucket_df = analyze_per_bucket_metrics(predictions_dict)
                 if not per_bucket_df.empty:
-                    per_bucket_df.to_csv(output_dir / "per_label_count_metrics.csv", index=False)
+                    per_bucket_df.to_csv(compare_dir / "per_label_count_metrics.csv", index=False)
 
                 # Coverage analysis per label
                 coverage_df = analyze_coverage_per_label(predictions_dict)
                 if not coverage_df.empty:
-                    coverage_df.to_csv(output_dir / "prediction_coverage.csv", index=False)
+                    coverage_df.to_csv(compare_dir / "prediction_coverage.csv", index=False)
 
                 # Label count distribution
                 dist_df = analyze_label_count_distribution(predictions_dict)
                 if not dist_df.empty:
-                    dist_df.to_csv(output_dir / "label_count_distribution.csv", index=False)
+                    dist_df.to_csv(compare_dir / "label_count_distribution.csv", index=False)
 
                 # Optimal thresholds analysis (if probability files exist)
                 if artefacts_root is not None:
@@ -453,29 +451,31 @@ class BaseEvaluationRunner(ABC):
                         predictions_dict, Path(artefacts_root)
                     )
                     if not thresholds_df.empty:
-                        thresholds_df.to_csv(output_dir / "optimal_thresholds.csv", index=False)
+                        thresholds_df.to_csv(compare_dir / "optimal_thresholds.csv", index=False)
 
                     # PR summary curves + JSON (multilabel only, probabilities required).
                     # This is intentionally defensive: if anything fails (missing files,
                     # shape mismatches, etc.), the rest of the evaluation still succeeds.
+                    # Note: compute_multilabel_pr_summary writes per-model files to eval_dir
+                    # and returns a summary DataFrame for compare_dir
                     pr_summary_df = compute_multilabel_pr_summary(
                         predictions_dict=predictions_dict,
                         artefacts_root=Path(artefacts_root),
-                        eval_root=output_dir,
+                        eval_root=eval_dir,
                     )
                     if not pr_summary_df.empty:
-                        pr_summary_df.to_csv(output_dir / "multilabel_pr_summary.csv", index=False)
+                        pr_summary_df.to_csv(compare_dir / "multilabel_pr_summary.csv", index=False)
 
                     # Optional global threshold sweep, gated by configuration.
                     if threshold_sweep_enabled:
                         sweep_df = run_multilabel_threshold_sweep(
                             predictions_dict=predictions_dict,
                             artefacts_root=Path(artefacts_root),
-                            eval_root=output_dir,
+                            eval_root=eval_dir,
                         )
                         if not sweep_df.empty:
                             sweep_df.to_csv(
-                                output_dir / "multilabel_threshold_sweep.csv", index=False
+                                compare_dir / "multilabel_threshold_sweep.csv", index=False
                             )
 
                     # Label co-occurrence statistics for the dataset (gated by config).
@@ -500,11 +500,11 @@ class BaseEvaluationRunner(ABC):
                                         )
                                 else:
                                     cooccurrence_df.to_csv(
-                                        output_dir / "label_cooccurrence.csv", index=False
+                                        compare_dir / "label_cooccurrence.csv", index=False
                                     )
                             except Exception:
                                 cooccurrence_df.to_csv(
-                                    output_dir / "label_cooccurrence.csv", index=False
+                                    compare_dir / "label_cooccurrence.csv", index=False
                                 )
 
                     # Hardest examples per model (error_analysis/hardest_examples.*),
@@ -513,17 +513,6 @@ class BaseEvaluationRunner(ABC):
                         write_hardest_examples(
                             predictions_dict=predictions_dict,
                             artefacts_root=Path(artefacts_root),
-                            eval_root=output_dir,
+                            eval_root=eval_dir,
                             store_text=store_text_enabled,
                         )
-
-                    # PR summary curves + JSON (multilabel only, probabilities required).
-                    # This is intentionally defensive: if anything fails (missing files,
-                    # shape mismatches, etc.), the rest of the evaluation still succeeds.
-                    pr_summary_df = compute_multilabel_pr_summary(
-                        predictions_dict=predictions_dict,
-                        artefacts_root=Path(artefacts_root),
-                        eval_root=output_dir,
-                    )
-                    if not pr_summary_df.empty:
-                        pr_summary_df.to_csv(output_dir / "multilabel_pr_summary.csv", index=False)

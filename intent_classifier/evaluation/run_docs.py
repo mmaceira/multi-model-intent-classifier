@@ -12,6 +12,7 @@ templates are plain ``.format`` strings stored under ``docs/templates``.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -315,7 +316,7 @@ def _load_template(template_name: str) -> str:
     return template_path.read_text(encoding="utf-8")
 
 
-class _SafeDict(dict):
+class _SafeDict(dict[str, str]):
     """Dictionary that returns an empty string for missing keys when formatting."""
 
     def __missing__(self, key: str) -> str:
@@ -508,8 +509,74 @@ def generate_run_readme_and_model_cards(
 
     for display_name, model_metrics in results.items():
         model_id = _slugify_model_name(display_name)
+
+        # If metrics are missing from results, try to load from
+        # eval/<model_id>/test/test_metrics.json or from compare/summary_metrics.csv
+        # Convert to dict to allow modifications (Mapping is read-only)
+        metrics_dict: dict[str, Any] = dict(model_metrics) if model_metrics else {}
+
+        if not metrics_dict:
+            # Try loading from per-model eval directory
+            model_eval_dir = eval_dir / model_id / "test"
+            test_metrics_file = model_eval_dir / "test_metrics.json"
+            if test_metrics_file.exists():
+                try:
+                    with open(test_metrics_file, encoding="utf-8") as f:
+                        loaded_metrics = json.load(f)
+                        # Convert to the expected format (flat dict with test_ prefix)
+                        for key, value in loaded_metrics.items():
+                            if not key.startswith("test_"):
+                                metrics_dict[f"test_{key}"] = value
+                            else:
+                                metrics_dict[key] = value
+                except Exception:
+                    pass
+
+            # Fallback: try to get from summary_metrics.csv
+            if not metrics_dict and not summary_df.empty:
+                if display_name in summary_df.index:
+                    row_series = summary_df.loc[display_name]
+                    for col in summary_df.columns:
+                        val = row_series[col]
+                        if pd.notna(val):
+                            metrics_dict[col] = float(val)
+                # Also try slugified name
+                elif model_id in summary_df.index:
+                    row_series = summary_df.loc[model_id]
+                    for col in summary_df.columns:
+                        val = row_series[col]
+                        if pd.notna(val):
+                            metrics_dict[col] = float(val)
+
+        model_metrics = metrics_dict
+
+        # Try fuzzy matching for RagLLM variants
+        registry_key = model_id
+        if model_id not in ALGORITHM_REGISTRY:
+            # Try fuzzy matching for RagLLM variants
+            if model_id.startswith("rag_llm_"):
+                # Try to match patterns like rag_llm_tfidf_* -> rag_llm_tfidf_default
+                parts = model_id.split("_")
+                if len(parts) >= 3 and parts[0] == "rag" and parts[1] == "llm":
+                    # Try common variants - match first 3 parts (rag_llm_<retrieval_method>)
+                    retrieval_method = parts[2] if len(parts) > 2 else None
+                    if retrieval_method:
+                        # Try to find a matching variant based on retrieval method
+                        base_variants = [
+                            "rag_llm_tfidf_default",
+                            "rag_llm_sbert_default",
+                            "rag_llm_qwen_default",
+                            "rag_llm_tfidf_short",
+                            "rag_llm_tfidf_n8n",
+                        ]
+                        for variant in base_variants:
+                            variant_parts = variant.split("_")
+                            if len(variant_parts) >= 3 and variant_parts[2] == retrieval_method:
+                                registry_key = variant
+                                break
+
         algo_info = ALGORITHM_REGISTRY.get(
-            model_id,
+            registry_key,
             AlgorithmInfo(
                 display_name=display_name,
                 algorithm_family="Unknown / custom",

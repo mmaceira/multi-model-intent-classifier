@@ -35,7 +35,6 @@ def test_pipeline_single_label_e2e():
         tmp_path = Path(tmpdir)
         models_dir = tmp_path / "models"
         pred_dir = tmp_path / "predictions"
-        results_dir = tmp_path / "results"
 
         # Step 1: Training
         models = {
@@ -89,10 +88,13 @@ def test_pipeline_single_label_e2e():
         assert (pred_dir / "naive_bayes" / "test_predictions.csv").exists()
 
         # Step 3: Evaluation
+        eval_dir = tmp_path / "eval"
+        compare_dir = tmp_path / "compare"
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -101,9 +103,9 @@ def test_pipeline_single_label_e2e():
         assert "naive_bayes" in results
 
         # Check that metrics files exist
-        assert (results_dir / "linear_svm" / "test" / "test_metrics.json").exists()
-        assert (results_dir / "naive_bayes" / "test" / "test_metrics.json").exists()
-        assert (results_dir / "summary_metrics.csv").exists()
+        assert (eval_dir / "linear_svm" / "test" / "test_metrics.json").exists()
+        assert (eval_dir / "naive_bayes" / "test" / "test_metrics.json").exists()
+        assert (compare_dir / "summary_metrics.csv").exists()
 
 
 def test_pipeline_multilabel_e2e():
@@ -127,7 +129,6 @@ def test_pipeline_multilabel_e2e():
         tmp_path = Path(tmpdir)
         models_dir = tmp_path / "models"
         pred_dir = tmp_path / "predictions"
-        results_dir = tmp_path / "results"
 
         # Step 1: Training
         models = {
@@ -183,10 +184,13 @@ def test_pipeline_multilabel_e2e():
         assert (pred_dir / "naive_bayes" / "test_predictions.csv").exists()
 
         # Step 3: Evaluation
+        eval_dir = tmp_path / "eval"
+        compare_dir = tmp_path / "compare"
         results = run_evaluations(
             model_names=list(models.keys()),
             artefacts_root=pred_dir,
-            output_dir=results_dir,
+            eval_dir=eval_dir,
+            compare_dir=compare_dir,
             verbose=False,
         )
 
@@ -195,9 +199,9 @@ def test_pipeline_multilabel_e2e():
         assert "naive_bayes" in results
 
         # Check that metrics files exist
-        assert (results_dir / "linear_svm" / "test" / "test_metrics.json").exists()
-        assert (results_dir / "naive_bayes" / "test" / "test_metrics.json").exists()
-        assert (results_dir / "summary_metrics.csv").exists()
+        assert (eval_dir / "linear_svm" / "test" / "test_metrics.json").exists()
+        assert (eval_dir / "naive_bayes" / "test" / "test_metrics.json").exists()
+        assert (compare_dir / "summary_metrics.csv").exists()
 
 
 def test_pipeline_deploy_workflow():

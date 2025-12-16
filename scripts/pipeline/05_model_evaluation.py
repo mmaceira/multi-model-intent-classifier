@@ -81,7 +81,8 @@ def main():
         results = run_evaluations(
             models,
             artefacts_root=PREDICTIONS_DIR,
-            output_dir=RESULTS_DIR,
+            eval_dir=PREDICTIONS_DIR,  # Per-model metrics go to eval/<model_id>/
+            compare_dir=RESULTS_DIR,  # Summary metrics go to compare/
             verbose=True,
         )
         if not results:

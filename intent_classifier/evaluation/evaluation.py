@@ -11,8 +11,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-import dataframe_image as dfi
-
 # -----------------------------------------------------------------------------
 # Metric‑table visualisation helpers
 # -----------------------------------------------------------------------------
@@ -101,9 +99,25 @@ def save_metric_table(
     and **bold** font. Change ``highlight`` to ``"row"`` to switch to a
     row‑wise comparison. Both the colour and the definition of *best*
     (``max``/``min``) are configurable.
+
+    Note: If dataframe_image is not available, this function will log a warning
+    and skip image generation.
     """
     if df.empty:
         raise ValueError("Provided DataFrame is empty – nothing to plot.")
+
+    # Lazy import of dataframe_image to avoid ModuleNotFoundError if missing
+    try:
+        import dataframe_image as dfi
+    except ImportError:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "dataframe_image not available - skipping metric table image generation. "
+            "Install with: uv pip install dataframe_image"
+        )
+        return
 
     # 1. Basic formatting ------------------------------------------------------
     styler = df.style.format(number_format)
@@ -195,7 +209,8 @@ def run_evaluations(
     model_names: list[str] | dict[str, Any] | None,
     *,
     artefacts_root: str | Path = "artefacts",
-    output_dir: str | Path = "results",
+    eval_dir: str | Path,
+    compare_dir: str | Path,
     verbose: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Compute metrics from persisted predictions and render rich reports.
@@ -207,7 +222,8 @@ def run_evaluations(
         model_names: List of model names to evaluate, dict of models (keys will be used),
                     or None/empty list to evaluate all models with predictions
         artefacts_root: Root directory containing prediction files
-        output_dir: Directory to save evaluation results
+        eval_dir: Directory for per-model evaluation results (eval/<model_id>/)
+        compare_dir: Directory for cross-model comparison summaries (compare/)
         verbose: Whether to print progress and warning messages
 
     Returns:
@@ -220,7 +236,9 @@ def run_evaluations(
     from intent_classifier.evaluation.multilabel import MultiLabelEvaluationRunner
     from intent_classifier.evaluation.singlelabel import SingleLabelEvaluationRunner
 
-    artefacts_root, output_dir = Path(artefacts_root), ensure_dir(output_dir)
+    artefacts_root = Path(artefacts_root)
+    eval_dir = ensure_dir(eval_dir)
+    compare_dir = ensure_dir(compare_dir)
 
     predictions_dict = load_all_prediction_files(artefacts_root)
     if not predictions_dict:
@@ -272,7 +290,8 @@ def run_evaluations(
     return runner.run_evaluations(
         model_names=model_names,
         artefacts_root=artefacts_root,
-        output_dir=output_dir,
+        eval_dir=eval_dir,
+        compare_dir=compare_dir,
     )
 
 
