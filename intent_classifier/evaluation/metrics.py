@@ -95,35 +95,37 @@ def compute_metrics(
         y_prob = np.load(prob_path)
 
         # Ensure probabilities are properly normalized
-        if not np.allclose(y_prob.sum(axis=1), 1.0):
-            logger.warning("Probabilities do not sum to 1, normalizing...")
-            y_prob = y_prob / y_prob.sum(axis=1, keepdims=True)
+        if y_prob.ndim == 2:
+            if not np.allclose(y_prob.sum(axis=1), 1.0):
+                logger.warning("Probabilities do not sum to 1, normalizing...")
+                y_prob = y_prob / y_prob.sum(axis=1, keepdims=True)
 
         # Compute probability-based metrics
-        if is_multiclass:
-            metrics[f"{split['prefix']}roc_auc"] = roc_auc_score(
-                split["y_true_bin"], y_prob, multi_class="ovr"
-            )
-            metrics[f"{split['prefix']}avg_precision"] = average_precision_score(
-                split["y_true_bin"], y_prob
-            )
-        else:
-            metrics[f"{split['prefix']}roc_auc"] = roc_auc_score(split["y_true"], y_prob)
-            metrics[f"{split['prefix']}avg_precision"] = average_precision_score(
-                split["y_true"], y_prob
-            )
+        if y_prob.ndim == 2:
+            if is_multiclass:
+                metrics[f"{split['prefix']}roc_auc"] = roc_auc_score(
+                    split["y_true_bin"], y_prob, multi_class="ovr"
+                )
+                metrics[f"{split['prefix']}avg_precision"] = average_precision_score(
+                    split["y_true_bin"], y_prob
+                )
+            else:
+                metrics[f"{split['prefix']}roc_auc"] = roc_auc_score(split["y_true"], y_prob)
+                metrics[f"{split['prefix']}avg_precision"] = average_precision_score(
+                    split["y_true"], y_prob
+                )
 
-        # Compute Expected Calibration Error (ECE)
-        ece = compute_ece(split["y_true"], y_pred, y_prob, classes)
-        metrics[f"{split['prefix']}ece"] = ece
+            # Compute Expected Calibration Error (ECE)
+            ece = compute_ece(split["y_true"], y_pred, y_prob, classes)
+            metrics[f"{split['prefix']}ece"] = ece
 
-        # Generate per-class PR curves
-        generate_per_class_pr_curves(
-            split["y_true"],
-            y_prob,
-            classes,
-            split["out_dir"] / f"{split['name']}_pr_curves_per_class.png",
-        )
+            # Generate per-class PR curves
+            generate_per_class_pr_curves(
+                split["y_true"],
+                y_prob,
+                classes,
+                split["out_dir"] / f"{split['name']}_pr_curves_per_class.png",
+            )
 
     return y_pred, y_prob, metrics
 
@@ -380,7 +382,7 @@ def analyze_optimal_thresholds(
         calibrate_per_label_thresholds,
     )
 
-    all_rows = []
+    all_rows: list[dict[str, Any]] = []
 
     for model_name, splits in predictions_dict.items():
         # Use validation set if available, otherwise test set
@@ -415,14 +417,23 @@ def analyze_optimal_thresholds(
             continue
 
         try:
-            y_proba = np.load(prob_file)
+            y_proba = np.load(prob_file, allow_pickle=True)
 
-            # Handle MultiOutputClassifier format (list of arrays)
-            if isinstance(y_proba, list):
-                # Convert list of (n_samples, 2) arrays to (n_samples, n_classes)
-                y_proba = np.array(
-                    [proba[:, 1] if proba.shape[1] > 1 else proba[:, 0] for proba in y_proba]
-                ).T
+            # Handle MultiOutputClassifier-style object arrays
+            if isinstance(y_proba, np.ndarray) and y_proba.dtype == object:
+                try:
+                    # Each element should be an array of shape (n_samples, 2)
+                    arrays = list(y_proba)
+                    if arrays and getattr(arrays[0], "ndim", 1) >= 1:
+                        y_proba = np.array(
+                            [proba[:, 1] if proba.shape[1] > 1 else proba[:, 0] for proba in arrays]
+                        ).T
+                except Exception:
+                    # Fall back to skipping if conversion fails
+                    continue
+
+            if not isinstance(y_proba, np.ndarray) or y_proba.ndim != 2:
+                continue
 
             if y_proba.shape[1] != len(all_classes):
                 continue
@@ -438,7 +449,7 @@ def analyze_optimal_thresholds(
                         "model": model_name,
                         "split": split_to_use,
                         "label": label,
-                        "optimal_threshold": threshold,
+                        "optimal_threshold": float(threshold),
                     }
                 )
         except Exception:
@@ -627,3 +638,588 @@ def generate_per_class_pr_curves(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
+
+
+def compute_multilabel_pr_summary(
+    predictions_dict: dict[str, dict[str, pd.DataFrame]],
+    artefacts_root: Path,
+    eval_root: Path,
+) -> pd.DataFrame:
+    """Compute micro/macro PR summaries for multilabel models and persist artefacts.
+
+    This function is intentionally defensive:
+    - It only runs for models/splits that have matching *_prob.npy files.
+    - It gracefully skips any models where probabilities are missing or malformed.
+    - It writes one JSON summary and one PNG figure per model under its eval directory.
+    """
+    from intent_classifier.utils.label_utils import binarize_labels
+
+    summaries: list[dict[str, Any]] = []
+
+    for model_name, splits in predictions_dict.items():
+        # Prefer validation split when available, otherwise use test.
+        split_to_use = "val" if "val" in splits else "test"
+        if split_to_use not in splits:
+            continue
+
+        df = splits[split_to_use].copy()
+        if "y_true" not in df.columns:
+            continue
+
+        # Parse multilabel strings into sets
+        def parse_labels(label_str: str) -> set[str]:
+            if pd.isna(label_str) or label_str == "":
+                return set()
+            return {tag.strip() for tag in str(label_str).split(",") if tag.strip()}
+
+        y_true_list = [parse_labels(str(row)) for row in df["y_true"]]
+
+        # Derive consistent class ordering
+        all_classes = sorted({tag for labels in y_true_list for tag in labels})
+        if not all_classes:
+            continue
+
+        # Convert to binary matrix
+        y_true_binary, _ = binarize_labels(
+            [list(labels) for labels in y_true_list], classes=all_classes
+        )
+
+        prob_file = artefacts_root / model_name / f"{split_to_use}_prob.npy"
+        if not prob_file.exists():
+            continue
+
+        try:
+            y_proba = np.load(prob_file, allow_pickle=True)
+
+            # Handle MultiOutputClassifier-style object arrays
+            if isinstance(y_proba, np.ndarray) and y_proba.dtype == object:
+                arrays = list(y_proba)
+                if arrays:
+                    # Each element is expected to be (n_samples, 2) or (n_samples,)
+                    stacked = []
+                    for proba in arrays:
+                        if getattr(proba, "ndim", 1) == 2:
+                            stacked.append(proba[:, 1] if proba.shape[1] > 1 else proba[:, 0])
+                        else:
+                            stacked.append(np.asarray(proba).reshape(-1))
+                    y_proba = np.vstack(stacked).T
+
+            if not isinstance(y_proba, np.ndarray) or y_proba.ndim != 2:
+                continue
+
+            if y_proba.shape[0] != y_true_binary.shape[0] or y_proba.shape[1] != len(all_classes):
+                continue
+        except Exception:
+            # Skip models where probabilities cannot be loaded/sanitised
+            continue
+
+        # Compute per-label average precision and aggregate micro/macro scores
+        per_label_rows: list[dict[str, Any]] = []
+        ap_values: list[float] = []
+
+        for i, label in enumerate(all_classes):
+            try:
+                precision, recall, _ = precision_recall_curve(y_true_binary[:, i], y_proba[:, i])
+                ap = average_precision_score(y_true_binary[:, i], y_proba[:, i])
+            except Exception:
+                # Skip pathologically small / degenerate labels
+                continue
+
+            ap_values.append(float(ap))
+            per_label_rows.append(
+                {
+                    "label": label,
+                    "average_precision": float(ap),
+                    "n_positive": int(y_true_binary[:, i].sum()),
+                    "n_samples": int(y_true_binary.shape[0]),
+                }
+            )
+
+        if not per_label_rows:
+            continue
+
+        # Micro-average: flatten all labels
+        try:
+            precision_micro, recall_micro, _ = precision_recall_curve(
+                y_true_binary.ravel(), y_proba.ravel()
+            )
+            ap_micro = float(average_precision_score(y_true_binary.ravel(), y_proba.ravel()))
+        except Exception:
+            # If micro computation fails, fall back to macro-only summary.
+            precision_micro, recall_micro, ap_micro = None, None, None
+
+        ap_macro = float(np.mean(ap_values)) if ap_values else None
+
+        # Persist artefacts under the model's eval directory
+        model_eval_dir = eval_root / model_name
+        figures_dir = model_eval_dir / "figures"
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        # Plot micro/macro PR curves if available
+        try:
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            if precision_micro is not None and recall_micro is not None:
+                ax.plot(
+                    recall_micro,
+                    precision_micro,
+                    label=f"Micro-average (AP={ap_micro:.3f})",
+                    color="black",
+                    linewidth=2,
+                )
+
+            # As a simple, dense summary, overlay the best few labels by AP.
+            # This keeps the plot readable while still giving concrete examples.
+            top_k = min(5, len(per_label_rows))
+            for row in sorted(per_label_rows, key=lambda r: r["average_precision"], reverse=True)[
+                :top_k
+            ]:
+                idx = all_classes.index(row["label"])
+                p_label, r_label, _ = precision_recall_curve(y_true_binary[:, idx], y_proba[:, idx])
+                ax.plot(
+                    r_label,
+                    p_label,
+                    label=f"{row['label']} (AP={row['average_precision']:.3f})",
+                    alpha=0.6,
+                )
+
+            ax.set_xlabel("Recall")
+            ax.set_ylabel("Precision")
+            ax.set_title(f"Precision–Recall Summary – {model_name} [{split_to_use}]")
+            ax.set_xlim(0.0, 1.0)
+            ax.set_ylim(0.0, 1.05)
+            ax.grid(alpha=0.3)
+            ax.legend(loc="lower left", fontsize=8)
+            plt.tight_layout()
+            plt.savefig(figures_dir / f"pr_summary_{split_to_use}.png", dpi=150)
+            plt.close(fig)
+        except Exception:
+            # Plotting failures should not break evaluation.
+            pass
+
+        summary_row: dict[str, Any] = {
+            "model": model_name,
+            "split": split_to_use,
+            "micro_average_precision": ap_micro,
+            "macro_average_precision": ap_macro,
+            "n_labels": len(per_label_rows),
+        }
+        summaries.append(summary_row)
+
+        # Persist numeric summary as JSON alongside CSVs
+        try:
+            import json
+
+            payload: dict[str, Any] = {
+                "model": model_name,
+                "split": split_to_use,
+                "micro_average_precision": ap_micro,
+                "macro_average_precision": ap_macro,
+                "per_label": per_label_rows,
+            }
+            with (model_eval_dir / "pr_summary.json").open("w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            # Non-fatal – metrics are still available from the returned DataFrame.
+            pass
+
+    return pd.DataFrame(summaries)
+
+
+def run_multilabel_threshold_sweep(
+    predictions_dict: dict[str, dict[str, pd.DataFrame]],
+    artefacts_root: Path,
+    eval_root: Path,
+    thresholds: np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Sweep a global decision threshold for multilabel models and persist results.
+
+    For each model, this:
+    - Loads the corresponding *_prob.npy file (validation preferred, otherwise test)
+    - Sweeps a global threshold over the given range
+    - Computes micro/macro F1 and Hamming loss
+    - Writes per-model sweep results to ``threshold_sweep.parquet`` (or CSV fallback)
+      and an accompanying PNG plot under ``models/<model_id>/figures``.
+    """
+    from sklearn.metrics import f1_score, hamming_loss
+
+    from intent_classifier.utils.label_utils import (
+        binarize_labels,
+        multilabel_predictions_from_proba,
+    )
+
+    if thresholds is None:
+        thresholds = np.linspace(0.1, 0.9, 9)
+
+    all_rows: list[dict[str, Any]] = []
+
+    for model_name, splits in predictions_dict.items():
+        split_to_use = "val" if "val" in splits else "test"
+        if split_to_use not in splits:
+            continue
+
+        df = splits[split_to_use].copy()
+        if "y_true" not in df.columns:
+            continue
+
+        # Parse multilabel strings
+        def parse_labels(label_str: str) -> set[str]:
+            if pd.isna(label_str) or label_str == "":
+                return set()
+            return {tag.strip() for tag in str(label_str).split(",") if tag.strip()}
+
+        y_true_list = [parse_labels(str(row)) for row in df["y_true"]]
+
+        # Get all classes
+        all_classes = sorted({tag for labels in y_true_list for tag in labels})
+        if not all_classes:
+            continue
+
+        # Convert to binary (convert sets to lists)
+        y_true_binary, _ = binarize_labels(
+            [list(labels) for labels in y_true_list], classes=all_classes
+        )
+
+        prob_file = artefacts_root / model_name / f"{split_to_use}_prob.npy"
+        if not prob_file.exists():
+            continue
+
+        try:
+            y_proba = np.load(prob_file, allow_pickle=True)
+
+            # Handle MultiOutputClassifier-style object arrays
+            if isinstance(y_proba, np.ndarray) and y_proba.dtype == object:
+                arrays = list(y_proba)
+                if arrays:
+                    stacked = []
+                    for proba in arrays:
+                        if getattr(proba, "ndim", 1) == 2:
+                            stacked.append(proba[:, 1] if proba.shape[1] > 1 else proba[:, 0])
+                        else:
+                            stacked.append(np.asarray(proba).reshape(-1))
+                    y_proba = np.vstack(stacked).T
+
+            if not isinstance(y_proba, np.ndarray) or y_proba.ndim != 2:
+                continue
+
+            if y_proba.shape[0] != y_true_binary.shape[0] or y_proba.shape[1] != len(all_classes):
+                continue
+        except Exception:
+            # Skip models where probabilities cannot be loaded/sanitised
+            continue
+
+        model_rows: list[dict[str, Any]] = []
+
+        for threshold in thresholds:
+            try:
+                # Derive multi-label predictions from probabilities using a global threshold
+                y_pred_multilabel = multilabel_predictions_from_proba(
+                    y_proba, all_classes, threshold=float(threshold)
+                )
+                y_pred_binary, _ = binarize_labels(y_pred_multilabel, classes=all_classes)
+
+                micro_f1 = float(
+                    f1_score(
+                        y_true_binary,
+                        y_pred_binary,
+                        average="micro",
+                        zero_division=0,
+                    )
+                )
+                macro_f1 = float(
+                    f1_score(
+                        y_true_binary,
+                        y_pred_binary,
+                        average="macro",
+                        zero_division=0,
+                    )
+                )
+                hamming = float(hamming_loss(y_true_binary, y_pred_binary))
+            except Exception:
+                # If anything goes wrong for this threshold, skip the row but keep others.
+                continue
+
+            row: dict[str, Any] = {
+                "model": model_name,
+                "split": split_to_use,
+                "threshold": float(threshold),
+                "micro_f1": micro_f1,
+                "macro_f1": macro_f1,
+                "hamming_loss": hamming,
+                "n_samples": int(y_true_binary.shape[0]),
+                "n_labels": int(len(all_classes)),
+            }
+            model_rows.append(row)
+            all_rows.append(row)
+
+        if not model_rows:
+            continue
+
+        # Persist per-model sweep results
+        model_eval_dir = eval_root / model_name
+        figures_dir = model_eval_dir / "figures"
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        model_df = pd.DataFrame(model_rows)
+
+        # Prefer Parquet for efficiency; fall back to CSV if the engine isn't available.
+        try:
+            model_df.to_parquet(model_eval_dir / "threshold_sweep.parquet", index=False)
+        except Exception:
+            model_df.to_csv(model_eval_dir / "threshold_sweep.csv", index=False)
+
+        # Plot F1 / Hamming vs threshold
+        try:
+            fig, ax1 = plt.subplots(figsize=(8, 6))
+
+            ax1.plot(
+                model_df["threshold"],
+                model_df["micro_f1"],
+                label="Micro F1",
+                marker="o",
+                color="tab:blue",
+            )
+            ax1.plot(
+                model_df["threshold"],
+                model_df["macro_f1"],
+                label="Macro F1",
+                marker="s",
+                color="tab:green",
+            )
+            ax1.set_xlabel("Threshold")
+            ax1.set_ylabel("F1 score")
+            ax1.set_ylim(0.0, 1.05)
+
+            ax2 = ax1.twinx()
+            ax2.plot(
+                model_df["threshold"],
+                model_df["hamming_loss"],
+                label="Hamming loss",
+                marker="^",
+                color="tab:red",
+                linestyle="--",
+            )
+            ax2.set_ylabel("Hamming loss")
+
+            lines_labels = [
+                *ax1.get_legend_handles_labels(),
+                *ax2.get_legend_handles_labels(),
+            ]
+            handles, labels = lines_labels
+            ax1.legend(handles, labels, loc="center right", fontsize=8)
+
+            plt.title(f"Threshold sweep – {model_name} [{split_to_use}]")
+            plt.tight_layout()
+            plt.savefig(figures_dir / f"threshold_sweep_{split_to_use}.png", dpi=150)
+            plt.close(fig)
+        except Exception:
+            # Plotting failures should not break evaluation.
+            pass
+
+    return pd.DataFrame(all_rows)
+
+
+def compute_label_cooccurrence(
+    predictions_dict: dict[str, dict[str, pd.DataFrame]],
+) -> pd.DataFrame:
+    """Compute label co-occurrence counts from ground-truth multilabel annotations.
+
+    The computation is based on the first available model's splits (train/val/test).
+    For each sample, we form all unordered label pairs that appear together.
+    """
+    from collections import Counter
+
+    if not predictions_dict:
+        return pd.DataFrame()
+
+    first_model = next(iter(predictions_dict))
+    splits = predictions_dict[first_model]
+
+    cooccurrence_counts: Counter[tuple[str, str]] = Counter()
+
+    def parse_labels(label_str: str) -> list[str]:
+        if pd.isna(label_str) or label_str == "":
+            return []
+        return [tag.strip() for tag in str(label_str).split(",") if tag.strip()]
+
+    for split_name in ("train", "val", "test"):
+        if split_name not in splits:
+            continue
+        df = splits[split_name]
+        if "y_true" not in df.columns:
+            continue
+
+        for raw in df["y_true"]:
+            labels = sorted(set(parse_labels(str(raw))))
+            if len(labels) < 2:
+                continue
+            for i in range(len(labels)):
+                for j in range(i + 1, len(labels)):
+                    cooccurrence_counts[(labels[i], labels[j])] += 1
+
+    if not cooccurrence_counts:
+        return pd.DataFrame()
+
+    rows = [
+        {
+            "label_a": label_a,
+            "label_b": label_b,
+            "cooccurrence_count": int(count),
+        }
+        for (label_a, label_b), count in sorted(
+            cooccurrence_counts.items(), key=lambda kv: kv[1], reverse=True
+        )
+    ]
+    return pd.DataFrame(rows)
+
+
+def write_hardest_examples(
+    predictions_dict: dict[str, dict[str, pd.DataFrame]],
+    artefacts_root: Path,
+    eval_root: Path,
+    *,
+    store_text: bool = False,
+) -> None:
+    """Persist hardest examples per model to ``error_analysis/hardest_examples.*``.
+
+    "Hardest" is defined as high-confidence mistakes on the test split:
+    - We favour samples where the model is confident (max probability) but wrong.
+    - To avoid PII by default, we store only a stable hash of the text unless
+      ``store_text`` is explicitly enabled via configuration.
+    """
+    import hashlib
+
+    for model_name, splits in predictions_dict.items():
+        if "test" not in splits:
+            continue
+        df = splits["test"].copy()
+
+        if "y_true" not in df.columns or "y_pred" not in df.columns:
+            continue
+
+        # Use existing ID column if present, otherwise row index.
+        if "id" in df.columns:
+            row_ids = df["id"].astype(int).tolist()
+        else:
+            row_ids = list(range(len(df)))
+
+        texts = df.get("text", pd.Series([""] * len(df)))
+
+        # Compute basic correctness flags and FP/FN label sets (for multilabel).
+        def parse_labels_to_set(value: Any) -> set[str]:
+            if pd.isna(value) or value == "":
+                return set()
+            return {tag.strip() for tag in str(value).split(",") if tag.strip()}
+
+        y_true_raw = df["y_true"]
+        y_pred_raw = df["y_pred"]
+
+        y_true_sets = [parse_labels_to_set(v) for v in y_true_raw]
+        y_pred_sets = [parse_labels_to_set(v) for v in y_pred_raw]
+
+        # Determine if this looks like multilabel based on first few samples.
+        is_multilabel_flags = [len(s) > 1 for s in y_true_sets[:10] if s]
+        is_multilabel = any(is_multilabel_flags)
+
+        fp_labels_list: list[str] = []
+        fn_labels_list: list[str] = []
+        errors_mask: list[bool] = []
+
+        for true_set, pred_set in zip(y_true_sets, y_pred_sets, strict=False):
+            if is_multilabel:
+                fp_labels = sorted(pred_set - true_set)
+                fn_labels = sorted(true_set - pred_set)
+                is_error = true_set != pred_set
+            else:
+                # Single-label: treat the first (or only) element as the atomic label.
+                true_label = next(iter(true_set), str(y_true_raw.iloc[0]))
+                pred_label = next(iter(pred_set), str(y_pred_raw.iloc[0]))
+                fp_labels = [pred_label] if true_label != pred_label else []
+                fn_labels = [true_label] if true_label != pred_label else []
+                is_error = true_label != pred_label
+
+            fp_labels_list.append(",".join(fp_labels))
+            fn_labels_list.append(",".join(fn_labels))
+            errors_mask.append(is_error)
+
+        # Load probabilities if available to compute a confidence score.
+        split_to_use = "test"
+        prob_file = artefacts_root / model_name / f"{split_to_use}_prob.npy"
+        confidences: list[float | None] = [None] * len(df)
+
+        if prob_file.exists():
+            try:
+                y_proba = np.load(prob_file, allow_pickle=True)
+
+                if isinstance(y_proba, np.ndarray) and y_proba.dtype == object:
+                    arrays = list(y_proba)
+                    if arrays:
+                        stacked = []
+                        for proba in arrays:
+                            if getattr(proba, "ndim", 1) == 2:
+                                stacked.append(proba[:, 1] if proba.shape[1] > 1 else proba[:, 0])
+                            else:
+                                stacked.append(np.asarray(proba).reshape(-1))
+                        y_proba = np.vstack(stacked).T
+
+                if isinstance(y_proba, np.ndarray) and y_proba.ndim == 2:
+                    for i in range(min(len(confidences), y_proba.shape[0])):
+                        confidences[i] = float(np.max(y_proba[i]))
+            except Exception:
+                # Confidence remains None for this model if probabilities can't be used.
+                pass
+
+        # Build a per-model DataFrame of misclassified examples only.
+        records: list[dict[str, Any]] = []
+        for _idx, (is_error, row_id, text, true_raw, pred_raw, fp, fn, conf) in enumerate(
+            zip(
+                errors_mask,
+                row_ids,
+                texts,
+                y_true_raw,
+                y_pred_raw,
+                fp_labels_list,
+                fn_labels_list,
+                confidences,
+                strict=False,
+            )
+        ):
+            if not is_error:
+                continue
+
+            text_str = str(text)
+            text_hash = hashlib.sha256(text_str.encode("utf-8")).hexdigest()
+
+            record: dict[str, Any] = {
+                "row_id": int(row_id),
+                "text_hash": text_hash,
+                "true_labels": str(true_raw),
+                "predicted_labels": str(pred_raw),
+                "false_positive_labels": fp,
+                "false_negative_labels": fn,
+                "confidence": conf,
+            }
+            if store_text:
+                record["text"] = text_str
+
+            records.append(record)
+
+        if not records:
+            continue
+
+        hardest_df = pd.DataFrame(records)
+
+        # Sort by confidence descending so that the most confident mistakes come first.
+        if "confidence" in hardest_df.columns:
+            hardest_df = hardest_df.sort_values(
+                by=["confidence"], ascending=[False], na_position="last"
+            )
+
+        model_eval_dir = eval_root / model_name / "error_analysis"
+        model_eval_dir.mkdir(parents=True, exist_ok=True)
+
+        # Prefer Parquet; fall back to CSV if engine is missing.
+        try:
+            hardest_df.to_parquet(model_eval_dir / "hardest_examples.parquet", index=False)
+        except Exception:
+            hardest_df.to_csv(model_eval_dir / "hardest_examples.csv", index=False)

@@ -10,7 +10,7 @@ Utility scripts for training, demos, evaluation, and API serving.
 
 ```bash
 # Full pipeline
-uv run intent-train --config config/dataset/clinc150/tiny.yaml
+uv run intent-train --config config/experiments/clinc150/tiny.yaml
 
 # Individual steps
 uv run python scripts/pipeline/00_data_loading.py
@@ -34,7 +34,8 @@ uv run intent-classify --model-path output/experiment/models/Linear\ SVM/ --text
 uv sync --extra api
 
 # Start server
-CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run api-serve --host 0.0.0.0 --port 8000
+DATASET=clinc150 VARIANT=tiny \
+  uv run api-serve --host 0.0.0.0 --port 8000
 ```
 
 ### Demos
@@ -54,10 +55,10 @@ uv run python scripts/demos/intent_trend_analyzer.py
 
 ```bash
 # Tune all models
-uv run intent-tune --config config/dataset/clinc150/tiny.yaml --all
+uv run intent-tune --config config/experiments/clinc150/tiny.yaml --all
 
 # Tune specific model
-uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
+uv run intent-tune --config config/experiments/clinc150/tiny.yaml --algo nb --num-samples 30
 ```
 
 ## Directories

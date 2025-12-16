@@ -8,9 +8,9 @@ Configuration files organized by dataset and algorithm.
 
 ```
 config/
-├── dataset/          # Dataset configuration files
-│   ├── clinc150/     # CLINC150 configs
-│   └── nlu_plus/     # NLU++ configs (multi-label)
+├── base/             # Global defaults, providers, prompts
+├── datasets/         # Dataset-level configuration (one YAML per dataset, with loader section)
+├── experiments/      # Experiment variants per dataset
 └── algorithm/        # Algorithm configuration
     ├── models_config.yaml   # Model selection
     └── hyperparameters/     # Tuned hyperparameters
@@ -20,10 +20,10 @@ config/
 
 ```bash
 # Single-label
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+uv run python scripts/pipeline/run_all.py --config config/experiments/clinc150/tiny.yaml
 
 # Multi-label
-uv run python scripts/pipeline/run_all.py --config config/dataset/nlu_plus/tiny.yaml
+uv run python scripts/pipeline/run_all.py --config config/experiments/nlu_plus/tiny.yaml
 ```
 
 ## Datasets

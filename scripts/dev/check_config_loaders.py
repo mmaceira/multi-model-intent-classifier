@@ -4,7 +4,7 @@ Test script for config-based dataset loaders.
 
 This script tests loading datasets using the new config-based loader system.
 It verifies that:
-- Datasets can be loaded from config/dataset/{name}/loader.yaml
+- Datasets can be loaded from config/datasets/{name}.yaml (with a `loader` section)
 - Single-label and multi-label datasets work correctly
 - All splits (train/val/test) are properly loaded
 

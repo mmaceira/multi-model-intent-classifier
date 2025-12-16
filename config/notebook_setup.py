@@ -1,8 +1,8 @@
 # config/notebook_setup.py
 # Configuration setup module for pipeline scripts
-# This module loads and processes config files from the structure:
-# config/dataset/{dataset_name}/{config_name}.yaml
-# Creates convenient variables for use in pipeline scripts
+# This module loads and processes layered experiment configs using
+# ``config/experiments/{dataset}/{variant}.yaml`` and exposes convenient
+# variables for use in pipeline scripts.
 import logging
 import os
 import random
@@ -48,14 +48,10 @@ for section_key, section_value in cfg.items():
             # Create variable name: uppercase with section prefix
             var_name = f"{section_key.upper()}_{key.upper()}"
 
-            # Handle path creation for items in the paths section
-            if section_key == "paths":
-                # If we detected label_type and dataset_name, add prefix to output paths
-                if label_type and dataset_name and value.startswith("output/"):
-                    # Extract the part after "output/" (e.g., "${general.run_name}/embeddings")
-                    path_suffix = value.replace("output/", "", 1)
-                    # Build new path: output/{label_type}/{dataset_name}/{path_suffix}
-                    value = f"output/{label_type}/{dataset_name}/{path_suffix}"
+            # Handle path creation for items in the paths section.
+            # Paths are already derived from run_id in code; we only need to
+            # convert them to absolute Paths rooted at the repository.
+            if section_key == "paths" and isinstance(value, str):
                 value = repo_root / value
 
             # Store in the global namespace and our tracking dictionary
@@ -70,12 +66,16 @@ SEED = config_vars.get("GENERAL_SEED")
 RUN_NAME = config_vars.get("GENERAL_RUN_NAME")
 RAG_TOP_K = int(config_vars.get("MODEL_RAG_TOP_K", 25))  # Default to 25 if not found
 
-# Path variables with shorter names for backward compatibility
-DATA_EXPLORATION_DIR = config_vars.get("PATHS_DATA_EXPLORATION_DIR")
-EMB_DIR = config_vars.get("PATHS_EMBEDDINGS_DIR")
-MODELS_DIR = config_vars.get("PATHS_MODELS_DIR")
-PREDICTIONS_DIR = config_vars.get("PATHS_PREDICTIONS_DIR")
-RESULTS_DIR = config_vars.get("PATHS_RESULTS_DIR")
+# Path variables with shorter names, mapped to the new output schema.
+# The central config loader always derives ``paths`` from ``run_id`` using
+# ``compute_paths``, so we simply convert those to absolute Paths here.
+_paths_cfg = cfg.get("paths", {})
+
+DATA_EXPLORATION_DIR = repo_root / _paths_cfg.get("dataset_dir", "output/runs/unknown/dataset")
+EMB_DIR = repo_root / _paths_cfg.get("features_dir", "output/runs/unknown/features")
+MODELS_DIR = repo_root / _paths_cfg.get("models_dir", "output/runs/unknown/models")
+PREDICTIONS_DIR = repo_root / _paths_cfg.get("eval_dir", "output/runs/unknown/eval")
+RESULTS_DIR = repo_root / _paths_cfg.get("compare_dir", "output/runs/unknown/compare")
 
 # Set environment variables
 if N_CLASSES is not None:

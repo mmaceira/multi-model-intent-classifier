@@ -53,29 +53,29 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
         return RagSklearnAdapter(load_centroid(top_k=top_k))
 
     elif method == "llm":
-        # Get model name with fallback to LLM config default
+        # Get model name; in the layered config this should already be fully
+        # substituted from resolved.llm_model.
         model_name = params.get("model")
         # Check if model is missing, None, or still contains unsubstituted variable
         if not model_name or model_name.startswith("${"):
-            # Try to get from LLM config
-            from intent_classifier.utils.config_loader import _load_llm_config
+            # Final fallback – should be rarely hit if configs are wired correctly.
+            model_name = "ollama/llama3.1:8b"
+            logger.warning(
+                "LLM model not fully specified in params; using fallback: %s", model_name
+            )
+        # Embedding / retrieval backend (optional, for FAISS-backed retrieval)
+        backend = params.get("backend")
 
-            llm_config = _load_llm_config()
-            if llm_config and "ollama" in llm_config and "default_model" in llm_config["ollama"]:
-                model_name = llm_config["ollama"]["default_model"]
-                logger.info(f"Using LLM model from llm_config.yaml: {model_name}")
-            else:
-                # Final fallback
-                model_name = "ollama/llama3.1:8b"
-                logger.warning(
-                    f"LLM model not found in params or config, using fallback: {model_name}"
-                )
-        use_openai = params.get("use_openai", False)  # Kept for compatibility (OpenAI embeddings)
+        use_openai = params.get("use_openai", False)
+
         min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
-        prompt_style = params.get(
-            "prompt_style", "default"
-        )  # Prompt style: "default", "short", "n8n_prompt", etc.
-        backend = params.get("backend")  # Optional embedding backend for retrieval
+        # Prompt configuration: allow either nested prompt.style or legacy prompt_style
+        prompt_cfg = params.get("prompt", {})
+        if isinstance(prompt_cfg, dict) and "style" in prompt_cfg:
+            prompt_style = prompt_cfg.get("style", "default")
+        else:
+            # Backward-compatible flat key
+            prompt_style = params.get("prompt_style", "default")
 
         logger.info(
             f"Creating LLM RAG model with top_k={top_k}, model={model_name}, "

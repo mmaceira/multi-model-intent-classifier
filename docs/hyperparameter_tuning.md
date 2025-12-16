@@ -15,36 +15,36 @@ uv sync --extra tune
 When running tuning, use `--active` so Ray workers reuse the current env (prevents `ray` missing inside worker venvs):
 
 ```bash
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
 ```
 
 ## Quickstart
 
 ```bash
 # Tune all models (default behavior)
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
 
 # Tune all models explicitly
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml --algo all
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo all
 
 # Tune specific model
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml --algo nb
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo nb
 ```
 
 ## Commands
 
 ```bash
 # Tune all models (default)
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
 
 # Tune all models with more samples
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml --algo all --num-samples 50
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo all --num-samples 50
 
 # Tune specific model
-uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml --algo svm
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo svm
 
 # Tune with custom output directory
-uv run --active intent-tune --config config/dataset/nlu_plus/tiny.yaml --algo svm --num-samples 50 --output-dir output/custom_tune
+uv run --active intent-tune --config config/experiments/nlu_plus/tiny.yaml --algo svm --num-samples 50 --output-dir output/custom_tune
 ```
 
 ## What Gets Tuned
@@ -60,12 +60,12 @@ uv run --active intent-tune --config config/dataset/nlu_plus/tiny.yaml --algo sv
 Tuned hyperparameters are loaded automatically by the training pipeline:
 
 1. Install Ray Tune (see Installation above)
-2. Run tuning: `uv run --active intent-tune --config config/dataset/clinc150/tiny.yaml` (tunes all models by default)
-3. Run training: `CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run intent-train`
+2. Run tuning: `uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml` (tunes all models by default)
+3. Run training: `CONFIG_FILE=config/experiments/clinc150/tiny.yaml uv run intent-train`
 
 The `--tune` flag on `intent-train` will also run hyperparameter tuning before training:
 ```bash
-CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run intent-train --tune
+CONFIG_FILE=config/experiments/clinc150/tiny.yaml uv run intent-train --tune
 ```
 
 ## Storage
@@ -78,9 +78,6 @@ Best hyperparameters are stored in:
 For the tiny CLINC150 config:
 
 - `config_name` is `tiny`
-- The training pipeline (via `CONFIG_FILE=config/dataset/clinc150/tiny.yaml`) writes models, predictions, and results under:
-  - `output/singlelabel/clinc150/tiny/models/`
-  - `output/singlelabel/clinc150/tiny/predictions/`
-  - `output/singlelabel/clinc150/tiny/results/`
+- The training pipeline (via `CONFIG_FILE=config/experiments/clinc150/tiny.yaml`) writes models, predictions, and results under `output/runs/singlelabel/clinc150/tiny/`.
 
 Files in `config/algorithm/hyperparameters/` should be committed to git.

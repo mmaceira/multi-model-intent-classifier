@@ -11,7 +11,8 @@ FastAPI text classification service.
 uv sync --extra api
 
 # Start server
-CONFIG_FILE=config/dataset/clinc150/tiny.yaml uv run api-serve --host 0.0.0.0 --port 8000
+DATASET=clinc150 VARIANT=tiny \
+  uv run api-serve --host 0.0.0.0 --port 8000
 ```
 
 ## Endpoints

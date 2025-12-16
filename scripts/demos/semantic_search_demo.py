@@ -35,7 +35,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
 # Use centralized path resolution so both "config/..." and absolute paths work.
-config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
+config_file = os.environ.get("CONFIG_FILE", "config/experiments/clinc150/tiny.yaml")
 config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)

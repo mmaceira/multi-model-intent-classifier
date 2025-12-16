@@ -31,7 +31,7 @@ repo_root = script_dir.parent.parent
 
 
 def load_config() -> dict:
-    """Load configuration from YAML file."""
+    """Load configuration from the active layered experiment config."""
     from intent_classifier.utils.config_loader import load_config as load_config_centralized
 
     return load_config_centralized()
@@ -74,12 +74,12 @@ def main():
             "  # Run with default config\n"
             "  python scripts/pipeline/run_all.py\n\n"
             "  # Run with custom config\n"
-            "  CONFIG_FILE=config/dataset/clinc150/tiny.yaml "
+            "  CONFIG_FILE=config/experiments/clinc150/tiny.yaml "
             "python scripts/pipeline/run_all.py\n\n"
             "  # Run with hyperparameter tuning\n"
             "  python scripts/pipeline/run_all.py --tune\n\n"
             "  # Run with tuning and save model\n"
-            "  CONFIG_FILE=config/dataset/clinc150/tiny.yaml "
+            "  CONFIG_FILE=config/experiments/clinc150/tiny.yaml "
             "python scripts/pipeline/run_all.py --tune "
             "--save-model artifacts/model.pkl\n"
         ),

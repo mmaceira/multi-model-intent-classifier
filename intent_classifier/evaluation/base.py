@@ -401,7 +401,13 @@ class BaseEvaluationRunner(ABC):
             analyze_label_count_distribution,
             analyze_optimal_thresholds,
             analyze_per_bucket_metrics,
+            compute_label_cooccurrence,
+            compute_multilabel_pr_summary,
+            run_multilabel_threshold_sweep,
+            write_hardest_examples,
         )
+        from intent_classifier.utils.config_loader import load_config_with_metadata
+        from intent_classifier.utils.paths import get_repo_root
 
         # Check if this is multilabel by looking at first prediction
         test_df = predictions_dict[first_model]["test"]
@@ -412,6 +418,16 @@ class BaseEvaluationRunner(ABC):
             )
 
             if is_multilabel:
+                # Read analysis configuration (if available) to gate heavier steps.
+                try:
+                    cfg = load_config_with_metadata()["config"]
+                    analysis_cfg = cfg.get("analysis", {})
+                    threshold_sweep_enabled = bool(analysis_cfg.get("threshold_sweep", False))
+                    store_text_enabled = bool(analysis_cfg.get("store_text", False))
+                except Exception:
+                    threshold_sweep_enabled = False
+                    store_text_enabled = False
+
                 # Per-bucket metrics (by number of labels)
                 per_bucket_df = analyze_per_bucket_metrics(predictions_dict)
                 if not per_bucket_df.empty:
@@ -434,3 +450,73 @@ class BaseEvaluationRunner(ABC):
                     )
                     if not thresholds_df.empty:
                         thresholds_df.to_csv(output_dir / "optimal_thresholds.csv", index=False)
+
+                    # PR summary curves + JSON (multilabel only, probabilities required).
+                    # This is intentionally defensive: if anything fails (missing files,
+                    # shape mismatches, etc.), the rest of the evaluation still succeeds.
+                    pr_summary_df = compute_multilabel_pr_summary(
+                        predictions_dict=predictions_dict,
+                        artefacts_root=Path(artefacts_root),
+                        eval_root=output_dir,
+                    )
+                    if not pr_summary_df.empty:
+                        pr_summary_df.to_csv(output_dir / "multilabel_pr_summary.csv", index=False)
+
+                    # Optional global threshold sweep, gated by configuration.
+                    if threshold_sweep_enabled:
+                        sweep_df = run_multilabel_threshold_sweep(
+                            predictions_dict=predictions_dict,
+                            artefacts_root=Path(artefacts_root),
+                            eval_root=output_dir,
+                        )
+                        if not sweep_df.empty:
+                            sweep_df.to_csv(
+                                output_dir / "multilabel_threshold_sweep.csv", index=False
+                            )
+
+                    # Label co-occurrence statistics for the dataset.
+                    cooccurrence_df = compute_label_cooccurrence(predictions_dict)
+                    if not cooccurrence_df.empty:
+                        try:
+                            paths_cfg = cfg.get("paths", {})
+                            dataset_rel = paths_cfg.get("dataset_dir")
+                            if isinstance(dataset_rel, str) and dataset_rel:
+                                dataset_dir = get_repo_root() / dataset_rel
+                                dataset_dir.mkdir(parents=True, exist_ok=True)
+                                try:
+                                    cooccurrence_df.to_parquet(
+                                        dataset_dir / "label_cooccurrence.parquet",
+                                        index=False,
+                                    )
+                                except Exception:
+                                    cooccurrence_df.to_csv(
+                                        dataset_dir / "label_cooccurrence.csv",
+                                        index=False,
+                                    )
+                            else:
+                                cooccurrence_df.to_csv(
+                                    output_dir / "label_cooccurrence.csv", index=False
+                                )
+                        except Exception:
+                            cooccurrence_df.to_csv(
+                                output_dir / "label_cooccurrence.csv", index=False
+                            )
+
+                    # Hardest examples per model (error_analysis/hardest_examples.*).
+                    write_hardest_examples(
+                        predictions_dict=predictions_dict,
+                        artefacts_root=Path(artefacts_root),
+                        eval_root=output_dir,
+                        store_text=store_text_enabled,
+                    )
+
+                    # PR summary curves + JSON (multilabel only, probabilities required).
+                    # This is intentionally defensive: if anything fails (missing files,
+                    # shape mismatches, etc.), the rest of the evaluation still succeeds.
+                    pr_summary_df = compute_multilabel_pr_summary(
+                        predictions_dict=predictions_dict,
+                        artefacts_root=Path(artefacts_root),
+                        eval_root=output_dir,
+                    )
+                    if not pr_summary_df.empty:
+                        pr_summary_df.to_csv(output_dir / "multilabel_pr_summary.csv", index=False)

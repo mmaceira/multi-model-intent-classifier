@@ -1,0 +1,19 @@
+general:
+  # Seed for all experiments unless overridden in an experiment config
+  seed: 42
+
+dataset:
+  # Default flags; per-dataset configs can override these.
+  use_oos: false
+
+model:
+  # Embedding options
+  embedding_backend: "sbert"  # ["sbert", "openai", "ollama"]
+  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  openai_model_name: "text-embedding-3-small"
+  # Optional Ollama embedding model (Qwen embeddings via litellm + Ollama)
+  ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
+
+  # RAG / classifier defaults
+  classifier: "linear_svm"
+  rag_top_k: 25

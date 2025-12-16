@@ -63,4 +63,4 @@ uv run python scripts/demos/intent_trend_analyzer.py
 
 ## Configuration
 
-Demos automatically load configuration from `CONFIG_FILE` (default: `config/dataset/clinc150/tiny.yaml`).
+Demos automatically load configuration from `CONFIG_FILE` (default: `config/experiments/clinc150/tiny.yaml`).

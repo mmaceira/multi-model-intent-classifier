@@ -16,7 +16,7 @@ Hyperparameters are automatically loaded by the model loader during training. If
 ## Generating Hyperparameters
 
 ```bash
-uv run python scripts/tune_hyperparams.py --config config/dataset/clinc150/tiny.yaml --all
+uv run python scripts/tune_hyperparams.py --config config/experiments/clinc150/tiny.yaml --all
 ```
 
 This saves results to:

@@ -41,20 +41,20 @@ models:
     name: "Embedding + LogReg (SBERT)"
     class: "EmbeddingLogReg"
     params:
-      # Embedding backend configuration:
-      # - use_openai: false (default) - Uses local SBERT embeddings (no API key needed)
-      # - use_openai: true - Uses OpenAI embeddings (requires OPENAI_API_KEY)
-      use_openai: false  # Default: false (uses SBERT). Set to true for OpenAI embeddings
-      model: "${model.sbert_model_name}"  # SBERT model when use_openai: false
-      # model: "${model.openai_model_name}"  # OpenAI model when use_openai: true (uncomment if needed)
+      # Embedding configuration:
+      # - backend: Selected via model.embedding_backend in the main config
+      # - model: Resolved embedding model id (SBERT/OpenAI/Ollama)
+      backend: "${resolved.embedding_backend}"
+      model: "${resolved.embedding_model}"
 
   embedding_logreg_qwen:
     enabled: true
     name: "Embedding + LogReg (Qwen/Ollama)"
     class: "EmbeddingLogReg"
     params:
-      # Use Ollama/Qwen embeddings via litellm + Ollama
+      # Force Ollama/Qwen embeddings via litellm + Ollama regardless of global default
       backend: "ollama"
+      # Use the dedicated Ollama embedding model from the main config
       model: "${model.ollama_embedding_model_name}"
 
   # RAG-based models
@@ -65,7 +65,8 @@ models:
     params:
       method: "kmajority"
       top_k: "${model.rag_top_k}"
-      use_openai: false
+      # Embedding backend is derived from the FAISS index; config does not need to
+      # specify backend or model here.
 
   rag_kmajority_qwen:
     enabled: true
@@ -92,19 +93,12 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      # LLM model configuration:
-      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
-      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
-      # - To use other providers: See litellm docs for supported models
-      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
-      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
-      use_openai: false  # Always false for local embeddings
-      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
-      # Prompt style configuration:
-      # - "default": Full detailed prompt with all instructions
-      # - "short": Concise prompt for faster/cheaper inference
-      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
-      prompt_style: "default"  # Options: "default", "short", "n8n_prompt"
+      # LLM backend/model are resolved via providers.* and resolved.* in the main config.
+      model: "${resolved.llm_model}"
+      backend: "${resolved.llm_backend}"
+      # Prompt configuration references named styles; templates are managed centrally.
+      prompt:
+        style: "default"
 
   rag_llm_local_short:
     enabled: true  # TF-IDF retrieval + LLM (short prompt)
@@ -113,19 +107,10 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      # LLM model configuration:
-      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
-      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
-      # - To use other providers: See litellm docs for supported models
-      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
-      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
-      use_openai: false  # Always false for local embeddings
-      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
-      # Prompt style configuration:
-      # - "default": Full detailed prompt with all instructions
-      # - "short": Concise prompt for faster/cheaper inference
-      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
-      prompt_style: "short"  # Options: "default", "short", "n8n_prompt"
+      model: "${resolved.llm_model}"
+      backend: "${resolved.llm_backend}"
+      prompt:
+        style: "short"
 
   rag_llm_local_n8n:
     enabled: true  # TF-IDF retrieval + LLM (n8n prompt)
@@ -134,19 +119,10 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      # LLM model configuration:
-      # - Default: Uses Ollama (ollama/llama3.1:8b) from main config - no API keys needed
-      # - To use OpenAI LLM: Change model to "gpt-4o-mini" or "gpt-4o" (requires OPENAI_API_KEY)
-      # - To use other providers: See litellm docs for supported models
-      model: "${model.llm_model}"  # Default: ollama/llama3.1:8b (from main config)
-      # Embedding configuration: Uses local SBERT embeddings (no API key needed)
-      use_openai: false  # Always false for local embeddings
-      embedder_model: "${model.sbert_model_name}"  # SBERT model for local embeddings
-      # Prompt style configuration:
-      # - "default": Full detailed prompt with all instructions
-      # - "short": Concise prompt for faster/cheaper inference
-      # - "n8n_prompt": Email cleaning + classification prompt (Catalan)
-      prompt_style: "n8n_prompt"  # Options: "default", "short", "n8n_prompt"
+      model: "${resolved.llm_model}"
+      backend: "${resolved.llm_backend}"
+      prompt:
+        style: "n8n_prompt"
 
   rag_llm_openai:
     enabled: false  # Disabled - too slow for full dataset. Enable for quick testing only.
@@ -155,12 +131,9 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      # LLM model configuration:
-      # - Uses OpenAI LLM (gpt-4o-mini) - requires OPENAI_API_KEY
-      # - To use other providers: See litellm docs for supported models
-      model: "gpt-4o-mini"  # Using OpenAI LLM (requires OPENAI_API_KEY)
-      # Embedding configuration: Uses OpenAI embeddings (requires OPENAI_API_KEY)
-      use_openai: true  # Always true for OpenAI embeddings
+      # Explicit OpenAI override for experimentation
+      model: "gpt-4o-mini"
+      backend: "openai"
 
   rag_llm_sbert_embeddings:
     enabled: true
@@ -169,9 +142,10 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      model: "${model.llm_model}"
+      model: "${resolved.llm_model}"
       backend: "sbert"
-      prompt_style: "default"
+      prompt:
+        style: "default"
 
   rag_llm_ollama_embeddings:
     enabled: true
@@ -180,6 +154,7 @@ models:
     params:
       method: "llm"
       top_k: "${model.rag_top_k}"
-      model: "${model.llm_model}"
+      model: "${resolved.llm_model}"
       backend: "ollama"
-      prompt_style: "default"
+      prompt:
+        style: "default"

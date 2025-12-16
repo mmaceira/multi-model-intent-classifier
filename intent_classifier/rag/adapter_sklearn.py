@@ -135,25 +135,17 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         try:
             from pathlib import Path
 
-            # Try to get predictions_dir from config
-            predictions_dir = config.get("paths", {}).get("predictions_dir")
-            if predictions_dir:
-                # Resolve template variables if present
-                if "${" in str(predictions_dir):
-                    # Try to get resolved config_vars
-                    try:
-                        from config.notebook_setup import config_vars
+            paths_cfg = config.get("paths", {}) or {}
 
-                        predictions_dir = config_vars.get("PATHS_PREDICTIONS_DIR")
-                        if predictions_dir:
-                            log_dir = Path(predictions_dir) / "rag_llm_logs"
-                            return log_dir
-                    except Exception:
-                        pass
-                else:
-                    # Create a subdirectory for LLM logs
-                    log_dir = Path(predictions_dir) / "rag_llm_logs"
-                    return log_dir
+            # Prefer the dedicated llm_logs_dir from the new path schema.
+            llm_logs_dir = paths_cfg.get("llm_logs_dir")
+            if llm_logs_dir:
+                return Path(llm_logs_dir)
+
+            # Fallback: derive from eval_dir if present.
+            eval_dir = paths_cfg.get("eval_dir")
+            if eval_dir:
+                return Path(eval_dir) / "rag_llm_logs"
         except Exception:
             pass
         return None
@@ -162,57 +154,17 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
     def _get_config():
         """Get configuration from standard locations.
 
-        This helper method tries to load the project configuration from standard
-        locations, falling back to empty dict if not found.
+        This helper method delegates to the centralized layered config loader and
+        returns the merged configuration dictionary for the current run.
 
         Returns:
             dict: Configuration dictionary
         """
         try:
-            from pathlib import Path
+            from intent_classifier.utils.config_loader import load_config_with_metadata
 
-            import yaml
-
-            # Try to find repo root
-            current_file = Path(__file__).resolve()
-            for parent in [current_file.parent.parent.parent, current_file.parent.parent]:
-                # Try to find a config file in the new structure
-                # Try to find first available dataset config as default
-                dataset_dir = parent / "config" / "dataset"
-                if dataset_dir.exists():
-                    dataset_dirs = [d for d in dataset_dir.iterdir() if d.is_dir()]
-                    if dataset_dirs:
-                        first_dataset = sorted(dataset_dirs)[0].name
-                        if (dataset_dir / first_dataset / "tiny.yaml").exists():
-                            config_path = dataset_dir / first_dataset / "tiny.yaml"
-                        elif (dataset_dir / first_dataset / "default.yaml").exists():
-                            config_path = dataset_dir / first_dataset / "default.yaml"
-                        else:
-                            config_path = dataset_dir / first_dataset / "tiny.yaml"  # Fallback
-                    else:
-                        config_path = (
-                            parent / "config" / "dataset" / "clinc150" / "tiny.yaml"
-                        )  # Final fallback
-                else:
-                    config_path = (
-                        parent / "config" / "dataset" / "clinc150" / "tiny.yaml"
-                    )  # Final fallback
-                if not config_path.exists():
-                    # Fallback: try to find any config in the new structure
-                    dataset_dir = parent / "config" / "dataset"
-                    if dataset_dir.exists():
-                        for dataset_subdir in dataset_dir.iterdir():
-                            if dataset_subdir.is_dir():
-                                for config_file in dataset_subdir.glob("*.yaml"):
-                                    config_path = config_file
-                                    break
-                                if config_path.exists():
-                                    break
-                if config_path.exists():
-                    with open(config_path, encoding="utf-8") as f:
-                        return yaml.safe_load(f)
-
-            return {}
+            metadata = load_config_with_metadata()
+            return metadata["config"]
         except Exception:
             # In case of any errors, return empty dict
             return {}

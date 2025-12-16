@@ -143,7 +143,7 @@ def debug_algorithm(
             pass  # Fall back to default selection
 
     # Fallback: select dataset based on multilabel requirement
-    # Try to discover available datasets from config/dataset/ directory
+    # Try to discover available datasets from config/datasets/ directory
     if dataset_name is None:
         try:
             from pathlib import Path

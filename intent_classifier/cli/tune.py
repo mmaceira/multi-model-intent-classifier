@@ -21,13 +21,13 @@ Key Features:
 
 Usage:
     # Tune all models
-    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --all
+    uv run intent-tune --config config/experiments/clinc150/tiny.yaml --all
 
     # Tune specific model
-    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo nb --num-samples 30
+    uv run intent-tune --config config/experiments/clinc150/tiny.yaml --algo nb --num-samples 30
 
     # Tune with custom search space
-    uv run intent-tune --config config/dataset/clinc150/tiny.yaml --algo svm --num-samples 50
+    uv run intent-tune --config config/experiments/clinc150/tiny.yaml --algo svm --num-samples 50
 
 This script follows ML best practices:
 - Uses validation set for hyperparameter selection (not test set)
@@ -114,7 +114,7 @@ def main() -> None:
     cfg = load_config(config_file)
 
     # Extract config file name (without extension) for output directory naming
-    # Extract config name from path (e.g., "tiny" from "config/dataset/clinc150/tiny.yaml")
+    # Extract config name from path (e.g., "tiny" from "config/experiments/clinc150/tiny.yaml")
     from intent_classifier.utils.config_loader import parse_config_path
 
     _, config_name = parse_config_path(config_file)

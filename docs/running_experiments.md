@@ -11,10 +11,12 @@ How to run the training pipeline. For background on data splits and pipeline ste
 uv sync --extra all
 
 # Run full pipeline (single-label)
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+DATASET=clinc150 VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 
 # Run full pipeline (multi-label)
-uv run python scripts/pipeline/run_all.py --config config/dataset/nlu_plus/tiny.yaml
+DATASET=nlu_plus VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 ```
 
 Datasets download automatically from HuggingFace/GitHub.
@@ -25,10 +27,12 @@ Datasets download automatically from HuggingFace/GitHub.
 
 ```bash
 # Using entry point
-uv run intent-train --config config/dataset/clinc150/tiny.yaml
+DATASET=clinc150 VARIANT=tiny \
+  uv run intent-train
 
 # Or directly
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+DATASET=clinc150 VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 ```
 
 ### Individual Steps
@@ -45,22 +49,24 @@ uv run python scripts/pipeline/05_model_evaluation.py
 ## Configuration
 
 Preconfigured configs:
-- `config/dataset/clinc150/default.yaml` - Full CLINC150
-- `config/dataset/clinc150/tiny.yaml` - Quick test
-- `config/dataset/nlu_plus/default.yaml` - Full NLU++
-- `config/dataset/nlu_plus/tiny.yaml` - Quick test
+- `config/experiments/clinc150/default.yaml` - Full CLINC150
+- `config/experiments/clinc150/tiny.yaml` - Quick test
+- `config/experiments/nlu_plus/default.yaml` - Full NLU++
+- `config/experiments/nlu_plus/tiny.yaml` - Quick test
 
 ```bash
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/default.yaml
+DATASET=clinc150 VARIANT=default \
+  uv run python scripts/pipeline/run_all.py
 ```
 
 ## Outputs
 
-All outputs in `output/{run_name}/`:
-- `data_exploration/` - Statistics and visualizations
-- `embeddings/` - FAISS indices
+All outputs live under `output/runs/<label_type>/<dataset>/<variant>/`:
+- `dataset/` - Statistics, label summaries, and dataset metadata
+- `features/` - Embeddings and other feature artefacts
 - `models/` - Trained models
-- `predictions/` - Predictions
-- `results/` - Evaluation metrics
+- `eval/` - Per‑model evaluation artefacts
+- `compare/` - Cross‑model summaries and comparison plots
+- `meta/` - Reproducibility package (resolved config, env, git info, manifest)
 
-See `configuration.md` for model selection and `hyperparameter_tuning.md` for tuning.
+See `output_schema.md` for the full layout and `config.md` for config layering and selection.

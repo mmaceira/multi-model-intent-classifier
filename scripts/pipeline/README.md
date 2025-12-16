@@ -9,7 +9,7 @@ Python scripts for the complete training and evaluation pipeline.
 ### Full Pipeline
 
 ```bash
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+uv run python scripts/pipeline/run_all.py --config config/experiments/clinc150/tiny.yaml
 ```
 
 ### Individual Steps
@@ -53,7 +53,7 @@ uv run python scripts/pipeline/05_model_evaluation.py
 
 1. **Install dependencies**: `uv sync --extra all`
 
-2. **Configuration**: Set up config file (e.g., `config/dataset/clinc150/tiny.yaml`)
+2. **Configuration**: Set up config file (e.g., `config/experiments/clinc150/tiny.yaml`)
 
 3. **Ollama** (for RAG-LLM models):
    ```bash

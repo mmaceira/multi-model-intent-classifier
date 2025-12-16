@@ -8,10 +8,10 @@ This script performs a basic connection test to verify that:
 
 Configuration:
 - Ollama endpoint: Set OLLAMA_API_BASE environment variable (default: http://localhost:11434)
-  Example: export OLLAMA_API_BASE=http://192.168.1.100:11434
+  Example: export OLLAMA_API_BASE=http://localhost:11434
 - OpenAI: Set OPENAI_API_KEY environment variable
-- Model selection: The model name comes from config files (config/dataset/*/default.yaml)
-  or can be overridden via command line arguments
+- Model selection: The model name comes from the active layered config
+  (base/providers/dataset/experiment) or can be overridden via command line arguments
 """
 
 import argparse
@@ -162,21 +162,21 @@ Examples:
   %(prog)s
 
   # Test with custom Ollama endpoint and model
-  %(prog)s --ollama-endpoint http://192.168.1.100:11434 --ollama-model ollama/llama3.2:3b
+  %(prog)s --ollama-endpoint http://localhost:11434 --ollama-model ollama/llama3.2:3b
 
   # Endpoint without protocol (http:// will be added automatically)
-  %(prog)s --ollama-endpoint xat.somit.coop:11434 --ollama-model qwen2.5:14b
+  %(prog)s --ollama-endpoint example.com:11434 --ollama-model qwen2.5:14b
 
   # Model without 'ollama/' prefix (will be added automatically)
   %(prog)s --ollama-model qwen2.5:14b
 
   # Test with specific config file
-  CONFIG_FILE=config/dataset/nlu_plus/default.yaml %(prog)s
+  CONFIG_FILE=config/experiments/nlu_plus/default.yaml %(prog)s
 
 Configuration Priority (highest to lowest):
   1. Command-line arguments (--ollama-endpoint, --ollama-model)
   2. Environment variables (OLLAMA_API_BASE)
-  3. Config file (config/dataset/*/default.yaml or tiny.yaml)
+  3. Config file (config/experiments/{dataset}/{variant}.yaml)
   4. Defaults (http://localhost:11434, ollama/llama3.1:8b)
         """,
     )
@@ -200,7 +200,7 @@ Configuration Priority (highest to lowest):
     parser.add_argument(
         "--config-file",
         default=None,
-        help="Config file to read settings from (e.g., config/dataset/nlu_plus/default.yaml). "
+        help="Config file to read settings from (e.g., config/experiments/nlu_plus/default.yaml). "
         "If not specified, uses CONFIG_FILE env var or discovers default config.",
     )
     args = parser.parse_args()
@@ -217,10 +217,10 @@ Configuration Priority (highest to lowest):
             config_source = config_file
 
             # Read from config if not overridden by command line
-            # LLM settings are now in config/llm_config.yaml and merged into config["model"]
+            # LLM settings are now in config/base/providers.yaml and merged into config["model"]
             if "model" in config:
                 if args.ollama_model is None:
-                    # Try model.llm_model first (for backward compatibility), then check LLM config
+                    # Try model.llm_model first (if present), then check provider defaults
                     ollama_model_from_config = config["model"].get("llm_model")
                 if args.ollama_endpoint is None:
                     # Try model.ollama_endpoint first (for backward

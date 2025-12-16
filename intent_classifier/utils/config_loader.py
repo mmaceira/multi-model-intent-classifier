@@ -2,18 +2,19 @@
 Centralized Configuration Loader
 
 This module provides a single source of truth for loading and processing
-YAML configuration files with variable substitution, validation, and caching.
+layered YAML configuration files with variable substitution, validation,
+and caching.
 
 The module uses TypedDict (ConfigMetadata) for type-safe configuration metadata
 returned by load_config_with_metadata().
 
 Example:
     >>> from intent_classifier.utils.config_loader import load_config, load_config_with_metadata
-    >>> config = load_config("config/dataset/clinc150/tiny.yaml")
+    >>> config = load_config("config/experiments/clinc150/tiny.yaml")
     >>> print(config["general"]["run_name"])
     >>>
     >>> # With metadata (type-safe)
-    >>> metadata = load_config_with_metadata("config/dataset/clinc150/tiny.yaml")
+    >>> metadata = load_config_with_metadata("config/experiments/clinc150/tiny.yaml")
     >>> print(metadata["dataset_name"])  # Type checker knows this is a str
     >>> print(metadata["label_type"])    # Type checker knows this is "singlelabel" | "multilabel"
 """
@@ -26,7 +27,7 @@ from typing import Any, Literal, TypedDict
 
 import yaml
 
-from intent_classifier.utils.paths import get_config_path, get_repo_root
+from intent_classifier.utils.paths import compute_paths, get_config_path, get_repo_root
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
@@ -46,6 +47,21 @@ class ConfigMetadata(TypedDict):
 
 # Cache for loaded configs to avoid re-reading files
 _CONFIG_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def _deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge two dictionaries (override wins).
+
+    This is used for layered configuration loading:
+    base defaults <- dataset config <- experiment overrides.
+    """
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge_dicts(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def substitute_vars(value: Any, config: dict[str, Any]) -> Any:
@@ -110,18 +126,19 @@ def process_config_vars(config_value: Any, main_config: dict[str, Any]) -> Any:
 def path_to_config_file_str(config_path: Path) -> str:
     """Convert a Path object to a config file string format expected by load_config.
 
-    Converts absolute paths to relative paths starting with "config/".
+    Converts absolute paths to relative paths starting with ``config/``.
     This is the canonical format expected by load_config() and other config functions.
 
     Args:
         config_path: Path object (absolute or relative) to a config file
 
     Returns:
-        Config file path string starting with "config/" (e.g., "config/dataset/clinc150/tiny.yaml")
-        If config_path is absolute and can't be made relative, returns absolute path as string
+        Config file path string starting with ``config/`` (e.g.,
+        ``config/experiments/clinc150/tiny.yaml``). If ``config_path`` is
+        absolute and can't be made relative, returns absolute path as string.
 
     Raises:
-        ValueError: If config_path is relative but doesn't start with "config/"
+        ValueError: If ``config_path`` is relative but doesn't start with ``config/``.
     """
     repo_root = get_repo_root()
 
@@ -160,33 +177,39 @@ def discover_config_file() -> str:
     """Discover the default config file to use.
 
     Tries multiple strategies:
-    1. CONFIG_FILE environment variable
-    2. First available dataset config (tiny.yaml or default.yaml)
-    3. Fallback to config/dataset/clinc150/tiny.yaml
+    1. ``CONFIG_FILE`` environment variable (highest priority)
+    2. ``DATASET`` / ``VARIANT`` environment variables
+       - ``DATASET``: dataset name (e.g., \"clinc150\")
+       - ``VARIANT``: config name without extension (e.g., \"tiny\" or \"default\")
+    3. Fallback to ``config/experiments/clinc150/tiny.yaml``
 
     Returns:
-        Config file path starting with "config/" (e.g., "config/dataset/clinc150/tiny.yaml")
+        Config file path starting with ``config/`` (e.g.,
+        ``config/experiments/clinc150/tiny.yaml``)
     """
-    # Check environment variable first
+    # Check explicit config file first
     config_file = os.environ.get("CONFIG_FILE")
     if config_file:
         return config_file
 
-    # Try to find first available dataset config
-    repo_root = get_repo_root()
-    dataset_dir = repo_root / "config" / "dataset"
-    if dataset_dir.exists():
-        dataset_dirs = [d for d in dataset_dir.iterdir() if d.is_dir()]
-        if dataset_dirs:
-            first_dataset = sorted(dataset_dirs)[0].name
-            # Try tiny.yaml first, fallback to default.yaml
-            if (dataset_dir / first_dataset / "tiny.yaml").exists():
-                return f"config/dataset/{first_dataset}/tiny.yaml"
-            elif (dataset_dir / first_dataset / "default.yaml").exists():
-                return f"config/dataset/{first_dataset}/default.yaml"
+    # Next: DATASET/VARIANT pair (thin discovery API).
+    # New implementation: **only** layered experiment configs are supported here.
+    dataset_env = os.environ.get("DATASET")
+    variant_env = os.environ.get("VARIANT")
+    if dataset_env:
+        variant = variant_env or "tiny"
+
+        repo_root = get_repo_root()
+        exp_path = repo_root / "config" / "experiments" / dataset_env / f"{variant}.yaml"
+        if not exp_path.exists():
+            raise FileNotFoundError(
+                "Requested experiment config not found.\n"
+                f"Expected: config/experiments/{dataset_env}/{variant}.yaml\n"
+            )
+        return f"config/experiments/{dataset_env}/{variant}.yaml"
 
     # Final fallback
-    return "config/dataset/clinc150/tiny.yaml"
+    return "config/experiments/clinc150/tiny.yaml"
 
 
 def parse_config_path(config_file: str) -> tuple[str, str]:
@@ -194,8 +217,9 @@ def parse_config_path(config_file: str) -> tuple[str, str]:
 
     Args:
         config_file: Config file path. Must be:
-                    - "config/dataset/clinc150/tiny.yaml" (relative to repo root)
-                    - Absolute path ending with config/dataset/.../file.yaml
+                    - ``config/experiments/{dataset_name}/{config_name}.yaml``
+                      (relative to repo root), or an absolute path ending with the same
+                      structure.
 
     Returns:
         Tuple of (dataset_name, config_name)
@@ -211,16 +235,16 @@ def parse_config_path(config_file: str) -> tuple[str, str]:
         rel_path = config_path.relative_to(repo_root)
         parts = rel_path.parts
 
-        # Format: config/dataset/name/file.yaml
-        if len(parts) >= 4 and parts[0] == "config" and parts[1] == "dataset":
+        # Required format: config/experiments/{dataset_name}/{config_name}.yaml
+        if len(parts) >= 4 and parts[0] == "config" and parts[1] == "experiments":
             dataset_name = parts[2]
             config_name = config_path.stem
             return dataset_name, config_name
 
         # If we get here, the path doesn't match expected structure
         raise ValueError(
-            f"Config file must be in structure: "
-            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
+            "Config file must be in structure: "
+            "config/experiments/{dataset_name}/{config_name}.yaml\n"
             f"Got: {config_file}"
         )
     except ValueError as e:
@@ -232,30 +256,192 @@ def parse_config_path(config_file: str) -> tuple[str, str]:
             else config_path
         )
         raise ValueError(
-            f"Config file must be in structure: "
-            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml\n"
+            "Config file must be in structure: "
+            "config/experiments/{dataset_name}/{config_name}.yaml\n"
             f"Got: {rel_path}"
         ) from e
 
 
 def _load_llm_config() -> dict[str, Any] | None:
-    """Load the centralized LLM configuration file.
+    """Load centralized provider configuration.
+
+    The implementation treats ``config/base/providers.yaml`` as the
+    single source of truth. The historical ``config/llm_config.yaml`` file
+    is no longer consulted.
 
     Returns:
-        LLM configuration dictionary, or None if file doesn't exist
+        LLM/provider configuration dictionary, or None if nothing is configured.
     """
-    try:
-        repo_root = get_repo_root()
-        llm_config_path = repo_root / "config" / "llm_config.yaml"
-        if llm_config_path.exists():
-            with open(llm_config_path, encoding="utf-8") as f:
-                llm_config = yaml.safe_load(f)
-            if isinstance(llm_config, dict):
-                logger.debug(f"Loaded LLM config from: {llm_config_path}")
-                return llm_config
-    except Exception as e:
-        logger.debug(f"Could not load LLM config: {e}")
+    repo_root = get_repo_root()
+
+    # Provider configuration (single source of truth)
+    providers_path = repo_root / "config" / "base" / "providers.yaml"
+    if providers_path.exists():
+        try:
+            with open(providers_path, encoding="utf-8") as f:
+                providers_cfg = yaml.safe_load(f) or {}
+            if not isinstance(providers_cfg, dict):
+                raise ValueError("providers.yaml must contain a YAML dictionary")
+
+            providers_block = providers_cfg.get("providers", {})
+            if not isinstance(providers_block, dict):
+                raise ValueError("providers.yaml must contain a 'providers' mapping")
+
+            llm_config: dict[str, Any] = {}
+
+            ollama_cfg = providers_block.get("ollama", {}) or {}
+            if isinstance(ollama_cfg, dict):
+                llm_config["ollama"] = {
+                    "endpoint": ollama_cfg.get("endpoint"),
+                    "default_model": ollama_cfg.get("llm_default"),
+                    "embedding_model": ollama_cfg.get("embed_default"),
+                }
+
+            openai_cfg = providers_block.get("openai", {}) or {}
+            if isinstance(openai_cfg, dict):
+                llm_config["openai"] = {
+                    "default_model": openai_cfg.get("llm_default"),
+                    "embedding_model": openai_cfg.get("embed_default"),
+                }
+
+            logger.debug("Loaded provider config from: %s", providers_path)
+            return llm_config
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.debug("Could not load providers.yaml: %s", exc)
+
     return None
+
+
+def _ensure_general_and_paths(
+    config: dict[str, Any],
+    dataset_name: str,
+    config_name: str,
+    label_type: Literal["singlelabel", "multilabel"],
+) -> None:
+    """Ensure general metadata and paths are present in the config.
+
+    This centralises run_name/run_id and path computation so that:
+    - YAML configs can omit the ``paths`` section entirely
+    - ``general.run_name`` is always derived from the config file name
+    - ``general.run_id`` is a stable identifier including label type + dataset
+    """
+    general = config.setdefault("general", {})
+
+    # Always derive run_name from the config file name.
+    # This was previously only overridden if present; making it unconditional
+    # keeps behaviour consistent and avoids "half-templated" configs.
+    general["run_name"] = config_name
+
+    # Stable identifier that can be used for directory layout or logging.
+    # Example: "singlelabel/clinc150/tiny"
+    run_id = f"{label_type}/{dataset_name}/{config_name}"
+    general["run_id"] = run_id
+
+    # Compute canonical paths for this run_id using the new output schema.
+    #
+    # NOTE: We intentionally ignore any legacy ``paths`` blocks in YAML and
+    # always derive paths in code from the run_id.
+    computed = compute_paths(run_id, root="output/runs")
+    config["paths"] = {
+        "run_dir": computed["run_dir"],
+        "meta_dir": computed["meta_dir"],
+        "dataset_dir": computed["dataset_dir"],
+        "features_dir": computed["features_dir"],
+        "models_dir": computed["models_dir"],
+        "eval_dir": computed["eval_dir"],
+        "compare_dir": computed["compare_dir"],
+        "llm_logs_dir": computed["llm_logs_dir"],
+        "figures_dir": computed["figures_dir"],
+    }
+
+
+def _attach_providers_and_resolved(config: dict[str, Any]) -> None:
+    """Attach provider metadata and resolved model choices to the config.
+
+    This gives downstream components a single, normalized place to read:
+    - ``providers.*``: raw provider settings (endpoints, default models)
+    - ``resolved.*``: effective embedding / LLM models based on backends
+    """
+    llm_config = _load_llm_config() or {}
+
+    providers: dict[str, Any] = {}
+
+    # Ollama provider
+    ollama_cfg = llm_config.get("ollama", {}) if isinstance(llm_config, dict) else {}
+    if ollama_cfg:
+        # Environment variables override static config, matching the rules documented
+        # in config/llm_config.yaml.
+        endpoint_env = (
+            os.getenv("OLLAMA_API_BASE")
+            or os.getenv("OLLAMA_HOST")
+            or os.getenv("MODEL_OLLAMA_ENDPOINT")
+        )
+        endpoint = endpoint_env or ollama_cfg.get("endpoint") or "http://localhost:11434"
+        providers["ollama"] = {
+            "endpoint": endpoint,
+            "llm_default": ollama_cfg.get("default_model"),
+            "embed_default": ollama_cfg.get("embedding_model"),
+        }
+
+    # OpenAI provider
+    openai_cfg = llm_config.get("openai", {}) if isinstance(llm_config, dict) else {}
+    if openai_cfg:
+        providers["openai"] = {
+            "llm_default": openai_cfg.get("default_model"),
+            "embed_default": openai_cfg.get("embedding_model"),
+        }
+
+    if providers:
+        # Do not overwrite if user already provided a providers block.
+        config.setdefault("providers", providers)
+
+    # ------------------------------------------------------------------
+    # Build resolved.* section
+    # ------------------------------------------------------------------
+    model_cfg = config.get("model", {}) if isinstance(config.get("model"), dict) else {}
+
+    # Embedding backend and effective model
+    embedding_backend = model_cfg.get("embedding_backend", "sbert")
+    embedding_model: str | None
+
+    if embedding_backend == "openai":
+        embedding_model = providers.get("openai", {}).get("embed_default")
+    elif embedding_backend == "ollama":
+        embedding_model = providers.get("ollama", {}).get("embed_default")
+    else:  # sbert / local
+        embedding_model = model_cfg.get("sbert_model_name")
+
+    # LLM backend and effective model
+    #
+    # Provider model IDs live in config/base/providers.yaml; we no longer
+    # read legacy overrides like ``model.llm_model`` or per-provider
+    # embedding keys. Downstream code should rely on resolved.llm_model
+    # and resolved.embedding_model.
+    llm_backend = model_cfg.get("llm_backend")
+    llm_model: str | None = None
+
+    if llm_backend == "openai":
+        llm_model = providers.get("openai", {}).get("llm_default")
+    elif llm_backend == "ollama":
+        llm_model = providers.get("ollama", {}).get("llm_default")
+
+    # Effective Ollama endpoint
+    ollama_endpoint = providers.get("ollama", {}).get("endpoint")
+
+    resolved: dict[str, Any] = {
+        "embedding_backend": embedding_backend,
+        "embedding_model": embedding_model,
+        "llm_backend": llm_backend,
+        "llm_model": llm_model,
+        "ollama_endpoint": ollama_endpoint,
+        "openai_api_key_present": bool(os.getenv("OPENAI_API_KEY")),
+    }
+
+    # Do not overwrite an explicit resolved block; just fill in missing keys.
+    existing_resolved = config.setdefault("resolved", {})
+    if isinstance(existing_resolved, dict):
+        for key, value in resolved.items():
+            existing_resolved.setdefault(key, value)
 
 
 def detect_label_type(
@@ -286,9 +472,9 @@ def load_config(
     """Load and process a YAML configuration file.
 
     Args:
-        config_file: Config file path starting with "config/" (e.g.,
-                    "config/dataset/clinc150/tiny.yaml"). If None, uses
-                    discover_config_file() to find default.
+        config_file: Config file path starting with ``config/`` (e.g.,
+                    ``config/experiments/clinc150/tiny.yaml``). If None, uses
+                    discover_config_file() to find a default.
         apply_variable_substitution: If True, applies variable substitution to config values
         use_cache: If True, caches loaded configs to avoid re-reading files
 
@@ -311,49 +497,73 @@ def load_config(
     # Resolve config path
     config_path = get_config_path(config_file)
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"Config file not found: {config_path}\n"
-            f"Config files must be in structure: "
-            f"config/dataset/{{dataset_name}}/{{config_name}}.yaml"
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Layered loading for experiment configs:
+    #   config/base/defaults.yaml
+    #   + config/base/providers.yaml
+    #   + config/datasets/{dataset}.yaml
+    #   + config/experiments/{dataset}/{variant}.yaml   (the requested config_file)
+    repo_root = get_repo_root()
+    rel_parts = config_path.relative_to(repo_root).parts
+    config: dict[str, Any]
+
+    if len(rel_parts) >= 3 and rel_parts[0] == "config" and rel_parts[1] == "experiments":
+        dataset_name = rel_parts[2]
+        base_config: dict[str, Any] = {}
+
+        # 1) Base defaults (optional)
+        base_defaults_path = repo_root / "config" / "base" / "defaults.yaml"
+        if base_defaults_path.exists():
+            logger.debug("Loading base defaults from: %s", base_defaults_path)
+            with open(base_defaults_path, encoding="utf-8") as f:
+                defaults_cfg = yaml.safe_load(f) or {}
+            if not isinstance(defaults_cfg, dict):
+                raise ValueError(
+                    f"Base defaults config must contain a YAML dictionary, got {type(defaults_cfg)}"
+                )
+            base_config = _deep_merge_dicts(base_config, defaults_cfg)
+
+        # 2) Provider defaults (optional)
+        providers_path = repo_root / "config" / "base" / "providers.yaml"
+        if providers_path.exists():
+            logger.debug("Loading provider defaults from: %s", providers_path)
+            with open(providers_path, encoding="utf-8") as f:
+                providers_cfg = yaml.safe_load(f) or {}
+            if not isinstance(providers_cfg, dict):
+                raise ValueError(
+                    f"Provider config must contain a YAML dictionary, got {type(providers_cfg)}"
+                )
+            base_config = _deep_merge_dicts(base_config, providers_cfg)
+
+        # 3) Dataset-level config (optional)
+        dataset_cfg_path = repo_root / "config" / "datasets" / f"{dataset_name}.yaml"
+        if dataset_cfg_path.exists():
+            logger.debug("Loading dataset config from: %s", dataset_cfg_path)
+            with open(dataset_cfg_path, encoding="utf-8") as f:
+                dataset_cfg = yaml.safe_load(f) or {}
+            if not isinstance(dataset_cfg, dict):
+                raise ValueError(
+                    f"Dataset config must contain a YAML dictionary, got {type(dataset_cfg)}"
+                )
+            base_config = _deep_merge_dicts(base_config, dataset_cfg)
+
+        # 4) Experiment-level overrides (required for this branch)
+        logger.debug("Loading experiment config from: %s", config_path)
+        with open(config_path, encoding="utf-8") as f:
+            experiment_cfg = yaml.safe_load(f) or {}
+        if not isinstance(experiment_cfg, dict):
+            raise ValueError(
+                f"Experiment config must contain a YAML dictionary, got {type(experiment_cfg)}"
+            )
+
+        config = _deep_merge_dicts(base_config, experiment_cfg)
+    else:
+        raise ValueError(
+            "Config file must be in structure: "
+            "config/experiments/{dataset_name}/{config_name}.yaml\n"
+            f"Got: {config_path}"
         )
-
-    # Load YAML file
-    logger.debug(f"Loading config from: {config_path}")
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    if not isinstance(config, dict):
-        raise ValueError(f"Config file must contain a YAML dictionary, got {type(config)}")
-
-    # Load and merge LLM config (centralized LLM provider settings)
-    llm_config = _load_llm_config()
-    if llm_config:
-        # Merge LLM config into model section for backward compatibility
-        if "model" not in config:
-            config["model"] = {}
-
-        # Merge Ollama settings
-        if "ollama" in llm_config:
-            ollama_cfg = llm_config["ollama"]
-            # Set llm_model from ollama.default_model if not already set
-            if "llm_model" not in config["model"] and "default_model" in ollama_cfg:
-                config["model"]["llm_model"] = ollama_cfg["default_model"]
-            # Set ollama_endpoint from ollama.endpoint if not already set
-            if "ollama_endpoint" not in config["model"] and "endpoint" in ollama_cfg:
-                config["model"]["ollama_endpoint"] = ollama_cfg["endpoint"]
-            # Set ollama_embedding_model_name from ollama.embedding_model if not already set
-            if (
-                "ollama_embedding_model_name" not in config["model"]
-                and "embedding_model" in ollama_cfg
-            ):
-                config["model"]["ollama_embedding_model_name"] = ollama_cfg["embedding_model"]
-
-        # Merge OpenAI settings
-        if "openai" in llm_config:
-            openai_cfg = llm_config["openai"]
-            # Set openai_model_name if not already set
-            if "openai_model_name" not in config["model"] and "embedding_model" in openai_cfg:
-                config["model"]["openai_model_name"] = openai_cfg["embedding_model"]
 
     # Apply variable substitution if requested
     if apply_variable_substitution:
@@ -370,7 +580,7 @@ def load_config(
     if use_cache:
         _CONFIG_CACHE[cache_key] = config
 
-    return config  # type: ignore[no-any-return]
+    return config
 
 
 def load_config_with_metadata(
@@ -380,8 +590,8 @@ def load_config_with_metadata(
     """Load config and return it with metadata (dataset_name, config_name, label_type).
 
     Args:
-        config_file: Config file path starting with "config/" (e.g.,
-                    "config/dataset/clinc150/tiny.yaml"). If None, uses
+        config_file: Config file path starting with ``config/`` (e.g.,
+                    ``config/experiments/clinc150/tiny.yaml``). If None, uses
                     discover_config_file() to find default.
         apply_variable_substitution: If True, applies variable substitution to config values
 
@@ -405,17 +615,34 @@ def load_config_with_metadata(
     # Load config without substitution first
     config = load_config(config_file, apply_variable_substitution=False)
 
-    # Override run_name with config file name BEFORE variable substitution
-    # This ensures paths use the config name instead of the original run_name
-    if "general" in config and "run_name" in config["general"]:
-        config["general"]["run_name"] = config_name
+    # Detect label type early; this is cheap and allows us to build a stable run_id.
+    label_type = detect_label_type(config, dataset_name)
 
-    # Now apply variable substitution with the updated run_name
+    # Ensure general metadata (run_name / run_id) and default paths are present
+    _ensure_general_and_paths(
+        config=config,
+        dataset_name=dataset_name,
+        config_name=config_name,
+        label_type=label_type,
+    )
+
+    # Attach provider metadata and resolved model selections for downstream use
+    _attach_providers_and_resolved(config)
+
+    # Enrich resolved.* with run_id / label_type / paths snapshot
+    general = config.get("general", {})
+    paths = config.get("paths", {})
+    resolved = config.setdefault("resolved", {})
+    if isinstance(resolved, dict):
+        resolved.setdefault("run_id", general.get("run_id"))
+        resolved.setdefault("label_type", label_type)
+        if "paths" not in resolved and isinstance(paths, dict):
+            # Store a shallow snapshot to keep effective paths discoverable
+            resolved["paths"] = dict(paths)
+
+    # Now apply variable substitution with the updated structure
     if apply_variable_substitution:
         config = process_config_vars(config, config)
-
-    # Detect label type
-    label_type = detect_label_type(config, dataset_name)
 
     return {
         "config": config,
@@ -428,16 +655,16 @@ def load_config_with_metadata(
 
 
 def get_first_available_dataset() -> str | None:
-    """Get the name of the first available dataset from config/dataset directory.
+    """Get the name of the first available dataset from config/experiments directory.
 
     Returns:
-        Name of the first dataset directory found, or None if no datasets exist
+        Name of the first dataset directory found, or None if no datasets exist.
     """
     try:
         repo_root = get_repo_root()
-        dataset_dir = repo_root / "config" / "dataset"
-        if dataset_dir.exists():
-            dataset_dirs = [d.name for d in dataset_dir.iterdir() if d.is_dir()]
+        experiments_dir = repo_root / "config" / "experiments"
+        if experiments_dir.exists():
+            dataset_dirs = [d.name for d in experiments_dir.iterdir() if d.is_dir()]
             if dataset_dirs:
                 return sorted(dataset_dirs)[0]
     except Exception:

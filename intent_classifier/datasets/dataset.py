@@ -3,8 +3,10 @@ Dataset Module.
 
 This module provides functions for loading intent classification datasets.
 
-The system automatically discovers datasets from config/dataset/{name}/loader.yaml.
-To add a new dataset, simply create a loader.yaml config file - no Python code needed!
+The system automatically discovers datasets from `config/datasets/{name}.yaml`
+that define a `loader` section.
+To add a new dataset, simply create `config/datasets/{name}.yaml` with a `loader`
+configuration - no Python code needed!
 
 Functions:
     get_dataset: Common entry point for dataset loading
@@ -32,56 +34,57 @@ _CUSTOM_LOADERS: dict[str, Callable] = {}
 
 
 def _discover_datasets() -> dict[str, Callable]:
-    """Discover datasets from config/dataset/ directories.
+    """Discover datasets from `config/datasets/*.yaml` files.
+
+    Any dataset config file that either:
+    - defines a top-level `loader` section, or
+    - is itself a loader-style config (legacy)
+    will be exposed via a generic loader.
 
     Returns:
         Dictionary mapping dataset names to loader functions
     """
     repo_root = get_repo_root()
-    config_dir = repo_root / "config" / "dataset"
+    config_dir = repo_root / "config" / "datasets"
 
     if not config_dir.exists():
         return {}
 
-    discovered = {}
-    for dataset_dir in config_dir.iterdir():
-        if dataset_dir.is_dir():
-            loader_config = dataset_dir / "loader.yaml"
-            if loader_config.exists():
-                dataset_name = dataset_dir.name
+    discovered: dict[str, Callable] = {}
 
-                # Create a closure that captures the dataset_name correctly
-                # The loader function needs to accept the same parameters as
-                # load_dataset_from_config
-                # so that get_dataset() can detect and pass them through
-                def make_loader(name: str):
-                    def loader(
-                        use_oos: bool = False,
-                        max_train_samples: int | None = None,
-                        max_test_samples: int | None = None,
-                        max_val_samples: int | None = None,
-                        max_classes: int | None = None,
-                        seed: int = 42,
-                        csv_path: str | Path | None = None,
-                        multilabel: bool | None = None,
-                        **kwargs,
-                    ):
-                        return load_dataset_from_config(
-                            name,
-                            use_oos=use_oos,
-                            max_train_samples=max_train_samples,
-                            max_test_samples=max_test_samples,
-                            max_val_samples=max_val_samples,
-                            max_classes=max_classes,
-                            seed=seed,
-                            csv_path=csv_path,
-                            multilabel=multilabel,
-                            **kwargs,
-                        )
+    for yaml_path in sorted(config_dir.glob("*.yaml")):
+        dataset_name = yaml_path.stem
 
-                    return loader
+        # Always register a loader; generic_loader will validate the presence
+        # of a usable configuration at runtime (and raise a clear error if missing).
+        def make_loader(name: str):
+            def loader(
+                use_oos: bool = False,
+                max_train_samples: int | None = None,
+                max_test_samples: int | None = None,
+                max_val_samples: int | None = None,
+                max_classes: int | None = None,
+                seed: int = 42,
+                csv_path: str | Path | None = None,
+                multilabel: bool | None = None,
+                **kwargs,
+            ):
+                return load_dataset_from_config(
+                    name,
+                    use_oos=use_oos,
+                    max_train_samples=max_train_samples,
+                    max_test_samples=max_test_samples,
+                    max_val_samples=max_val_samples,
+                    max_classes=max_classes,
+                    seed=seed,
+                    csv_path=csv_path,
+                    multilabel=multilabel,
+                    **kwargs,
+                )
 
-                discovered[dataset_name] = make_loader(dataset_name)
+            return loader
+
+        discovered[dataset_name] = make_loader(dataset_name)
 
     return discovered
 
@@ -107,7 +110,8 @@ def register_dataset_loader(
     """Register a custom dataset loader function.
 
     This is for advanced use cases where you need a custom Python loader.
-    For most cases, just create config/dataset/{name}/loader.yaml instead.
+    For most cases, just create `config/datasets/{name}.yaml` with a `loader`
+    section instead.
 
     Args:
         dataset_name: Name of the dataset
@@ -156,7 +160,8 @@ def get_dataset(
         raise ValueError(
             f"Unknown dataset_name: {dataset_name}. "
             f"Available datasets: {available}. "
-            f"To add a new dataset, create config/dataset/{{dataset_name}}/loader.yaml"
+            f"To add a new dataset, create config/datasets/{{dataset_name}}.yaml "
+            f"with a `loader` section."
         )
 
     loader_function = all_loaders[dataset_name]

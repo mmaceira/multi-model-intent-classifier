@@ -107,13 +107,19 @@ output/
 # Hyperparameters are stored in config/hyperparameters/ and should be committed
 
 # Dataset configs - only keep nlu_plus and clinc150 (public datasets)
-# Private datasets can be added to config/dataset/ and will be ignored
+# Private datasets can be added to config/dataset/ or config/datasets/ and will be ignored
 # Each dataset should have a loader.yaml config file that defines how to load it
 config/dataset/*
 !config/dataset/nlu_plus/
 !config/dataset/nlu_plus/**
 !config/dataset/clinc150/
 !config/dataset/clinc150/**
+# Exclude private datasets from new structure (config/datasets/)
+config/datasets/tandem_go/
+config/datasets/tandem_go/**
+# Exclude private experiment configs
+config/experiments/tandem_go/
+config/experiments/tandem_go/**
 *.csv
 !tests/**/*.csv
 *.png

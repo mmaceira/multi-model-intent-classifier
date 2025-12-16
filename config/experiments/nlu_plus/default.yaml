@@ -1,0 +1,22 @@
+# Experiment config: NLU+ full multi‑label dataset (default).
+#
+# Mirrors the legacy `config/dataset/nlu_plus/default.yaml` while relying on:
+#   - config/base/defaults.yaml
+#   - config/base/providers.yaml
+#   - config/datasets/nlu_plus.yaml
+
+general:
+  run_name: "experiment_nlu_plus"
+
+model:
+  embedding_backend: "sbert"
+  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  openai_model_name: "text-embedding-3-small"
+  ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
+
+  classifier: "linear_svm"
+  rag_top_k: 25
+
+dataset:
+  # Full NLU++ multilabel experiment; limits are inherited from base defaults (no caps).
+  multilabel: true

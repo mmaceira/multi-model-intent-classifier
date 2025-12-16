@@ -79,7 +79,7 @@ def get_config_path(config_file: str | Path) -> Path:
         config_file: Config file path. Must be:
                     - Absolute path, or
                     - Path starting with "config/" (relative to repo root)
-                    Examples: "config/dataset/clinc150/tiny.yaml"
+                    Examples: "config/experiments/clinc150/tiny.yaml"
 
     Returns:
         Path to config file
@@ -94,9 +94,9 @@ def get_config_path(config_file: str | Path) -> Path:
     config_file_str = str(config_file)
     if not config_file_str.startswith("config/"):
         raise ValueError(
-            f"Config file path must start with 'config/' or be absolute. "
+            "Config file path must start with 'config/' or be absolute. "
             f"Got: {config_file_str}. "
-            f"Example: config/dataset/clinc150/tiny.yaml"
+            "Example: config/experiments/clinc150/tiny.yaml"
         )
 
     return _get_repo_root_cached() / config_file_str
@@ -144,3 +144,35 @@ def get_embeddings_dir(experiment_name: str | None = None) -> Path:
     if experiment_name:
         return get_output_dir(experiment_name) / "embeddings"
     return _get_repo_root_cached() / "embeddings"
+
+
+def compute_paths(run_id: str, root: str | Path = "output/runs") -> dict[str, str]:
+    """Compute canonical paths for a given run_id.
+
+    The layout is:
+        output/runs/{run_id}/
+          meta/
+          dataset/
+          features/
+          models/
+          eval/
+          compare/
+            figures/
+          llm_logs/
+
+    Returns plain string paths relative to the repository root; callers can
+    wrap them in ``Path`` objects where needed.
+    """
+    root_str = str(root).rstrip("/")
+    base = f"{root_str}/{run_id}"
+    return {
+        "run_dir": base,
+        "meta_dir": f"{base}/meta",
+        "dataset_dir": f"{base}/dataset",
+        "features_dir": f"{base}/features",
+        "models_dir": f"{base}/models",
+        "eval_dir": f"{base}/eval",
+        "compare_dir": f"{base}/compare",
+        "llm_logs_dir": f"{base}/llm_logs",
+        "figures_dir": f"{base}/compare/figures",
+    }

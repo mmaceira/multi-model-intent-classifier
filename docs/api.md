@@ -13,11 +13,11 @@ metrics (if enabled), and prediction endpoints.
 uv sync --extra api
 
 # Start server (single-label CLINC150 tiny)
-CONFIG_FILE=config/dataset/clinc150/tiny.yaml \
+DATASET=clinc150 VARIANT=tiny \
   uv run api-serve --host 0.0.0.0 --port 8000
 
 # Start server (multi-label NLU+ tiny)
-CONFIG_FILE=config/dataset/nlu_plus/tiny.yaml \
+DATASET=nlu_plus VARIANT=tiny \
   uv run api-serve --host 0.0.0.0 --port 8000
 ```
 
@@ -57,7 +57,8 @@ curl -X POST http://localhost:8000/v1/predict \
 
 Key environment variables:
 
-- `CONFIG_FILE` – dataset/config YAML used to locate outputs
+- `CONFIG_FILE` – explicit experiment config path (overrides `DATASET`/`VARIANT`)
+- `DATASET` / `VARIANT` – shorthand for `config/experiments/{DATASET}/{VARIANT}.yaml`
 - `SEED` – random seed (default: 42)
 - `CORS_ORIGINS` – comma-separated list of allowed origins (default: `*`)
 - `RATE_LIMIT_REQUESTS` – max requests per client per window (default: `100`)
@@ -65,5 +66,5 @@ Key environment variables:
 
 For LLM-backed models (RAG-LLM or other providers), also see:
 
-- `llm_providers.md` – provider setup and `config/llm_config.yaml`
+- `llm_providers.md` – provider setup and `config/base/providers.yaml`
 - `hyperparameter_tuning.md` – how tuned models are selected for serving

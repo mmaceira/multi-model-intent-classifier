@@ -137,6 +137,7 @@ class PipelineOrchestrator:
                 "03_model_training.py",
                 "04_model_prediction.py",
                 "05_model_evaluation.py",
+                "06_finalize_run.py",
             ]
 
         # Load config to get seed

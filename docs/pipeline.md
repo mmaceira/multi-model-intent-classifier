@@ -17,7 +17,8 @@ For concrete commands and preconfigured configs, see `running_experiments.md`.
 
 ```bash
 # Run full pipeline
-uv run python scripts/pipeline/run_all.py --config config/dataset/clinc150/tiny.yaml
+DATASET=clinc150 VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 
 # Run individual steps
 uv run python scripts/pipeline/00_data_loading.py
@@ -35,14 +36,14 @@ uv run python scripts/pipeline/05_model_evaluation.py
 - **Purpose**: Load dataset from HuggingFace/GitHub and validate
 - **Data**: Training, validation, and test splits
 - **Outputs**: Processed dataset, class distributions, statistics
-- **Saved to**: `output/{experiment_name}/data_exploration/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/dataset/`
 
 ### Step 1: Exploratory Analysis
 
 - **Purpose**: Analyze dataset characteristics
 - **Data**: Train+val merged for analysis, test for comparison
 - **Outputs**: Class distributions, vocabulary analysis, drift analysis
-- **Saved to**: `output/{experiment_name}/data_exploration/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/dataset/`
 
 ### Step 2: Build Embeddings
 
@@ -52,7 +53,7 @@ uv run python scripts/pipeline/05_model_evaluation.py
   - SBERT embeddings (default, local)
   - OpenAI embeddings (optional, requires API key)
 - **Outputs**: FAISS indices and metadata
-- **Saved to**: `output/{experiment_name}/embeddings/{backend}/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/features/embeddings/{backend}/`
 
 ### Step 3: Model Training
 
@@ -60,21 +61,21 @@ uv run python scripts/pipeline/05_model_evaluation.py
 - **Data**: Train set for fitting, validation set kept separate
 - **Models**: Naive Bayes, SVM, Transformer-based, RAG variants
 - **Outputs**: Trained model files
-- **Saved to**: `output/{experiment_name}/models/{model_name}/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/models/{model_name}/`
 
 ### Step 4: Model Prediction
 
 - **Purpose**: Generate predictions on test set
 - **Data**: Test set only
 - **Outputs**: Predictions with probabilities
-- **Saved to**: `output/{experiment_name}/predictions/{model_name}/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/eval/{model_name}/predictions/`
 
 ### Step 5: Model Evaluation
 
 - **Purpose**: Evaluate model performance
 - **Data**: Test set ground truth + predictions
 - **Outputs**: Metrics, confusion matrices, comparison plots
-- **Saved to**: `output/{experiment_name}/results/`
+- **Saved to**: `output/runs/<label_type>/<dataset>/<variant>/compare/`
 
 ## Data Flow
 

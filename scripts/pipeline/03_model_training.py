@@ -62,13 +62,10 @@ def main():
     print("=" * 60)
     try:
         # Check if hyperparameters exist (will be checked by model loader based on config name)
-        import os
+        from intent_classifier.utils.config_loader import load_config_with_metadata
 
-        config_file = os.environ.get("CONFIG_FILE", "config/dataset/clinc150/tiny.yaml")
-        # Extract config name from path (e.g., "tiny" from "config/dataset/clinc150/tiny.yaml")
-        from intent_classifier.utils.config_loader import parse_config_path
-
-        _, config_name = parse_config_path(config_file)
+        metadata = load_config_with_metadata()
+        config_name = metadata["config_name"]
         hyperparams_dir = repo_root / "config" / "algorithm" / "hyperparameters" / config_name
         # Check if any hyperparameter files exist
         if hyperparams_dir.exists() and any(hyperparams_dir.glob("best_*.yaml")):

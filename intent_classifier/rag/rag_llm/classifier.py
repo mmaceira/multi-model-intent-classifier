@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import re
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -197,8 +199,30 @@ def _normalize_endpoint(endpoint: str) -> str:
     return endpoint
 
 
-def _call_llm(messages: list[dict[str, str]], model: str) -> str:
-    """Send chat completion request (temperature fixed at 0)."""
+def _get_rag_llm_log_dir() -> Path | None:
+    """Return the dedicated rag_llm log directory for the current run, if configured.
+
+    This reuses the MethodLogger's log directory (which is already wired to the
+    run-specific ``llm_logs_dir``) and nests a ``rag_llm`` subfolder inside it.
+    """
+    try:
+        method_logger = get_method_logger()
+        log_dir = getattr(method_logger, "log_dir", None)
+        if not log_dir:
+            return None
+        rag_dir = Path(log_dir) / "rag_llm"
+        rag_dir.mkdir(parents=True, exist_ok=True)
+        return rag_dir
+    except Exception:
+        return None
+
+
+def _call_llm(
+    messages: list[dict[str, str]],
+    model: str,
+    context: dict[str, Any] | None = None,
+) -> str:
+    """Send chat completion request (temperature fixed at 0) and normalise logs."""
     # Only use response_format for models that support it (OpenAI, Anthropic, etc.)
     # Ollama and some other providers don't support this parameter
     supports_json_schema = not model.startswith("ollama/")
@@ -227,10 +251,63 @@ def _call_llm(messages: list[dict[str, str]], model: str) -> str:
     if supports_json_schema:
         kwargs["response_format"] = {"type": "json_object"}
 
-    # Log model call (only at debug level to reduce verbosity)
-    # The progress bar will show overall progress
-    resp = completion(**kwargs)
-    return resp["choices"][0]["message"]["content"]
+    # Normalised logging payload (no raw text; only sizes and metadata).
+    log_dir = _get_rag_llm_log_dir()
+    prompt_chars = int(sum(len(m.get("content", "")) for m in messages))
+    prompt_style = None
+    retrieved_ids = None
+    purpose = None
+    if context:
+        prompt_style = context.get("prompt_style")
+        retrieved_ids = context.get("retrieved_ids")
+        purpose = context.get("purpose")
+
+    start = time.perf_counter()
+    error: Exception | None = None
+    content: str = ""
+
+    try:
+        resp = completion(**kwargs)
+        content = resp["choices"][0]["message"]["content"]
+        return content
+    except Exception as exc:  # pragma: no cover - defensive logging
+        error = exc
+        raise
+    finally:
+        end = time.perf_counter()
+        latency_ms = float((end - start) * 1000.0)
+        response_chars = len(content)
+
+        if log_dir is not None:
+            record: dict[str, Any] = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "model": model,
+                "prompt_style": prompt_style,
+                "retrieved_ids": retrieved_ids,
+                "prompt_chars": prompt_chars,
+                "response_chars": response_chars,
+                "latency_ms": latency_ms,
+                "success": error is None,
+            }
+            if purpose is not None:
+                record["purpose"] = purpose
+            if error is not None:
+                record["error"] = str(error)
+
+            try:
+                requests_file = log_dir / "requests.jsonl"
+                with requests_file.open("a", encoding="utf-8") as f:
+                    json.dump(record, f, ensure_ascii=False)
+                    f.write("\n")
+
+                if error is not None:
+                    failures_file = log_dir / "failures.jsonl"
+                    with failures_file.open("a", encoding="utf-8") as f:
+                        json.dump(record, f, ensure_ascii=False)
+                        f.write("\n")
+            except Exception:
+                # Logging failures must never break inference.
+                pass
 
 
 def _normalize_label(label: str) -> str:
@@ -273,6 +350,31 @@ def _normalize_label_set(labels: list[str]) -> dict[str, str]:
     return {_normalize_label(label): label for label in labels}
 
 
+PROMPT_STYLES: dict[str, dict[str, Any]] = {
+    # Default detailed prompt for production-grade classification.
+    "default": {
+        "description": "Full instructions with rich context and examples.",
+    },
+    # Shortened prompt for faster/cheaper inference.
+    "short": {
+        "description": "Concise instructions; trades verbosity for speed.",
+    },
+    # n8n-specific prompt (Catalan email cleaning + classification).
+    "n8n_prompt": {
+        "description": "Email cleaning + intent classification (Catalan) tuned for n8n flows.",
+    },
+}
+
+
+def list_prompt_styles() -> list[str]:
+    """Return the list of supported prompt styles.
+
+    This provides a single source of truth for tools/clients that want
+    to expose a dropdown or validate user inputs.
+    """
+    return sorted(PROMPT_STYLES.keys())
+
+
 def _load_prompt_template(prompt_style: str, prompt_type: str, is_multilabel: bool) -> str:
     """Load a prompt template from file.
 
@@ -288,6 +390,14 @@ def _load_prompt_template(prompt_style: str, prompt_type: str, is_multilabel: bo
         FileNotFoundError: If prompt file doesn't exist
     """
     from pathlib import Path
+
+    # Normalize and validate style
+    if prompt_style not in PROMPT_STYLES:
+        logger.warning(
+            "Unknown prompt_style '%s'. Known styles: %s",
+            prompt_style,
+            ", ".join(sorted(PROMPT_STYLES.keys())),
+        )
 
     # Determine label mode suffix
     label_mode = "multilabel" if is_multilabel else "singlelabel"
@@ -402,7 +512,17 @@ def classify_single(
         {"role": "user", "content": user_prompt},
     ]
 
-    content = _call_llm(messages, model=model)
+    retrieved_ids = list(range(len(retrieved)))
+
+    content = _call_llm(
+        messages,
+        model=model,
+        context={
+            "prompt_style": prompt_style,
+            "retrieved_ids": retrieved_ids,
+            "purpose": "classification",
+        },
+    )
 
     # Initialize repair tracking metadata
     repair_metadata = {
@@ -448,7 +568,15 @@ def classify_single(
             {"role": "user", "content": repair_prompt},
         ]
         try:
-            repaired = _call_llm(repair_messages, model=model)
+            repaired = _call_llm(
+                repair_messages,
+                model=model,
+                context={
+                    "prompt_style": prompt_style,
+                    "retrieved_ids": retrieved_ids,
+                    "purpose": "json_repair",
+                },
+            )
             parsed = _extract_json_object(repaired)
             repair_metadata["json_parse_repair_succeeded"] = True
         except Exception as repair_error:
@@ -516,7 +644,15 @@ def classify_single(
             {"role": "user", "content": repair_label_prompt},
         ]
         try:
-            repaired_content = _call_llm(repair_label_messages, model=model)
+            repaired_content = _call_llm(
+                repair_label_messages,
+                model=model,
+                context={
+                    "prompt_style": prompt_style,
+                    "retrieved_ids": retrieved_ids,
+                    "purpose": "label_repair",
+                },
+            )
             repaired_parsed = _extract_json_object(repaired_content)
             repaired_label = repaired_parsed.get("label")
             if repaired_label is None:
@@ -866,7 +1002,9 @@ class RagLLM(RagClassifierBase):
         for i, doc in iterator:
             try:
                 retrieved = self.retriever.select_topk_with_min_labels(
-                    doc, k=self.top_k, m=self.min_labels
+                    doc,
+                    k=self.top_k,
+                    m=self.min_labels,
                 )
 
                 label_counts: dict[str, int] = {}
@@ -885,8 +1023,8 @@ class RagLLM(RagClassifierBase):
                 else:
                     all_probas[i, :] = 1.0 / len(sorted_labels)
 
-            except Exception as e:  # pragma: no cover - defensive logging
-                logger.error(f"Error computing probabilities for document '{doc[:50]}...': {e}")
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("Error computing probabilities for document '%s...'", doc[:50])
                 all_probas[i, :] = 1.0 / len(sorted_labels)
 
         return all_probas

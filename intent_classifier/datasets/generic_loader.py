@@ -1,7 +1,8 @@
 """
-Generic dataset loader that reads configuration from config/dataset/{name}/loader.yaml.
+Generic dataset loader that reads configuration from `config/datasets/{name}.yaml`.
 
-This allows adding new datasets by simply creating a config file without writing Python code.
+Each dataset file can define a `loader` section describing how to load and preprocess
+the raw data (source, fields, splits, filters, label processing, etc.).
 """
 
 from __future__ import annotations
@@ -15,19 +16,20 @@ from typing import Any
 from urllib.request import urlopen
 
 import yaml
-from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 
+from datasets import load_dataset
 from intent_classifier.utils.paths import get_repo_root
 
 try:
-    from intent_classifier.datasets.tandem_go.label_normalization import (
+    # Optional label normalization utilities for CSV-based multilabel datasets
+    from intent_classifier.datasets.multilabel_csv.label_normalization import (
         analyze_normalization,
         normalize_labels,
         print_normalization_report,
     )
 except ImportError:
-    # Fallback if module doesn't exist yet
+    # Fallback if normalization module doesn't exist yet
     normalize_labels = None  # type: ignore[assignment]
     analyze_normalization = None  # type: ignore[assignment]
     print_normalization_report = None  # type: ignore[assignment]
@@ -46,7 +48,7 @@ def load_dataset_from_config(
     **kwargs,
 ) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str]]:
     """
-    Load a dataset using configuration from config/dataset/{dataset_name}/loader.yaml.
+    Load a dataset using configuration from `config/datasets/{dataset_name}.yaml`.
 
     This is a generic loader that supports multiple source types:
     - huggingface: Load from HuggingFace datasets
@@ -55,7 +57,8 @@ def load_dataset_from_config(
     - local_json: Load from local JSON file
 
     Args:
-        dataset_name: Name of the dataset (must have config/dataset/{name}/loader.yaml)
+        dataset_name: Name of the dataset (must have config/datasets/{name}.yaml
+            with a loader section)
         use_oos: Whether to include out-of-scope examples (if supported)
         max_train_samples: Maximum training samples
         max_test_samples: Maximum test samples
@@ -69,18 +72,22 @@ def load_dataset_from_config(
     Returns:
         X_train, y_train, X_val, y_val, X_test, y_test, classes
     """
-    # Load config
+    # Load config: dataset metadata and loader settings live in config/datasets/{name}.yaml
     repo_root = get_repo_root()
-    config_path = repo_root / "config" / "dataset" / dataset_name / "loader.yaml"
+    config_path = repo_root / "config" / "datasets" / f"{dataset_name}.yaml"
 
     if not config_path.exists():
         raise ValueError(
             f"Dataset loader config not found: {config_path}. "
-            f"Create config/dataset/{dataset_name}/loader.yaml to add this dataset."
+            f"Create config/datasets/{dataset_name}.yaml with a `loader` section "
+            f"to add this dataset."
         )
 
     with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+        full_config = yaml.safe_load(f) or {}
+
+    # Backwards compatibility: if `loader` is missing, assume the whole file is a loader config.
+    config = full_config.get("loader") or full_config
 
     # Determine multilabel (config takes precedence unless explicitly overridden)
     is_multilabel = multilabel if multilabel is not None else config.get("multilabel", False)
@@ -148,7 +155,8 @@ def load_dataset_from_config(
 
     # Apply filters
     filters_config = config.get("filters") or {}
-    # For Tandem dataset, skip min_samples_per_label filtering if normalize_labels is enabled
+    # When label normalization is enabled, skip min_samples_per_label filtering
+    # to preserve all normalized labels.
     if filters_config.get("min_samples_per_label"):
         # Only apply filtering if normalization is not enabled (to preserve all normalized labels)
         if not (is_multilabel and label_processing.get("normalize_labels")):
