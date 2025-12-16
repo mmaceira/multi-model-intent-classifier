@@ -101,7 +101,7 @@ class EmbeddingLogReg(TextClassifier):
         # ------------------------------------------------------------------
         # Store parameters without mutating (clone‑safe)
         # ------------------------------------------------------------------
-        # backend takes precedence over legacy use_openai flag
+        # backend takes precedence over use_openai flag
         self.backend = backend or ("openai" if use_openai else "sbert")
         self.use_openai = self.backend == "openai"
 

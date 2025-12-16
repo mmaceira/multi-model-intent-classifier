@@ -14,6 +14,5 @@ model:
   # Optional Ollama embedding model (Qwen embeddings via litellm + Ollama)
   ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
 
-  # RAG / classifier defaults
-  classifier: "linear_svm"
+  # RAG defaults
   rag_top_k: 25

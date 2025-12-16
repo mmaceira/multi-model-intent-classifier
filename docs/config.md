@@ -86,8 +86,8 @@ After merging, the loader computes:
   - `resolved.ollama_endpoint`
   - `resolved.openai_api_key_present` (boolean)
 
-Legacy overrides such as `model.llm_model` are no longer supported; use
-`model.llm_backend` and provider defaults instead.
+Use `model.llm_backend` and provider defaults instead of direct `model.llm_model`
+overrides.
 
 ## Selecting configs via environment
 
@@ -118,5 +118,5 @@ dataset config under `config/datasets/`.
 - **`SEED`** – Optional override for the random seed
 - **`SBERT_BATCH`, `OPENAI_BATCH`** – Embedding batch sizes
 
-For more details on legacy configs and how models read from the merged config, see
+For more details on how models read from the merged config, see
 `configuration.md` and `config/algorithm/models_config.yaml`.

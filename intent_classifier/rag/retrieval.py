@@ -122,7 +122,7 @@ class Retriever:
         configuration, supporting both OpenAI and SentenceTransformer embeddings.
 
         Args:
-            use_openai (bool): Whether to use OpenAI index files (legacy flag, default: False).
+            use_openai (bool): Whether to use OpenAI index files (default: False).
             embed_model (Optional[str]): SBERT model name to use for embeddings.
                 If None, reads from MODEL_SBERT_MODEL_NAME env var or defaults to
                 "sentence-transformers/all-MiniLM-L6-v2". Only used when backend is

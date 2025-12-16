@@ -2,7 +2,7 @@
 
 ## Overview
 
-Install dependencies using `uv` (recommended) or `pip`.
+Install dependencies using `uv`.
 
 ## Quickstart
 ```bash

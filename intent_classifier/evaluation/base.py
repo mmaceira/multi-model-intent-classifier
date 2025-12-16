@@ -181,10 +181,10 @@ class BaseEvaluationRunner(ABC):
 
         # As a safety net, ensure that *all* models with predictions are
         # considered, even if their names do not exactly match the ones
-        # passed in model_names (e.g. due to unexpected sanitisation or
-        # legacy naming). Any such models fall back to using their
-        # prediction directory name as display label so they are visible
-        # in summaries instead of being silently skipped.
+        # passed in model_names (e.g. due to unexpected sanitisation).
+        # Any such models fall back to using their prediction directory name
+        # as display label so they are visible in summaries instead of being
+        # silently skipped.
         for pred_key in predictions_dict.keys():
             display_name_by_pred_key.setdefault(pred_key, pred_key)
 

@@ -64,7 +64,7 @@ ollama pull qwen3-embedding:latest
 # Set API key
 export OPENAI_API_KEY="your-key-here"
 
-# Update config: llm_model: "gpt-4o-mini"
+# Use an experiment config with model.llm_backend: "openai"
 uv run python scripts/pipeline/run_all.py
 ```
 
@@ -124,7 +124,7 @@ See [litellm documentation](https://docs.litellm.ai/) for full list.
 ### OpenAI Embeddings
 - API-based using `text-embedding-3-small`
 - Requires `OPENAI_API_KEY`
-- Set `use_openai: true` in model configuration
+- Set `model.embedding_backend: "openai"` in the experiment configuration
 
 ## RAG‑LLM Exploration (`rag-explore`)
 
@@ -171,11 +171,11 @@ LLM defaults (provider, base model, temperature, etc.) live in `config/base/prov
 ```bash
 # Switch to OpenAI
 export OPENAI_API_KEY="your-key"
-# Update config: llm_model: "gpt-4o-mini"
+# Use an experiment config with model.llm_backend: "openai"
 uv run python scripts/pipeline/run_all.py
 
 # Switch back to Ollama
-# Update config: llm_model: "ollama/llama3.1:8b"
+# Use an experiment config with model.llm_backend: "ollama"
 uv run python scripts/pipeline/run_all.py
 ```
 

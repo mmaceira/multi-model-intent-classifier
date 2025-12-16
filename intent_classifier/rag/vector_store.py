@@ -79,7 +79,7 @@ class VectorStore:
         embedder (EmbeddingGenerator | None): Embedding generator instance
         vectors (Dict[str, np.ndarray]): Document embeddings cache
         metadata (Dict[str, Dict]): Document metadata cache
-        _meta (List[Dict]): Legacy metadata format for backward compatibility
+        _meta (List[Dict]): Metadata format for backward compatibility
     """
 
     embedder: EmbeddingGenerator | LitellmOllamaEmbedder | None

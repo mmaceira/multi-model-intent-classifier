@@ -3,8 +3,6 @@
 ## This is the single source of truth for provider endpoints and default
 ## model identifiers. The central config loader normalises this into a
 ## `providers.*` block and a `resolved.*` section in code.
-##
-## NOTE: This file replaces the legacy `config/llm_config.yaml` shape.
 
 providers:
   ollama:

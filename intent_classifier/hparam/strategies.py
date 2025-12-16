@@ -156,7 +156,7 @@ def ensure_embeddings_built(
     # Resolve index/meta paths using current RAG configuration.
     # This respects EMBEDDINGS_DIR / RAG_EMBEDDINGS_DIR and any recent calls
     # to set_artifacts_dir, so tuning uses the same layout as the main pipeline
-    # (e.g. output/experiment_tiny_dataset/embeddings/...).
+    # (e.g. output/runs/multilabel/nlu_plus/tiny/features/embeddings/sbert/...).
     index_path, meta_path = get_index_paths(use_openai=use_openai)
 
     # Check if embeddings already exist

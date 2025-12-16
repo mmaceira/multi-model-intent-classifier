@@ -95,7 +95,8 @@ models:
       top_k: "${model.rag_top_k}"
       # LLM backend/model are resolved via providers.* and resolved.* in the main config.
       model: "${resolved.llm_model}"
-      backend: "${resolved.llm_backend}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
       # Prompt configuration references named styles; templates are managed centrally.
       prompt:
         style: "default"
@@ -108,7 +109,8 @@ models:
       method: "llm"
       top_k: "${model.rag_top_k}"
       model: "${resolved.llm_model}"
-      backend: "${resolved.llm_backend}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
       prompt:
         style: "short"
 
@@ -120,7 +122,8 @@ models:
       method: "llm"
       top_k: "${model.rag_top_k}"
       model: "${resolved.llm_model}"
-      backend: "${resolved.llm_backend}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
       prompt:
         style: "n8n_prompt"
 

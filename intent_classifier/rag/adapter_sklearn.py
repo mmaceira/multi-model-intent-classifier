@@ -238,42 +238,21 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             elif rag_type == "CentroidNN":
                 self.rag = load_centroid(use_openai=use_openai)
             elif rag_type == "RagLLM":
-                # Get LLM model from state or config, with fallback
-                saved_llm_model = state.get("llm_model")
-
-                # Try to get current config model
-                config_llm_model = config.get("model", {}).get("llm_model")
-                if not config_llm_model or config_llm_model.startswith("${"):
-                    # Try to get from LLM config
-                    from intent_classifier.utils.config_loader import _load_llm_config
-
-                    llm_config = _load_llm_config()
-                    if (
-                        llm_config
-                        and "ollama" in llm_config
-                        and "default_model" in llm_config["ollama"]
-                    ):
-                        config_llm_model = llm_config["ollama"]["default_model"]
-
-                # Use config model if available and different from saved, otherwise use saved
-                if config_llm_model and config_llm_model != saved_llm_model:
-                    llm_model = config_llm_model
-                    logger.info(
-                        f"Using LLM model from config ({llm_model}) "
-                        f"instead of saved state ({saved_llm_model})"
+                # Strictly use the LLM model from the active run config.
+                # We ignore any value saved in the pickle and do not fall back
+                # to local defaults – this keeps behaviour tied to the config
+                # you pass (DATASET/VARIANT/CONFIG_FILE).
+                resolved_cfg = config.get("resolved", {}) or {}
+                llm_model = resolved_cfg.get("llm_model")
+                if not llm_model:
+                    raise RuntimeError(
+                        "RagLLM restore failed: 'resolved.llm_model' is not set in the "
+                        "active configuration. Please ensure your experiment config "
+                        "specifies model.llm_backend and that providers.yaml defines "
+                        "the corresponding default model."
                     )
-                elif saved_llm_model:
-                    llm_model = saved_llm_model
-                    logger.info(f"Restoring LLM model from saved state: {llm_model}")
-                elif config_llm_model:
-                    llm_model = config_llm_model
-                    logger.info(f"Using LLM model from config: {llm_model}")
-                else:
-                    # Final fallback
-                    llm_model = "ollama/llama3.1:8b"
-                    logger.warning(
-                        f"LLM model not found in state or config, using fallback: {llm_model}"
-                    )
+
+                logger.info(f"Using LLM model from active config: {llm_model}")
 
                 # Get min_labels from state (new parameter in new implementation)
                 min_labels = state.get("min_labels", 4)

@@ -294,7 +294,7 @@ DATASET=nlu_plus VARIANT=tiny \
 ```
 
 Enable/disable models in `config/algorithm/models_config.yaml`. See
-[Configuration](docs/config.md) for details. For the new output layout, see
+[Configuration](docs/config.md) for details. For the output layout, see
 [Output Schema](docs/output_schema.md).
 
 

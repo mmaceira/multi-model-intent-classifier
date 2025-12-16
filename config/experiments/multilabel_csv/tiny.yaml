@@ -1,13 +1,12 @@
 # Experiment config: CSV-based tiny multi-label subset.
 #
-# Relies on:
+# Thin override layered on top of:
 #   - config/base/defaults.yaml
 #   - config/base/providers.yaml
 #   - config/datasets/multilabel_csv.yaml
 #
 general:
   run_name: "tiny"
-  seed: 42
 
 dataset:
   # Tiny CSV-based multilabel experiment for quick tests
@@ -18,11 +17,5 @@ dataset:
   max_test_samples: 50
 
 model:
-  embedding_backend: "sbert"
-  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
-  openai_model_name: "text-embedding-3-small"
-
-  classifier: "linear_svm"
+  # Use a smaller neighborhood for RAG-style models in tiny runs
   rag_top_k: 5
-
-  llm_model: "ollama/llama3.1:8b"

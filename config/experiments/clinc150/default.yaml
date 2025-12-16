@@ -1,21 +1,9 @@
 # Experiment config: CLINC150 full dataset (default).
 #
-# This mirrors the legacy `config/dataset/clinc150/default.yaml` but is
-# intended to be a thin override layered on top of:
+# Thin override layered on top of:
 #   - config/base/defaults.yaml
 #   - config/base/providers.yaml
 #   - config/datasets/clinc150.yaml
 
 general:
   run_name: "experiment_default"
-
-model:
-  # Embedding options
-  embedding_backend: "sbert"
-  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
-  openai_model_name: "text-embedding-3-small"
-  ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
-
-  # Classifier options
-  classifier: "linear_svm"
-  rag_top_k: 25

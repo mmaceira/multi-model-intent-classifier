@@ -1,6 +1,6 @@
 # Experiment config: NLU+ tiny multi‑label subset.
 #
-# Mirrors the legacy `config/dataset/nlu_plus/tiny.yaml` while relying on:
+# Relies on:
 #   - config/base/defaults.yaml
 #   - config/base/providers.yaml
 #   - config/datasets/nlu_plus.yaml
@@ -14,10 +14,4 @@ dataset:
   max_test_samples: 50
 
 model:
-  embedding_backend: "sbert"
-  sbert_model_name: "sentence-transformers/all-MiniLM-L6-v2"
-  openai_model_name: "text-embedding-3-small"
-  ollama_embedding_model_name: "ollama/qwen3-embedding:latest"
-
-  classifier: "linear_svm"
   rag_top_k: 5

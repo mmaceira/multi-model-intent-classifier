@@ -169,7 +169,7 @@ def _get_index_paths_internal(use_openai: bool, backend: str | None = None) -> t
     """Internal implementation of get_index_paths without artifacts_dir handling.
 
     The ``backend`` parameter allows selecting between specific embedding backends
-    (\"sbert\", \"openai\", \"ollama\"). The legacy ``use_openai`` flag is kept for
+    (\"sbert\", \"openai\", \"ollama\"). The ``use_openai`` flag is kept for
     backward compatibility and is treated as a shortcut for ``backend=\"openai\"``.
     """
     # Ensure directories exist
@@ -260,7 +260,7 @@ def load_llm(
     """Load RAG LLM model
 
     Args:
-        use_openai: Whether to use OpenAI embeddings (legacy flag).
+        use_openai: Whether to use OpenAI embeddings.
         artifacts_dir: Optional alternative artifacts directory.
         backend: Optional embedding backend selector for retrieval
                  (\"sbert\", \"ollama\", \"openai\"). If provided, this is

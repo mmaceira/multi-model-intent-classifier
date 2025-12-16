@@ -807,7 +807,7 @@ class RagLLM(RagClassifierBase):
         retriever: TfIdfRetriever | EmbeddingRetriever,
         labels: Sequence[str],
         *,
-        model: str = "ollama/llama3.1:8b",
+        model: str = "ollama/qwen2.5:14b",
         top_k: int = 10,
         min_labels: int = 4,
         label_defs: dict[str, str] | None = None,
@@ -829,7 +829,7 @@ class RagLLM(RagClassifierBase):
         cls,
         *,
         use_openai: bool = False,  # kept for compatibility
-        model: str = "ollama/llama3.1:8b",
+        model: str = "ollama/qwen2.5:14b",
         top_k: int = 10,
         min_labels: int = 4,
         prompt_style: str = "default",
@@ -848,7 +848,7 @@ class RagLLM(RagClassifierBase):
         retriever: TfIdfRetriever | EmbeddingRetriever
         label_defs: dict[str, str] = {}
 
-        if backend_normalized in ("tfidf", "local", "legacy"):
+        if backend_normalized in ("tfidf", "local"):
             examples, label_defs = _load_examples()
             retriever = TfIdfRetriever(examples)
             labels = sorted({ex.label for ex in examples})

@@ -68,13 +68,13 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
 
         use_openai = params.get("use_openai", False)
 
-        min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
-        # Prompt configuration: allow either nested prompt.style or legacy prompt_style
+        min_labels = params.get("min_labels", 4)
+        # Prompt configuration: allow either nested prompt.style or flat prompt_style
         prompt_cfg = params.get("prompt", {})
         if isinstance(prompt_cfg, dict) and "style" in prompt_cfg:
             prompt_style = prompt_cfg.get("style", "default")
         else:
-            # Backward-compatible flat key
+            # Flat key for backward compatibility
             prompt_style = params.get("prompt_style", "default")
 
         logger.info(

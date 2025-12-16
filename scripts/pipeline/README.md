@@ -67,11 +67,7 @@ uv run python scripts/pipeline/05_model_evaluation.py
 
 ## Outputs
 
-All outputs in `output/{run_name}/`:
-- `data_exploration/` - Statistics and visualizations
-- `embeddings/` - FAISS indices
-- `models/` - Trained models
-- `predictions/` - Predictions
-- `results/` - Evaluation metrics
+All outputs are written under `output/runs/<label_type>/<dataset>/<variant>/`.
+See `docs/output_schema.md` for the full layout.
 
 See [Pipeline Documentation](../../docs/pipeline.md) for detailed information.

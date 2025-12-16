@@ -36,9 +36,7 @@ _CUSTOM_LOADERS: dict[str, Callable] = {}
 def _discover_datasets() -> dict[str, Callable]:
     """Discover datasets from `config/datasets/*.yaml` files.
 
-    Any dataset config file that either:
-    - defines a top-level `loader` section, or
-    - is itself a loader-style config (legacy)
+    Any dataset config file that defines a top-level `loader` section
     will be exposed via a generic loader.
 
     Returns:

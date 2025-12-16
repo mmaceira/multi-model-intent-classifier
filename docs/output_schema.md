@@ -2,7 +2,7 @@
 
 ## Overview
 
-Pipeline runs now write into a single, self‑contained folder per experiment under:
+Pipeline runs write into a single, self‑contained folder per experiment under:
 
 - **Pattern**: `output/runs/<label_type>/<dataset>/<variant>/`
 - **Example**: `output/runs/multilabel/nlu_plus/tiny/`

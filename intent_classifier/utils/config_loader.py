@@ -78,9 +78,9 @@ def substitute_vars(value: Any, config: dict[str, Any]) -> Any:
         Value with variables substituted (or original if substitution failed)
 
     Example:
-        >>> config = {"general": {"run_name": "experiment1"}}
-        >>> substitute_vars("output/${general.run_name}/models", config)
-        'output/experiment1/models'
+        >>> config = {"resolved": {"run_id": "singlelabel/clinc150/tiny"}}
+        >>> substitute_vars("output/runs/${resolved.run_id}/models", config)
+        'output/runs/singlelabel/clinc150/tiny/models'
     """
     if isinstance(value, str) and "${" in value:
         var_pattern = r"\${([^}]+)}"
@@ -337,10 +337,8 @@ def _ensure_general_and_paths(
     run_id = f"{label_type}/{dataset_name}/{config_name}"
     general["run_id"] = run_id
 
-    # Compute canonical paths for this run_id using the new output schema.
-    #
-    # NOTE: We intentionally ignore any legacy ``paths`` blocks in YAML and
-    # always derive paths in code from the run_id.
+    # Compute canonical paths for this run_id using the output schema.
+    # Paths are always derived in code from the run_id.
     computed = compute_paths(run_id, root="output/runs")
     config["paths"] = {
         "run_dir": computed["run_dir"],
@@ -413,10 +411,8 @@ def _attach_providers_and_resolved(config: dict[str, Any]) -> None:
 
     # LLM backend and effective model
     #
-    # Provider model IDs live in config/base/providers.yaml; we no longer
-    # read legacy overrides like ``model.llm_model`` or per-provider
-    # embedding keys. Downstream code should rely on resolved.llm_model
-    # and resolved.embedding_model.
+    # Provider model IDs live in config/base/providers.yaml.
+    # Downstream code should rely on resolved.llm_model and resolved.embedding_model.
     llm_backend = model_cfg.get("llm_backend")
     llm_model: str | None = None
 
