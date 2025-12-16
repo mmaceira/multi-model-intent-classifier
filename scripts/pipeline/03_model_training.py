@@ -25,6 +25,7 @@ from config.notebook_setup import (  # noqa: E402
 # Import dataset and training modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.training import run_training  # noqa: E402
+from intent_classifier.utils.file_ops import sanitize_model_name  # noqa: E402
 from intent_classifier.utils.method_logger import get_logger  # noqa: E402
 from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
@@ -104,7 +105,12 @@ def main():
     skipped_models = []
 
     for name, model in models.items():
-        model_path = MODELS_DIR / name / "model.pkl"
+        # Use the same sanitisation logic as the training helper so that
+        # models whose display names contain path separators (e.g.
+        # "Embedding + LogReg (Qwen/Ollama)") map to the correct
+        # filesystem directory and can be detected as already trained.
+        safe_name = sanitize_model_name(name)
+        model_path = MODELS_DIR / safe_name / "model.pkl"
         if model_path.exists():
             print(f"⏭️  Skipping {name} - model already exists at {model_path}")
             skipped_models.append(name)

@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 
 from intent_classifier.evaluation.utils import load_all_prediction_files, setup_logging
-from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.file_ops import ensure_dir, sanitize_model_name
 
 
 class BaseEvaluationRunner(ABC):
@@ -135,20 +135,72 @@ class BaseEvaluationRunner(ABC):
         test_df = predictions_dict[first_model]["test"]
         self._extract_classes(test_df)
 
-        # If model_names is None or empty, use all models that have predictions
+        # ------------------------------------------------------------------
+        # Normalise requested model names to prediction directory keys
+        # ------------------------------------------------------------------
+        # predictions_dict is keyed by *sanitised* model names (see
+        # intent_classifier.utils.file_ops.sanitize_model_name), whereas
+        # callers may provide human‑readable display names. To ensure we
+        # evaluate the correct models (including those whose names contain
+        # path separators such as "Qwen/Ollama"), we build a mapping from
+        # prediction‑directory key -> display name.
+        # ------------------------------------------------------------------
+
+        display_name_by_pred_key: dict[str, str] = {}
+
         if not model_names:
-            model_names = list(predictions_dict.keys())
-        # If model_names is a dict, convert to list of keys
-        elif isinstance(model_names, dict):
-            model_names = list(model_names.keys())
+            # No filter specified: evaluate all models and keep their
+            # existing keys as display names.
+            for pred_key in predictions_dict.keys():
+                display_name_by_pred_key[pred_key] = pred_key
+            normalised_model_names: list[str] | None = None
+
+        else:
+            # If a dict was provided, use its keys (e.g. mapping of names to objects)
+            if isinstance(model_names, dict):
+                normalised_model_names = list(model_names.keys())
+            else:
+                normalised_model_names = list(model_names)
+
+            # Build helper map from sanitised name -> original display name
+            safe_to_display: dict[str, str] = {}
+            for name in normalised_model_names:
+                safe = sanitize_model_name(name)
+                # Prefer the first occurrence if there are collisions
+                if safe not in safe_to_display:
+                    safe_to_display[safe] = name
+                # Also allow exact (unsanitised) matches
+                if name not in safe_to_display:
+                    safe_to_display[name] = name
+
+            # For each predictions directory, decide whether it should be
+            # evaluated and which display name to use in the results.
+            for pred_key in predictions_dict.keys():
+                if pred_key in safe_to_display:
+                    display_name_by_pred_key[pred_key] = safe_to_display[pred_key]
+
+        # As a safety net, ensure that *all* models with predictions are
+        # considered, even if their names do not exactly match the ones
+        # passed in model_names (e.g. due to unexpected sanitisation or
+        # legacy naming). Any such models fall back to using their
+        # prediction directory name as display label so they are visible
+        # in summaries instead of being silently skipped.
+        for pred_key in predictions_dict.keys():
+            display_name_by_pred_key.setdefault(pred_key, pred_key)
+
+        selected_display_names = sorted(set(display_name_by_pred_key.values()))
 
         # Per-model processing
-        for name, model_predictions in predictions_dict.items():
-            if name not in model_names:
+        for pred_key, model_predictions in predictions_dict.items():
+            # Skip models that were not requested
+            if pred_key not in display_name_by_pred_key:
                 continue
 
-            model_out_dir = ensure_dir(output_dir / name)
-            self.logger.info("Processing model %s", name)
+            display_name = display_name_by_pred_key[pred_key]
+
+            # Keep filesystem layout based on prediction key (already sanitised)
+            model_out_dir = ensure_dir(output_dir / pred_key)
+            self.logger.info("Processing model %s", display_name)
 
             model_results: dict[str, float] = {}
             for split_name, df in model_predictions.items():
@@ -192,10 +244,18 @@ class BaseEvaluationRunner(ABC):
                     if train_val is not None and test_val is not None:
                         model_results[f"{metric}_diff"] = train_val - test_val
 
-            results[name] = model_results
+            # Store results under the *display* name so that downstream
+            # tables use human‑readable model identifiers.
+            results[display_name] = model_results
 
         # Summary & cross-model visualizations
-        self._generate_summary(results, predictions_dict, output_dir, model_names, artefacts_root)
+        self._generate_summary(
+            results,
+            predictions_dict,
+            output_dir,
+            selected_display_names,
+            artefacts_root,
+        )
 
         return results
 

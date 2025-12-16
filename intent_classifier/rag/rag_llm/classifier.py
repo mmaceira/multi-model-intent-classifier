@@ -710,6 +710,7 @@ class RagLLM(RagClassifierBase):
         backend_normalized = (backend or "tfidf").lower()
 
         retriever: TfIdfRetriever | EmbeddingRetriever
+        label_defs: dict[str, str] = {}
 
         if backend_normalized in ("tfidf", "local", "legacy"):
             examples, label_defs = _load_examples()
@@ -722,13 +723,15 @@ class RagLLM(RagClassifierBase):
                     f"Unsupported backend '{backend}'. Expected one of "
                     f"'tfidf', 'sbert', 'ollama', 'openai', or None."
                 )
+
             faiss_retriever = FaissRetriever.from_default(
                 use_openai=backend_normalized == "openai",
                 backend=backend_normalized if backend_normalized != "tfidf" else None,
             )
             retriever = EmbeddingRetriever(faiss_retriever)
             labels = sorted({ex.label for ex in retriever.examples})
-            # Build simple label definitions from examples
+
+            # Build simple label definitions from examples.
             for ex in retriever.examples:
                 label_defs.setdefault(ex.label, ex.text[:160])
 
