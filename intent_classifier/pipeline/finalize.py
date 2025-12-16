@@ -28,25 +28,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from intent_classifier.evaluation.run_docs import generate_run_readme_and_model_cards
 from intent_classifier.utils.config_loader import ConfigMetadata, load_config_with_metadata
 from intent_classifier.utils.file_ops import ensure_dir
 from intent_classifier.utils.paths import get_repo_root
-
-
-def _slugify_model_id(name: str) -> str:
-    """Create a stable, slug-like model identifier.
-
-    - Lowercase
-    - Replace non-alphanumeric characters with underscores
-    - Collapse multiple underscores
-    - Strip leading/trailing underscores
-    """
-    import re
-
-    slug = name.lower()
-    slug = re.sub(r"[^a-z0-9]+", "_", slug)
-    slug = re.sub(r"_+", "_", slug)
-    return slug.strip("_") or "model"
+from intent_classifier.utils.slugify import slugify_model_id
 
 
 def _sha256_file(path: Path) -> str:
@@ -68,7 +54,7 @@ def _discover_model_dirs(models_root: Path) -> dict[str, Path]:
         if not child.is_dir():
             continue
         display_name = child.name
-        slug = _slugify_model_id(display_name)
+        slug = slugify_model_id(display_name)
         # Prefer the first occurrence if there are collisions
         model_dirs.setdefault(slug, child)
     return model_dirs
@@ -85,8 +71,21 @@ def _standardise_model_dirs(models_root: Path) -> dict[str, dict[str, Any]]:
     for child in sorted(models_root.iterdir()):
         if not child.is_dir():
             continue
+
         display_name = child.name
-        slug = _slugify_model_id(display_name)
+
+        # Skip and clean up any legacy/duplicate directories created by previous
+        # runs of finalisation. Older versions used both single \"_obsolete\"
+        # and double \"__obsolete\" suffixes, and repeated runs could nest them.
+        if "obsolete" in display_name:
+            try:
+                shutil.rmtree(child)
+            except OSError:
+                # Best-effort cleanup; if removal fails we simply ignore this dir.
+                pass
+            continue
+
+        slug = slugify_model_id(display_name)
         dest = models_root / slug
         # If the directory is already in slug form, keep it as-is.
         if child == dest:
@@ -97,11 +96,13 @@ def _standardise_model_dirs(models_root: Path) -> dict[str, dict[str, Any]]:
                 # drop the duplicate display-name directory.
                 # This situation should be rare and typically only happens
                 # when re-running finalisation.
-                obsolete = child.with_name(f"{display_name}__obsolete")
-                # Ensure any previous "__obsolete" directory is removed so rename won't fail
-                if obsolete.exists():
-                    shutil.rmtree(obsolete)
-                child.rename(obsolete)
+                # We simply remove the duplicate folder instead of keeping
+                # another \"obsolete\" copy to avoid polluting the models dir.
+                try:
+                    shutil.rmtree(child)
+                except OSError:
+                    # Ignore best-effort cleanup failures.
+                    pass
             else:
                 child.rename(dest)
             mapping[slug] = {"path": dest, "display_name": display_name}
@@ -304,6 +305,10 @@ def finalize_run() -> None:
 
     # 3) Write manifest across the entire run directory
     _write_manifest(run_dir)
+
+    # 4) Generate run-level README and per-model model cards **after**
+    #    directory standardisation and metadata/compare artefacts exist.
+    generate_run_readme_and_model_cards()
 
 
 def main() -> None:

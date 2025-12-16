@@ -27,6 +27,15 @@ from intent_classifier.utils.retry import with_retry
 logger = logging.getLogger(__name__)
 
 
+class EmbeddingServiceError(RuntimeError):
+    """Error raised when an external embedding service (e.g. Ollama) is unavailable.
+
+    This is used to signal *recoverable* infrastructure issues (HTTP 4xx/5xx,
+    connection errors, timeouts, etc.) so that higher-level pipelines can
+    decide to **skip** the affected model without failing the entire run.
+    """
+
+
 class EmbeddingGenerator:
     """A class for generating text embeddings using OpenAI's API.
 
@@ -286,16 +295,23 @@ class LitellmOllamaEmbedder:
                 with request.urlopen(req, timeout=600) as resp:
                     body = resp.read().decode("utf-8")
                 data = json.loads(body)
+            except error.HTTPError as exc:
+                # HTTP-level errors (e.g. 404 when /api/embeddings is not available)
+                logger.error("HTTP error calling Ollama embeddings at %s: %s", url, exc)
+                raise EmbeddingServiceError(f"Ollama embeddings HTTP error: {exc}") from exc
             except error.URLError as exc:
+                # Connection issues, DNS failures, refusals, etc.
                 logger.error("Error calling Ollama embeddings at %s: %s", url, exc)
-                raise
+                raise EmbeddingServiceError(f"Ollama embeddings connection error: {exc}") from exc
             except Exception as exc:  # pragma: no cover - defensive
                 logger.error("Unexpected response from Ollama embeddings at %s: %s", url, exc)
-                raise
+                raise EmbeddingServiceError(f"Ollama embeddings unexpected error: {exc}") from exc
 
             if "embedding" not in data:
                 logger.error("Ollama embedding response missing 'embedding' field: %r", data)
-                raise RuntimeError("Invalid Ollama embeddings response (no 'embedding' field)")
+                raise EmbeddingServiceError(
+                    "Invalid Ollama embeddings response (no 'embedding' field)"
+                )
 
             vectors.append(np.asarray(data["embedding"], dtype="float32"))
 

@@ -423,9 +423,13 @@ class BaseEvaluationRunner(ABC):
                     cfg = load_config_with_metadata()["config"]
                     analysis_cfg = cfg.get("analysis", {})
                     threshold_sweep_enabled = bool(analysis_cfg.get("threshold_sweep", False))
+                    label_cooccurrence_enabled = bool(analysis_cfg.get("label_cooccurrence", True))
+                    hardest_examples_enabled = bool(analysis_cfg.get("hardest_examples", True))
                     store_text_enabled = bool(analysis_cfg.get("store_text", False))
                 except Exception:
                     threshold_sweep_enabled = False
+                    label_cooccurrence_enabled = True
+                    hardest_examples_enabled = True
                     store_text_enabled = False
 
                 # Per-bucket metrics (by number of labels)
@@ -474,41 +478,44 @@ class BaseEvaluationRunner(ABC):
                                 output_dir / "multilabel_threshold_sweep.csv", index=False
                             )
 
-                    # Label co-occurrence statistics for the dataset.
-                    cooccurrence_df = compute_label_cooccurrence(predictions_dict)
-                    if not cooccurrence_df.empty:
-                        try:
-                            paths_cfg = cfg.get("paths", {})
-                            dataset_rel = paths_cfg.get("dataset_dir")
-                            if isinstance(dataset_rel, str) and dataset_rel:
-                                dataset_dir = get_repo_root() / dataset_rel
-                                dataset_dir.mkdir(parents=True, exist_ok=True)
-                                try:
-                                    cooccurrence_df.to_parquet(
-                                        dataset_dir / "label_cooccurrence.parquet",
-                                        index=False,
-                                    )
-                                except Exception:
+                    # Label co-occurrence statistics for the dataset (gated by config).
+                    if label_cooccurrence_enabled:
+                        cooccurrence_df = compute_label_cooccurrence(predictions_dict)
+                        if not cooccurrence_df.empty:
+                            try:
+                                paths_cfg = cfg.get("paths", {})
+                                dataset_rel = paths_cfg.get("dataset_dir")
+                                if isinstance(dataset_rel, str) and dataset_rel:
+                                    dataset_dir = get_repo_root() / dataset_rel
+                                    dataset_dir.mkdir(parents=True, exist_ok=True)
+                                    try:
+                                        cooccurrence_df.to_parquet(
+                                            dataset_dir / "label_cooccurrence.parquet",
+                                            index=False,
+                                        )
+                                    except Exception:
+                                        cooccurrence_df.to_csv(
+                                            dataset_dir / "label_cooccurrence.csv",
+                                            index=False,
+                                        )
+                                else:
                                     cooccurrence_df.to_csv(
-                                        dataset_dir / "label_cooccurrence.csv",
-                                        index=False,
+                                        output_dir / "label_cooccurrence.csv", index=False
                                     )
-                            else:
+                            except Exception:
                                 cooccurrence_df.to_csv(
                                     output_dir / "label_cooccurrence.csv", index=False
                                 )
-                        except Exception:
-                            cooccurrence_df.to_csv(
-                                output_dir / "label_cooccurrence.csv", index=False
-                            )
 
-                    # Hardest examples per model (error_analysis/hardest_examples.*).
-                    write_hardest_examples(
-                        predictions_dict=predictions_dict,
-                        artefacts_root=Path(artefacts_root),
-                        eval_root=output_dir,
-                        store_text=store_text_enabled,
-                    )
+                    # Hardest examples per model (error_analysis/hardest_examples.*),
+                    # gated by config and privacy flag.
+                    if hardest_examples_enabled:
+                        write_hardest_examples(
+                            predictions_dict=predictions_dict,
+                            artefacts_root=Path(artefacts_root),
+                            eval_root=output_dir,
+                            store_text=store_text_enabled,
+                        )
 
                     # PR summary curves + JSON (multilabel only, probabilities required).
                     # This is intentionally defensive: if anything fails (missing files,

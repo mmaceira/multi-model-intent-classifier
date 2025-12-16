@@ -22,9 +22,6 @@ from config.notebook_setup import PREDICTIONS_DIR, RESULTS_DIR, config_vars  # n
 # Import dataset and evaluation modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.evaluation import display_detailed_results, run_evaluations  # noqa: E402
-from intent_classifier.evaluation.run_docs import (  # noqa: E402
-    generate_run_readme_and_model_cards,
-)
 from intent_classifier.utils.method_logger import get_logger  # noqa: E402
 from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
@@ -132,17 +129,6 @@ def main():
     except Exception as e:
         print(f"⚠️  Warning: Error generating comparison plots: {e}")
         print("   Evaluation results are still available.")
-
-    # Generate run-level README and per-model model cards
-    try:
-        print("\n" + "=" * 60)
-        print("Generating Run README and Model Cards")
-        print("=" * 60)
-        generate_run_readme_and_model_cards(results)
-        print("✅ Run README and model cards generated successfully")
-    except Exception as e:
-        print(f"⚠️  Warning: Failed to generate run docs: {e}")
-        print("   Evaluation metrics are still available under the compare directory.")
 
     print("\n✅ Evaluation complete!")
     print(f"Results saved to: {RESULTS_DIR}")

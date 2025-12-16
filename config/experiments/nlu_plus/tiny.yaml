@@ -6,7 +6,7 @@
 #   - config/datasets/nlu_plus.yaml
 
 general:
-  run_name: "experiment_multilabel_nlu_tiny"
+  run_alias: "experiment_multilabel_nlu_tiny"
 
 dataset:
   max_train_samples: 100
@@ -14,4 +14,9 @@ dataset:
   max_test_samples: 50
 
 model:
+  # Enable RAG‑LLM experiments using the Ollama provider (qwen2.5:14b by default),
+  # mirroring the CLINC150 tiny config so all RAG‑LLM variants can resolve
+  # `resolved.llm_model` and run end‑to‑end.
+  llm_backend: "ollama"
+
   rag_top_k: 5

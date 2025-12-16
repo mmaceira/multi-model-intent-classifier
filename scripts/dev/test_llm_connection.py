@@ -75,7 +75,9 @@ def normalize_ollama_model(model: str) -> str:
     return model
 
 
-def test_ollama(model: str = "ollama/llama3.1:8b", endpoint: str | None = None) -> tuple[bool, str]:
+def check_ollama(
+    model: str = "ollama/llama3.1:8b", endpoint: str | None = None
+) -> tuple[bool, str]:
     """Test Ollama connection with a simple prompt.
 
     Args:
@@ -120,7 +122,7 @@ def test_ollama(model: str = "ollama/llama3.1:8b", endpoint: str | None = None) 
         return False, f"❌ Ollama connection failed: {e}"
 
 
-def test_openai(model: str = "gpt-4o-mini") -> tuple[bool, str]:
+def check_openai(model: str = "gpt-4o-mini") -> tuple[bool, str]:
     """Test OpenAI connection with a simple prompt.
 
     Args:
@@ -256,13 +258,13 @@ Configuration Priority (highest to lowest):
 
     # Test Ollama
     print("-" * 70)
-    ollama_success, ollama_msg = test_ollama(model=ollama_model, endpoint=ollama_endpoint)
+    ollama_success, ollama_msg = check_ollama(model=ollama_model, endpoint=ollama_endpoint)
     print(ollama_msg)
     print()
 
     # Test OpenAI
     print("-" * 70)
-    openai_result = test_openai(model=args.openai_model)
+    openai_result = check_openai(model=args.openai_model)
     if openai_result[0] is None:
         print(openai_result[1])
     else:

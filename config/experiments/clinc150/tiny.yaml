@@ -6,7 +6,7 @@
 #   - config/datasets/clinc150.yaml
 
 general:
-  run_name: "experiment_tiny_dataset"
+  run_alias: "experiment_tiny_dataset"
 
 dataset:
   max_classes: 10

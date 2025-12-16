@@ -19,9 +19,9 @@ def _build_examples() -> list[rag_llm.Example]:
     ]
 
 
-def _retriever(examples: Iterable[rag_llm.Example] | None = None) -> rag_llm.Retriever:
+def _retriever(examples: Iterable[rag_llm.Example] | None = None) -> rag_llm.TfIdfRetriever:
     """Convenience wrapper that creates a retriever from helper data."""
-    return rag_llm.Retriever(list(examples) if examples else _build_examples())
+    return rag_llm.TfIdfRetriever(list(examples) if examples else _build_examples())
 
 
 def test_retrieval_enforces_min_labels_and_similarity_order():

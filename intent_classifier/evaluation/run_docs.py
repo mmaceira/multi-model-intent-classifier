@@ -22,6 +22,7 @@ import pandas as pd
 from intent_classifier.utils.config_loader import load_config_with_metadata
 from intent_classifier.utils.file_ops import ensure_dir
 from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.slugify import slugify_model_id
 
 
 @dataclass(frozen=True)
@@ -41,24 +42,12 @@ class AlgorithmInfo:
 
 
 def _slugify_model_name(name: str) -> str:
-    """Convert a display model name to a stable, portable model_id.
+    """Backward-compatible wrapper around the shared slugify helper.
 
-    Examples
-    --------
-    >>> _slugify_model_name("TF-IDF bigrams + SVM")
-    'tfidf_bigrams_svm'
-    >>> _slugify_model_name("Embedding + LogReg (Qwen/Ollama)")
-    'embedding_logreg_qwen_ollama'
+    This keeps the public behaviour and doc examples stable while delegating
+    the actual implementation to ``intent_classifier.utils.slugify``.
     """
-    import re
-
-    # Normalise common token TF‑IDF spelling first for nicer slugs.
-    normalised = name.replace("TF-IDF", "TFIDF").replace("tf-idf", "tfidf")
-    slug = normalised.lower()
-    slug = re.sub(r"[\/\\]+", "_", slug)
-    slug = re.sub(r"[^a-z0-9]+", "_", slug)
-    slug = re.sub(r"_+", "_", slug).strip("_")
-    return slug
+    return slugify_model_id(name)
 
 
 # Small, hand-written registry of model families that appear in this project.
@@ -381,19 +370,19 @@ def _build_metrics_table(summary_df: pd.DataFrame, max_models: int = 12) -> str:
 
 
 def generate_run_readme_and_model_cards(
-    results: Mapping[str, Mapping[str, Any]],
+    results: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> None:
     """Generate README and per-model model cards for the current run.
 
     Parameters
     ----------
     results:
-        Mapping from display model name to its scalar metric dictionary as
-        returned by :func:`intent_classifier.evaluation.run_evaluations`.
+        Optional mapping from display model name to its scalar metric
+        dictionary as returned by
+        :func:`intent_classifier.evaluation.run_evaluations`. When omitted
+        (or empty), this function will derive the available models from the
+        on-disk ``compare/summary_metrics.*`` artefacts.
     """
-    if not results:
-        return
-
     config_meta = load_config_with_metadata()
     cfg = config_meta["config"]
     dataset_name = config_meta["dataset_name"]
@@ -444,11 +433,18 @@ def generate_run_readme_and_model_cards(
     multilabel = bool(dataset_stats.get("multilabel", label_type == "multilabel"))
 
     # -------------------------- Metrics summary -------------------------------
-    summary_metrics_path = Path(compare_dir) / "summary_metrics.csv"
     summary_df = pd.DataFrame()
-    if summary_metrics_path.exists():
+    # Prefer CSV but fall back to Parquet if needed.
+    summary_csv = Path(compare_dir) / "summary_metrics.csv"
+    summary_parquet = Path(compare_dir) / "summary_metrics.parquet"
+    if summary_csv.exists():
         try:
-            summary_df = pd.read_csv(summary_metrics_path, index_col=0)
+            summary_df = pd.read_csv(summary_csv, index_col=0)
+        except Exception:
+            summary_df = pd.DataFrame()
+    elif summary_parquet.exists():
+        try:
+            summary_df = pd.read_parquet(summary_parquet)
         except Exception:
             summary_df = pd.DataFrame()
 
@@ -471,6 +467,17 @@ def generate_run_readme_and_model_cards(
 
     # -------------------------- Run README ------------------------------------
     run_template = _load_template("run_readme")
+
+    # If results were not provided, infer a minimal mapping from the summary
+    # metrics index. This keeps the function usable from ``finalize_run``
+    # without re-running evaluation in memory.
+    if not results:
+        inferred: dict[str, dict[str, Any]] = {}
+        if not summary_df.empty:
+            for model_name in summary_df.index:
+                inferred[str(model_name)] = {}
+        results = inferred
+
     models_section = _build_models_section(results)
 
     run_context = _SafeDict(

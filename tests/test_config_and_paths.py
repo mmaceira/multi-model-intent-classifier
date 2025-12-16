@@ -273,6 +273,55 @@ def test_attach_providers_and_resolved_respects_ollama_endpoint_env_override(
     monkeypatch.delenv("OLLAMA_API_BASE", raising=False)
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
 
+
+def test_attach_providers_and_resolved_emits_warnings_for_legacy_keys(caplog, monkeypatch) -> None:
+    """Ensure legacy model.* override keys still work but emit deprecation warnings."""
+    caplog.set_level("WARNING")
+
+    # Legacy embedding override for OpenAI.
+    cfg_openai_legacy: dict[str, object] = {
+        "model": {
+            "embedding_backend": "openai",
+            "openai_model_name": "legacy-embed-model",
+        }
+    }
+    _attach_providers_and_resolved(cfg_openai_legacy)
+    resolved_openai = cfg_openai_legacy.get("resolved", {})
+    assert isinstance(resolved_openai, dict)
+    assert resolved_openai["embedding_model"] == "legacy-embed-model"
+    assert any("model.openai_model_name" in rec.getMessage() for rec in caplog.records)
+
+    caplog.clear()
+
+    # Legacy Ollama embedding override.
+    cfg_ollama_legacy: dict[str, object] = {
+        "model": {
+            "embedding_backend": "ollama",
+            "ollama_embedding_model_name": "legacy-ollama-embed",
+        }
+    }
+    _attach_providers_and_resolved(cfg_ollama_legacy)
+    resolved_ollama = cfg_ollama_legacy.get("resolved", {})
+    assert isinstance(resolved_ollama, dict)
+    assert resolved_ollama["embedding_model"] == "legacy-ollama-embed"
+    assert any("model.ollama_embedding_model_name" in rec.getMessage() for rec in caplog.records)
+
+    caplog.clear()
+
+    # Legacy LLM model override when no backend is specified.
+    cfg_llm_legacy: dict[str, object] = {
+        "model": {
+            "embedding_backend": "sbert",
+            "sbert_model_name": "sentence-transformers/all-MiniLM-L6-v2",
+            "llm_model": "legacy-llm-model",
+        }
+    }
+    _attach_providers_and_resolved(cfg_llm_legacy)
+    resolved_llm = cfg_llm_legacy.get("resolved", {})
+    assert isinstance(resolved_llm, dict)
+    assert resolved_llm["llm_model"] == "legacy-llm-model"
+    assert any("model.llm_model" in rec.getMessage() for rec in caplog.records)
+
     repo_root = get_repo_root()
     providers_path = repo_root / "config" / "base" / "providers.yaml"
     assert providers_path.exists(), "providers.yaml must exist for this test"

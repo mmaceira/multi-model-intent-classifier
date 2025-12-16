@@ -82,6 +82,18 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
             f"min_labels={min_labels}, prompt_style={prompt_style}"
         )
 
+        # Where possible, resolve the active dataset from the experiment config
+        # so that RagLLM can load examples from the correct label space instead
+        # of falling back to CLINC150.
+        dataset_name: str | None = None
+        try:
+            from intent_classifier.utils.config_loader import load_config_with_metadata
+
+            metadata = load_config_with_metadata()
+            dataset_name = metadata.get("dataset_name")
+        except Exception:
+            dataset_name = None
+
         return RagSklearnAdapter(
             load_llm(
                 top_k=top_k,
@@ -90,6 +102,7 @@ def create_rag_model(params: dict[str, Any]) -> RagSklearnAdapter:
                 min_labels=min_labels,
                 prompt_style=prompt_style,
                 backend=backend,
+                dataset_name=dataset_name,
             )
         )
 

@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import json
 
-from intent_classifier.pipeline.finalize import _slugify_model_id, finalize_run
+from intent_classifier.pipeline.finalize import finalize_run
 from intent_classifier.utils.config_loader import load_config_with_metadata
 from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.slugify import slugify_model_id
 
 
 def test_slugify_model_id_basic_cases() -> None:
-    assert _slugify_model_id("TF-IDF bigrams + SVM") == "tf_idf_bigrams_svm"
-    assert _slugify_model_id("MiniLM + LogReg") == "minilm_logreg"
-    assert _slugify_model_id(" already_slugged_id ") == "already_slugged_id"
-    assert _slugify_model_id("$$$") == "model"
+    assert slugify_model_id("TF-IDF bigrams + SVM") == "tfidf_bigrams_svm"
+    assert slugify_model_id("MiniLM + LogReg") == "minilm_logreg"
+    assert slugify_model_id(" already_slugged_id ") == "already_slugged_id"
+    assert slugify_model_id("$$$") == "model"
 
 
 def test_finalize_run_writes_meta_and_manifest(tmp_path, monkeypatch) -> None:

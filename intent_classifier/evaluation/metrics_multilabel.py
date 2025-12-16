@@ -65,19 +65,33 @@ def compute_multilabel_metrics(
         Dictionary of computed metrics with keys like "{split_name}_accuracy",
         "{split_name}_hamming_loss", etc. Returns None if no classes found.
     """
-    # Get all unique classes from both true and predicted labels
-    all_classes = sorted(
-        set(tag for labels in y_true if labels for tag in labels)
-        | set(tag for labels in y_pred if labels for tag in labels)
-    )
+    # Get all unique classes from the dataset labels (ground truth only).
+    #
+    # IMPORTANT: We deliberately build the label space from y_true instead of
+    # union(y_true, y_pred) so that metrics are always computed over the
+    # dataset's label space. Any labels predicted outside this space are
+    # treated as invalid and ignored when binarizing y_pred.
+    all_classes = sorted({tag for labels in y_true if labels for tag in labels})
 
     if not all_classes:
         logger.warning(f"No classes found for {split_name}, skipping metrics")
         return None
 
-    # Convert to binary format for sklearn metrics
-    y_true_binary, _ = binarize_labels(y_true, classes=all_classes)
-    y_pred_binary, _ = binarize_labels(y_pred, classes=all_classes)
+    # Convert to binary format for sklearn metrics.
+    #
+    # When binarizing predictions, ignore any labels that are not in the
+    # dataset's class list instead of creating new columns.
+    valid_class_set = set(all_classes)
+
+    def _filter_to_valid_classes(labels: Sequence[str]) -> list[str]:
+        """Keep only labels that belong to the dataset class space."""
+        return [tag for tag in labels if tag in valid_class_set]
+
+    y_true_filtered = [list(labels) for labels in y_true]
+    y_pred_filtered = [_filter_to_valid_classes(labels) for labels in y_pred]
+
+    y_true_binary, _ = binarize_labels(y_true_filtered, classes=all_classes)
+    y_pred_binary, _ = binarize_labels(y_pred_filtered, classes=all_classes)
 
     if y_true_binary.size == 0 or y_pred_binary.size == 0:
         logger.warning(f"Empty binary arrays for {split_name}, skipping metrics")

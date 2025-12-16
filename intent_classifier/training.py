@@ -11,6 +11,7 @@ from typing import Any
 import cloudpickle
 from sklearn.base import clone as safe_clone
 
+from intent_classifier.utils.embeddings import EmbeddingServiceError
 from intent_classifier.utils.file_ops import ensure_dir, sanitize_model_name
 from intent_classifier.utils.method_logger import get_logger
 
@@ -194,10 +195,26 @@ def run_training(
                 with open(model_dir / "model.pkl", "wb") as f:
                     cloudpickle.dump(estimator, f)
 
+        except EmbeddingServiceError as e:
+            # Recoverable path: external embedding backend (e.g. Ollama) is unavailable.
+            # We log and **skip** this model while continuing with the rest.
+            if verbose:
+                print(
+                    f"\n⚠️  Skipping algorithm '{name}' due to embedding backend error: {e}",
+                    flush=True,
+                )
+                print(
+                    f"   Progress: {idx - 1}/{total_models} algorithms completed before skip\n",
+                    flush=True,
+                )
+            continue
         except Exception as e:
             if verbose:
                 print(f"\n❌ Error training algorithm '{name}': {e}", flush=True)
-                print(f"   Progress: {idx - 1}/{total_models} algorithms completed before error\n")
+                print(
+                    f"   Progress: {idx - 1}/{total_models} algorithms completed before error\n",
+                    flush=True,
+                )
             raise
 
     # Save all training times to a single file

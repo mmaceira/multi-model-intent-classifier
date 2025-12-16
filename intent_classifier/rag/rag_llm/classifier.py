@@ -715,15 +715,41 @@ def _load_examples(
     dataset_name: str | None = None,
     use_oos: bool = False,
 ) -> tuple[list[Example], dict[str, str]]:
-    """Load training data via existing dataset loader."""
-    from intent_classifier.datasets.dataset import get_dataset
+    """Load training data via existing dataset loader.
 
-    # Discover dataset name and multilabel setting if not provided
+    The dataset to use is primarily determined from the active experiment
+    configuration (via ``load_config_with_metadata``). This avoids any
+    hard-coded fallback to CLINC150 when running experiments on other
+    datasets such as ``tandem_go`` or ``multilabel_csv``.
+    """
+    from intent_classifier.datasets.dataset import get_dataset
+    from intent_classifier.utils.config_loader import (
+        load_config_with_metadata,
+    )
+
+    # Discover dataset name and multilabel setting if not provided.
     multilabel = False
+
+    if dataset_name is None:
+        try:
+            metadata = load_config_with_metadata()
+            dataset_name = metadata.get("dataset_name") or dataset_name
+            label_type = metadata.get("label_type")
+            multilabel = label_type == "multilabel"
+
+            # If the loaded config has an explicit dataset block, honour its
+            # multilabel flag for maximum consistency.
+            cfg = metadata.get("config") or {}
+            dataset_cfg = cfg.get("dataset", {}) or {}
+            if "multilabel" in dataset_cfg:
+                multilabel = bool(dataset_cfg.get("multilabel"))
+        except Exception:
+            # Best-effort only; fall back to environment-based discovery below.
+            pass
+
     if dataset_name is None:
         import os
 
-        # Try to get from config file
         config_file = os.environ.get("CONFIG_FILE")
         if config_file:
             try:
@@ -731,35 +757,26 @@ def _load_examples(
 
                 config = load_config(config_file, apply_variable_substitution=False)
                 dataset_name = config.get("dataset", {}).get("name")
-                multilabel = config.get("dataset", {}).get("multilabel", False)
+                if "multilabel" in config.get("dataset", {}) or {}:
+                    multilabel = bool(config.get("dataset", {}).get("multilabel", False))
             except Exception:
                 pass
 
-        # Fallback: discover first available dataset
-        if dataset_name is None:
+    if dataset_name is None:
+        # Fallback: discover first available dataset from config/experiments.
+        try:
             from intent_classifier.utils.config_loader import get_first_available_dataset
 
             dataset_name = get_first_available_dataset()
+        except Exception:
+            dataset_name = None
 
-        # Final fallback
-        if dataset_name is None:
-            dataset_name = "clinc150"  # For backward compatibility
-    else:
-        # If dataset_name is provided, try to get multilabel from config
-        import os
-
-        config_file = os.environ.get("CONFIG_FILE")
-        if config_file:
-            try:
-                from intent_classifier.utils.config_loader import load_config
-
-                config = load_config(config_file, apply_variable_substitution=False)
-                multilabel = config.get("dataset", {}).get("multilabel", False)
-            except Exception:
-                pass
+    # Final, very defensive fallback – only used when no config is active.
+    if dataset_name is None:
+        dataset_name = "clinc150"
 
     X_train, y_train, *_rest = get_dataset(
-        dataset_name=dataset_name or "clinc150",
+        dataset_name=dataset_name,
         use_oos=use_oos,
         max_train_samples=max_train_samples,
         max_classes=max_classes,

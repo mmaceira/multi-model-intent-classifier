@@ -115,6 +115,8 @@ max-complexity = 15
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+norecursedirs = [".venv", "venv", "node_modules", "scripts/dev"]
 markers = [
   "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]

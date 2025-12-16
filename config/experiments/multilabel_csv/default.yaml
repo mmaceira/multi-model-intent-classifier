@@ -6,4 +6,4 @@
 #   - config/datasets/multilabel_csv.yaml
 #
 general:
-  run_name: "experiment_multilabel_csv"
+  run_alias: "experiment_multilabel_csv"

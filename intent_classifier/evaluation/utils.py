@@ -136,7 +136,8 @@ def consistently_misclassified(pred_dfs: dict[str, dict[str, pd.DataFrame]], min
         return pd.DataFrame()
 
     # Fill NaN values and convert to bool, avoiding pandas deprecation warning
-    combined = combined.fillna(False)
+    # Use infer_objects to avoid FutureWarning about downcasting
+    combined = combined.infer_objects(copy=False).fillna(False)
     # Convert object columns to bool explicitly to avoid FutureWarning
     for col in combined.columns:
         if col not in ["id", "text", "y_true", "y_pred"]:

@@ -404,8 +404,24 @@ def _attach_providers_and_resolved(config: dict[str, Any]) -> None:
 
     if embedding_backend == "openai":
         embedding_model = providers.get("openai", {}).get("embed_default")
+        # Legacy override support: model.openai_model_name
+        legacy_openai = model_cfg.get("openai_model_name")
+        if legacy_openai:
+            logger.warning(
+                "Deprecated config key 'model.openai_model_name' detected – please use "
+                "providers.openai.embed_default and/or resolved.embedding_model instead."
+            )
+            embedding_model = str(legacy_openai)
     elif embedding_backend == "ollama":
         embedding_model = providers.get("ollama", {}).get("embed_default")
+        # Legacy override support: model.ollama_embedding_model_name
+        legacy_ollama_embed = model_cfg.get("ollama_embedding_model_name")
+        if legacy_ollama_embed:
+            logger.warning(
+                "Deprecated config key 'model.ollama_embedding_model_name' detected – please use "
+                "providers.ollama.embed_default and/or resolved.embedding_model instead."
+            )
+            embedding_model = str(legacy_ollama_embed)
     else:  # sbert / local
         embedding_model = model_cfg.get("sbert_model_name")
 
@@ -420,6 +436,16 @@ def _attach_providers_and_resolved(config: dict[str, Any]) -> None:
         llm_model = providers.get("openai", {}).get("llm_default")
     elif llm_backend == "ollama":
         llm_model = providers.get("ollama", {}).get("llm_default")
+    else:
+        # Backwards compatibility: honour explicit model.llm_model overrides,
+        # but emit a warning recommending model.llm_backend + providers.*
+        legacy_llm = model_cfg.get("llm_model")
+        if legacy_llm:
+            logger.warning(
+                "Deprecated config key 'model.llm_model' detected – please switch to "
+                "model.llm_backend + providers.* / resolved.llm_model instead."
+            )
+            llm_model = str(legacy_llm)
 
     # Effective Ollama endpoint
     ollama_endpoint = providers.get("ollama", {}).get("endpoint")

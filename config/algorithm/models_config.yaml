@@ -52,10 +52,12 @@ models:
     name: "Embedding + LogReg (Qwen/Ollama)"
     class: "EmbeddingLogReg"
     params:
-      # Force Ollama/Qwen embeddings via litellm + Ollama regardless of global default
+      # Force Ollama/Qwen embeddings via litellm + Ollama, independent of the
+      # global embedding backend. This ensures both training and evaluation use
+      # the same Ollama/Qwen embedding model.
       backend: "ollama"
-      # Use the dedicated Ollama embedding model from the main config
-      model: "${model.ollama_embedding_model_name}"
+      # Explicit Qwen embedding model served via Ollama.
+      model: "ollama/qwen3-embedding:latest"
 
   # RAG-based models
   rag_kmajority:
