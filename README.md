@@ -199,12 +199,12 @@ curl http://localhost:8000/ready
 curl http://localhost:8000/v1/models
 
 # Get model details
-curl http://localhost:8000/v1/models/Linear%20SVM
+curl http://localhost:8000/v1/models/linear_svm
 
 # Make a prediction
 curl -X POST http://localhost:8000/v1/predict \
   -H "Content-Type: application/json" \
-  -d '{"model_id": "Linear SVM", "text": "what is my account balance?"}'
+  -d '{"model_id": "linear_svm", "text": "what is my account balance?"}'
 
 # Interactive API documentation
 # Open in browser: http://localhost:8000/docs

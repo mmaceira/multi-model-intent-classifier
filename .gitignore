@@ -115,11 +115,10 @@ config/dataset/*
 !config/dataset/clinc150/
 !config/dataset/clinc150/**
 # Exclude private datasets from new structure (config/datasets/)
-config/datasets/tandem_go/
-config/datasets/tandem_go/**
-# Exclude private experiment configs
-config/experiments/tandem_go/
-config/experiments/tandem_go/**
+config/datasets/*
+!config/datasets/nlu_plus.yaml
+!config/datasets/clinc150.yaml
+
 *.csv
 !tests/**/*.csv
 *.png
