@@ -125,7 +125,12 @@ def main():
 
     # Display results in the specified order
     try:
-        display_detailed_results(results, model_order=model_order, output_dir=RESULTS_DIR)
+        display_detailed_results(
+            results,
+            model_order=model_order,
+            output_dir=RESULTS_DIR,
+            predictions_dir=PREDICTIONS_DIR,  # Pass predictions dir for timing data
+        )
         print("✅ Comparison plots generated successfully")
     except Exception as e:
         print(f"⚠️  Warning: Error generating comparison plots: {e}")

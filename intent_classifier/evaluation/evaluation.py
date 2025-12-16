@@ -304,8 +304,21 @@ def display_detailed_results(
     results: dict[str, dict[str, Any]],
     model_order: list[str] | None = None,
     output_dir: str | Path = "results",
+    predictions_dir: str | Path | None = None,
 ) -> None:
-    """Convenience helper to pretty‑print and persist the key result tables."""
+    """Convenience helper to pretty‑print and persist the key result tables.
+
+    Parameters
+    ----------
+    results : dict[str, dict[str, Any]]
+        Dictionary mapping model names to their metrics
+    model_order : list[str] | None
+        Optional order for models in tables
+    output_dir : str | Path
+        Directory to save output files
+    predictions_dir : str | Path | None
+        Directory containing prediction files (for timing data). If None, will try to infer.
+    """
     output_dir = ensure_dir(output_dir)
 
     # Test‑set metrics -----------------------------------------------------------
@@ -369,3 +382,18 @@ def display_detailed_results(
             )
             print("\n" + guide)
             (output_dir / "interpretation_guide.txt").write_text(guide)
+
+    # Metrics vs time plots -----------------------------------------------------
+    if predictions_dir is not None:
+        from intent_classifier.evaluation.visualization import plot_metrics_vs_time
+
+        try:
+            plot_metrics_vs_time(
+                results=results,
+                predictions_dir=Path(predictions_dir),
+                output_dir=output_dir,
+                model_order=model_order,
+            )
+        except Exception as e:
+            logger = setup_logging(True)
+            logger.warning(f"Could not generate metrics vs time plots: {e}")

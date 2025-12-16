@@ -6,6 +6,7 @@ for text classification models.
 """
 
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -339,6 +340,223 @@ def plot_confusion_matrix(
                     output_dir / f"{model_name}_{split_name}_confusion_matrix_normalized.png"
                 )
                 plt.close()
+
+
+def load_prediction_times(predictions_dir: Path) -> dict[str, float]:
+    """Load prediction times from prediction_times.txt file.
+
+    Parameters
+    ----------
+    predictions_dir : Path
+        Directory containing prediction_times.txt
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary mapping model names to prediction times in seconds
+    """
+    prediction_times = {}
+    times_file = predictions_dir / "prediction_times.txt"
+
+    if times_file.exists():
+        with open(times_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    model_name = parts[0].strip()
+                    try:
+                        # Extract time value (format: "X.XX seconds")
+                        time_str = parts[1].strip().split()[0]
+                        time_seconds = float(time_str)
+                        prediction_times[model_name] = time_seconds
+                    except (ValueError, IndexError):
+                        continue
+
+    return prediction_times
+
+
+def plot_metrics_vs_time(
+    results: dict[str, dict[str, Any]],
+    predictions_dir: Path,
+    output_dir: Path,
+    model_order: list[str] | None = None,
+) -> None:
+    """Plot accuracy and other metrics vs prediction time.
+
+    Parameters
+    ----------
+    results : dict[str, dict[str, Any]]
+        Dictionary mapping model names to their metrics
+    predictions_dir : Path
+        Directory containing prediction times
+    output_dir : Path
+        Directory to save plots
+    model_order : list[str] | None
+        Optional order for models
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load prediction times
+    prediction_times = load_prediction_times(predictions_dir)
+
+    if not prediction_times:
+        print("⚠️  Warning: No prediction times found. Skipping metrics vs time plots.")
+        return
+
+    # Get test set sizes to calculate per-sample times
+    # Try to load from prediction files if available
+    test_sizes = {}
+    from .utils import load_all_prediction_files
+
+    try:
+        predictions_dict = load_all_prediction_files(predictions_dir)
+        for model_name in results.keys():
+            if model_name in predictions_dict and "test" in predictions_dict[model_name]:
+                test_sizes[model_name] = len(predictions_dict[model_name]["test"])
+    except Exception:
+        pass  # Will use fallback below
+
+    # Fallback: try to get from metrics or use default
+    for model_name, metrics in results.items():
+        if model_name not in test_sizes:
+            if "test_n_samples" in metrics:
+                test_sizes[model_name] = metrics["test_n_samples"]
+            elif "n_samples" in metrics:
+                test_sizes[model_name] = metrics["n_samples"]
+            else:
+                # Default to 1 if we can't determine (will show total time)
+                test_sizes[model_name] = 1
+
+    # Build data for plotting
+    plot_data = []
+    for model_name, metrics in results.items():
+        if model_name not in prediction_times:
+            continue
+
+        total_time = prediction_times[model_name]
+        n_samples = test_sizes.get(model_name, 1)
+        time_per_sample_ms = (total_time / n_samples) * 1000 if n_samples > 0 else 0.0
+
+        # Extract test metrics
+        test_accuracy = metrics.get("test_accuracy", None)
+        test_macro_f1 = metrics.get("test_macro_f1", None)
+        test_weighted_f1 = metrics.get("test_weighted_f1", None)
+        test_micro_f1 = metrics.get("test_micro_f1", None)
+
+        if test_accuracy is not None:
+            plot_data.append(
+                {
+                    "Model": model_name,
+                    "Time per Sample (ms)": time_per_sample_ms,
+                    "Total Time (s)": total_time,
+                    "Accuracy": test_accuracy,
+                    "Macro F1": test_macro_f1,
+                    "Weighted F1": test_weighted_f1,
+                    "Micro F1": test_micro_f1,
+                }
+            )
+
+    if not plot_data:
+        print("⚠️  Warning: No data available for metrics vs time plots.")
+        return
+
+    df = pd.DataFrame(plot_data)
+
+    # Apply model order if provided
+    if model_order:
+        df["Model"] = pd.Categorical(
+            df["Model"],
+            categories=[m for m in model_order if m in df["Model"].values],
+            ordered=True,
+        )
+        df = df.sort_values("Model")
+
+    # Create plots for each metric
+    metrics_to_plot = [
+        ("Accuracy", "Accuracy"),
+        ("Macro F1", "Macro F1"),
+        ("Weighted F1", "Weighted F1"),
+        ("Micro F1", "Micro F1"),
+    ]
+
+    # Individual plots
+    for metric_key, metric_label in metrics_to_plot:
+        if metric_key not in df.columns or df[metric_key].isna().all():
+            continue
+
+        plt.figure(figsize=(12, 8))
+        scatter = plt.scatter(
+            df["Time per Sample (ms)"],
+            df[metric_key],
+            s=150,
+            alpha=0.7,
+            c=range(len(df)),
+            cmap="viridis",
+        )
+
+        # Add labels
+        for _, row in df.iterrows():
+            plt.annotate(
+                row["Model"],
+                (row["Time per Sample (ms)"], row[metric_key]),
+                xytext=(5, 5),
+                textcoords="offset points",
+                fontsize=9,
+                alpha=0.8,
+            )
+
+        plt.xlabel("Time per Sample (ms)", fontsize=12)
+        plt.ylabel(metric_label, fontsize=12)
+        plt.title(f"{metric_label} vs Prediction Time", fontsize=14)
+        plt.grid(True, alpha=0.3)
+        plt.colorbar(scatter, label="Model Index")
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / f"metrics_vs_time_{metric_key.lower().replace(' ', '_')}.png", dpi=300
+        )
+        plt.close()
+
+    # Combined plot with all metrics
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    axes = axes.flatten()
+
+    for idx, (metric_key, metric_label) in enumerate(metrics_to_plot):
+        if idx >= len(axes) or metric_key not in df.columns or df[metric_key].isna().all():
+            continue
+
+        ax = axes[idx]
+        ax.scatter(
+            df["Time per Sample (ms)"],
+            df[metric_key],
+            s=150,
+            alpha=0.7,
+        )
+
+        # Add labels
+        for _, row in df.iterrows():
+            ax.annotate(
+                row["Model"],
+                (row["Time per Sample (ms)"], row[metric_key]),
+                xytext=(5, 5),
+                textcoords="offset points",
+                fontsize=8,
+                alpha=0.8,
+            )
+
+        ax.set_xlabel("Time per Sample (ms)", fontsize=10)
+        ax.set_ylabel(metric_label, fontsize=10)
+        ax.set_title(f"{metric_label} vs Time", fontsize=11)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "metrics_vs_time_combined.png", dpi=300)
+    plt.close()
+
+    # Save data to CSV
+    df.to_csv(output_dir / "metrics_vs_time_data.csv", index=False)
+    print(f"✅ Metrics vs time plots saved to {output_dir}")
 
 
 def plot_model_comparisons(
