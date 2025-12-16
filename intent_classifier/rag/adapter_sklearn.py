@@ -40,26 +40,31 @@ Example Usage:
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 from intent_classifier.utils.method_logger import log_method
+from intent_classifier.utils.model_registry import register_model
 
 logger = logging.getLogger(__name__)
 
 
+@register_model("RagSklearnAdapter")
 class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
-    def __init__(self, rag_clf, **_):
+    """Adapter to make RAG classifiers compatible with sklearn interface."""
+
+    def __init__(self, rag_clf: Any, **_: Any) -> None:
         self.rag = rag_clf
         self.rag_clf = rag_clf  # Add this for compatibility with clone()
 
-    @log_method
-    def fit(self, X, y=None):
+    @log_method()
+    def fit(self, X: Any, y: Any = None) -> "RagSklearnAdapter":
         return self
 
-    @log_method
-    def predict(self, X):
+    @log_method()
+    def predict(self, X: Any) -> Any:
         if isinstance(X, list):
             return self.rag.predict(X)
         elif isinstance(X, np.ndarray):
@@ -67,8 +72,8 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         else:
             raise ValueError(f"Input must be a list or numpy array, got {type(X)}")
 
-    @log_method
-    def predict_proba(self, X):
+    @log_method()
+    def predict_proba(self, X: Any) -> np.ndarray:
         """Generate probability estimates for each class.
 
         This method delegates to the underlying RAG model's predict_proba method
@@ -108,7 +113,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         else:
             raise AttributeError("The underlying RAG model does not implement predict_proba")
 
-    def get_params(self, deep=True):
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         This is required for proper cloning.
@@ -130,25 +135,17 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         try:
             from pathlib import Path
 
-            # Try to get predictions_dir from config
-            predictions_dir = config.get("paths", {}).get("predictions_dir")
-            if predictions_dir:
-                # Resolve template variables if present
-                if "${" in str(predictions_dir):
-                    # Try to get resolved config_vars
-                    try:
-                        from config.notebook_setup import config_vars
+            paths_cfg = config.get("paths", {}) or {}
 
-                        predictions_dir = config_vars.get("PATHS_PREDICTIONS_DIR")
-                        if predictions_dir:
-                            log_dir = Path(predictions_dir) / "rag_llm_logs"
-                            return log_dir
-                    except Exception:
-                        pass
-                else:
-                    # Create a subdirectory for LLM logs
-                    log_dir = Path(predictions_dir) / "rag_llm_logs"
-                    return log_dir
+            # Prefer the dedicated llm_logs_dir from the new path schema.
+            llm_logs_dir = paths_cfg.get("llm_logs_dir")
+            if llm_logs_dir:
+                return Path(llm_logs_dir)
+
+            # Fallback: derive from eval_dir if present.
+            eval_dir = paths_cfg.get("eval_dir")
+            if eval_dir:
+                return Path(eval_dir) / "rag_llm_logs"
         except Exception:
             pass
         return None
@@ -157,26 +154,17 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
     def _get_config():
         """Get configuration from standard locations.
 
-        This helper method tries to load the project configuration from standard
-        locations, falling back to empty dict if not found.
+        This helper method delegates to the centralized layered config loader and
+        returns the merged configuration dictionary for the current run.
 
         Returns:
             dict: Configuration dictionary
         """
         try:
-            from pathlib import Path
+            from intent_classifier.utils.config_loader import load_config_with_metadata
 
-            import yaml
-
-            # Try to find repo root
-            current_file = Path(__file__).resolve()
-            for parent in [current_file.parent.parent.parent, current_file.parent.parent]:
-                config_path = parent / "config" / "config.yaml"
-                if config_path.exists():
-                    with open(config_path, "r") as f:
-                        return yaml.safe_load(f)
-
-            return {}
+            metadata = load_config_with_metadata()
+            return metadata["config"]
         except Exception:
             # In case of any errors, return empty dict
             return {}
@@ -218,7 +206,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
         self.rag_clf = None
 
         # Only attempt reinitialization if we have a rag_type
-        if "rag_type" in state and state["rag_type"]:
+        if state.get("rag_type"):
             # Import here to avoid circular imports
             from intent_classifier.rag import load_centroid, load_kmajority, load_llm
 
@@ -250,19 +238,28 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
             elif rag_type == "CentroidNN":
                 self.rag = load_centroid(use_openai=use_openai)
             elif rag_type == "RagLLM":
-                # Get LLM model from state or config, with fallback
-                llm_model = state.get("llm_model")
+                # Strictly use the LLM model from the active run config.
+                # We ignore any value saved in the pickle and do not fall back
+                # to local defaults – this keeps behaviour tied to the config
+                # you pass (DATASET/VARIANT/CONFIG_FILE).
+                resolved_cfg = config.get("resolved", {}) or {}
+                llm_model = resolved_cfg.get("llm_model")
                 if not llm_model:
-                    # Try to get from config
-                    llm_model = config.get("model", {}).get("llm_model", "ollama/llama3.1:8b")
-                    logger.warning(
-                        f"LLM model not found in saved state, using from config: {llm_model}"
+                    raise RuntimeError(
+                        "RagLLM restore failed: 'resolved.llm_model' is not set in the "
+                        "active configuration. Please ensure your experiment config "
+                        "specifies model.llm_backend and that providers.yaml defines "
+                        "the corresponding default model."
                     )
-                else:
-                    logger.info(f"Restoring LLM model from saved state: {llm_model}")
+
+                logger.info(f"Using LLM model from active config: {llm_model}")
 
                 # Get min_labels from state (new parameter in new implementation)
                 min_labels = state.get("min_labels", 4)
+                # Get prompt_style from state or config
+                prompt_style = state.get("prompt_style") or config.get("model", {}).get(
+                    "prompt_style", "default"
+                )
 
                 # New implementation uses TF-IDF retrieval, no embedder needed
                 # The use_openai parameter is kept for compatibility but not used
@@ -271,6 +268,7 @@ class RagSklearnAdapter(BaseEstimator, ClassifierMixin):
                     model=llm_model,
                     use_openai=use_openai,  # Kept for compatibility, but new impl doesn't use it
                     min_labels=min_labels,
+                    prompt_style=prompt_style,
                 )
 
             # Update rag_clf for consistency

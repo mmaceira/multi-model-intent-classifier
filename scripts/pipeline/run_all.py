@@ -5,6 +5,9 @@ Run All Pipeline Scripts
 This script runs all pipeline scripts in sequence. It's a convenience script
 for executing the complete training pipeline from start to finish.
 
+This script uses the PipelineOrchestrator to call pipeline steps as
+Python functions, making it easier to test, debug, and reuse.
+
 Supports:
 - CONFIG_FILE environment variable to override default config
 - --tune flag to run hyperparameter tuning before training
@@ -13,12 +16,10 @@ Supports:
 
 import argparse
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 # Set deterministic seed before any imports
-from intent_classifier.utils.seed import set_global_seed
 from intent_classifier.utils.warnings_config import suppress_pydantic_warnings
 
 # Suppress verbose Pydantic warnings globally
@@ -28,41 +29,12 @@ suppress_pydantic_warnings()
 script_dir = Path(__file__).resolve().parent
 repo_root = script_dir.parent.parent
 
-# Define the scripts in order
-scripts = [
-    "00_data_loading.py",
-    "01_exploratory_analysis.py",
-    "02_build_embeddings.py",
-    "03_model_training.py",
-    "04_model_prediction.py",
-    "05_model_evaluation.py",
-]
-
 
 def load_config() -> dict:
-    """Load configuration from YAML file."""
-    import yaml
+    """Load configuration from the active layered experiment config."""
+    from intent_classifier.utils.config_loader import load_config as load_config_centralized
 
-    config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-    config_path = repo_root / "config" / config_file
-
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path) as f:
-        return yaml.safe_load(f)
-
-
-def run_hyperparameter_tuning(config: dict) -> dict:
-    """Run hyperparameter tuning and return best parameters."""
-    try:
-        from intent_classifier.hparam.tune import run_tuning
-
-        return run_tuning(config)
-    except ImportError:
-        print("⚠️  Warning: Hyperparameter tuning module not available")
-        print("   Install with: pip install -e '.[tune]'")
-        return {}
+    return load_config_centralized()
 
 
 def save_model(model_path: str):
@@ -70,8 +42,14 @@ def save_model(model_path: str):
     # This is a placeholder - actual model saving happens in 03_model_training.py
     # We'll copy the model from the default location to the specified path
 
-    config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-    config_name = Path(config_file).stem
+    config_file = os.environ.get("CONFIG_FILE")
+    if config_file:
+        from intent_classifier.utils.config_loader import parse_config_path
+
+        _, config_name = parse_config_path(config_file)
+    else:
+        # Fallback if no CONFIG_FILE is set
+        config_name = "default"
 
     # Find the most recent model (this is a simplified approach)
     # In practice, the model should be saved during training
@@ -96,12 +74,12 @@ def main():
             "  # Run with default config\n"
             "  python scripts/pipeline/run_all.py\n\n"
             "  # Run with custom config\n"
-            "  CONFIG_FILE=config/config_tiny_dataset.yaml "
+            "  CONFIG_FILE=config/experiments/clinc150/tiny.yaml "
             "python scripts/pipeline/run_all.py\n\n"
             "  # Run with hyperparameter tuning\n"
             "  python scripts/pipeline/run_all.py --tune\n\n"
             "  # Run with tuning and save model\n"
-            "  CONFIG_FILE=config/config_tiny_dataset.yaml "
+            "  CONFIG_FILE=config/experiments/clinc150/tiny.yaml "
             "python scripts/pipeline/run_all.py --tune "
             "--save-model artifacts/model.pkl\n"
         ),
@@ -120,78 +98,28 @@ def main():
 
     args = parser.parse_args()
 
-    # Load config to get seed
+    # Load config
     try:
         config = load_config()
-        seed = config.get("general", {}).get("seed", 42)
     except Exception as e:
         print(f"⚠️  Warning: Could not load config: {e}")
-        print("   Using default seed: 42")
-        seed = 42
+        config = {}
 
-    # Set deterministic seed
-    set_global_seed(seed)
+    # Create orchestrator and run pipeline
+    from intent_classifier.pipeline.orchestrator import PipelineOrchestrator
 
-    print("=" * 60)
-    print("Running Complete Training Pipeline")
-    print("=" * 60)
-    print(f"Config: {os.environ.get('CONFIG_FILE', 'config.yaml')}")
-    print(f"Seed: {seed}")
-    print()
+    orchestrator = PipelineOrchestrator(repo_root=repo_root)
+    success = orchestrator.run_all(skip_tuning=not args.tune, config=config)
 
-    # Step 1: Hyperparameter tuning (if requested)
-    if args.tune:
-        print("\n" + "=" * 60)
-        print("Step 0: Hyperparameter Tuning")
-        print("=" * 60)
-        try:
-            best_params = run_hyperparameter_tuning(config)
-            if best_params:
-                print(f"\n✅ Tuning complete. Best parameters for {len(best_params)} model(s)")
-            else:
-                print("\n⚠️  No hyperparameters returned from tuning")
-        except Exception as e:
-            print(f"\n❌ Hyperparameter tuning failed: {e}")
-            print("   Continuing with default hyperparameters...")
-            import traceback
-
-            traceback.print_exc()
-
-    # Step 2: Run pipeline scripts
-    for i, script_name in enumerate(scripts, 1):
-        script_path = script_dir / script_name
-
-        if not script_path.exists():
-            print(f"❌ Error: Script not found: {script_path}")
-            sys.exit(1)
-
-        print(f"\n[{i}/{len(scripts)}] Running {script_name}...")
-        print("-" * 60)
-
-        try:
-            subprocess.run(
-                [sys.executable, str(script_path)],
-                check=True,
-                cwd=repo_root,  # Run from repo root
-            )
-            print(f"✅ {script_name} completed successfully")
-        except subprocess.CalledProcessError as e:
-            print(f"❌ {script_name} failed with exit code {e.returncode}")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            print(f"\n⚠️  Pipeline interrupted by user at {script_name}")
-            sys.exit(1)
-
-    # Step 3: Save model if requested
-    if args.save_model:
+    # Save model if requested
+    if args.save_model and success:
         print("\n" + "=" * 60)
         print("Saving Model")
         print("=" * 60)
         save_model(args.save_model)
 
-    print("\n" + "=" * 60)
-    print("✅ All pipeline scripts completed successfully!")
-    print("=" * 60)
+    if not success:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

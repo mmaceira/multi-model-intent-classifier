@@ -3,13 +3,17 @@
 import logging
 import os
 import warnings
+from collections.abc import Callable
+from typing import Any, cast
 
 # Suppress Pydantic warnings at the module level before any imports
 # This must be done before pydantic is imported
 os.environ.setdefault("PYDANTIC_WARNINGS", "none")
 
+_ORIG_HANDLER: Callable[..., Any] | None = None
 
-def suppress_pydantic_warnings():
+
+def suppress_pydantic_warnings() -> None:
     """Suppress verbose Pydantic serialization warnings.
 
     These warnings are not serious - they occur when Pydantic deserializes
@@ -19,11 +23,18 @@ def suppress_pydantic_warnings():
     The warnings come from litellm/openai client libraries when they deserialize
     API responses. We suppress them at multiple levels to ensure they're caught.
     """
-    # Store original warning handler if not already stored
-    if not hasattr(suppress_pydantic_warnings, "_original_handler"):
-        suppress_pydantic_warnings._original_handler = warnings.showwarning
+    global _ORIG_HANDLER
+    if _ORIG_HANDLER is None:
+        _ORIG_HANDLER = warnings.showwarning
 
-    def _filtered_showwarning(message, category, filename, lineno, file=None, line=None):
+    def _filtered_showwarning(
+        message: Any,
+        category: type[Warning],
+        filename: str,
+        lineno: int,
+        file: Any = None,
+        line: Any = None,
+    ) -> None:
         """Custom warning handler that filters out Pydantic serialization warnings."""
         # Check if this is a Pydantic warning we want to suppress
         if issubclass(category, UserWarning):
@@ -40,9 +51,11 @@ def suppress_pydantic_warnings():
                 return  # Suppress this warning
 
         # For all other warnings, use the original handler
-        suppress_pydantic_warnings._original_handler(
-            message, category, filename, lineno, file, line
+        original_handler = cast(
+            Callable[..., Any],
+            _ORIG_HANDLER if _ORIG_HANDLER is not None else warnings.showwarning,
         )
+        original_handler(message, category, filename, lineno, file, line)
 
     # Install our custom warning handler
     warnings.showwarning = _filtered_showwarning
@@ -59,7 +72,7 @@ def suppress_pydantic_warnings():
     os.environ["PYDANTIC_WARNINGS"] = "none"
 
 
-def configure_logging(level: str = "INFO", suppress_warnings: bool = True):
+def configure_logging(level: str = "INFO", suppress_warnings: bool = True) -> None:
     """Configure logging with sensible defaults.
 
     Args:

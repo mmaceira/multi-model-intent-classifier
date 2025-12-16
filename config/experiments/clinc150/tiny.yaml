@@ -1,0 +1,24 @@
+# Experiment config: CLINC150 tiny subset (quick smoke tests).
+#
+# Relies on:
+#   - config/base/defaults.yaml
+#   - config/base/providers.yaml
+#   - config/datasets/clinc150.yaml
+
+general:
+  run_alias: "experiment_tiny_dataset"
+
+dataset:
+  max_classes: 10
+  max_train_samples: 100
+  max_test_samples: 50
+
+model:
+  # Enable RAG‑LLM experiments using the Ollama provider (qwen2.5:14b by default).
+  # This activates:
+  # - RAG-LLM (TF-IDF, default/short/n8n prompts)
+  # - RAG-LLM (SBERT embeddings, default prompt)
+  # - RAG-LLM (Qwen embeddings, default prompt)
+  llm_backend: "ollama"
+
+  rag_top_k: 5

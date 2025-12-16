@@ -1,67 +1,36 @@
 # Installation
 
-## Prerequisites
+## Overview
 
-- Python 3.12 or higher
-- [uv](https://github.com/astral-sh/uv) package manager (recommended, but optional)
-- Internet connection (for initial dataset download from HuggingFace)
+Install dependencies using `uv`.
 
-## Installation
-
+## Quickstart
 ```bash
-# 1. Clone the repository
-git clone https://github.com/mmaceira/multi-model-intent-classifier.git
-cd multi-model-intent-classifier
-
-# 2. Install uv if you haven't already (recommended)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# Or on Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# 3. Install dependencies (uv will automatically create a virtual environment)
+# Install all dependencies
 uv sync --extra all
 
-# --- or install with plain pip ---
-python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e ".[all]"
+# Verify installation
+uv run pytest tests/test_dataset_clinc150.py -q
 ```
 
 ## Optional Dependencies
 
-The project has several optional dependency groups for different features:
-
-| Extra | Includes | Install Command |
-|-------|----------|----------------|
-| **all** | Everything (recommended) | `uv sync --extra all` |
-| **api** | FastAPI server dependencies | `uv sync --extra api` |
-| **ui** | Gradio UI dependencies | `uv sync --extra ui` |
-| **dev** | Development tools (pytest, ruff, black, pre-commit) | `uv sync --extra dev` |
-
-**Note**: Pipeline requirements (`matplotlib`, `seaborn`, `dataframe_image`) are now part of the **core install**; you do **not** need a separate `pipeline` extra. The `all` extra still includes everything and is recommended for most users.
-
-**Note**: All dependencies are listed in `pyproject.toml`. The base installation includes most dependencies. For OpenAI features, ensure `OPENAI_API_KEY` is set in your environment or `.env` file.
+| Extra | Includes | Command |
+|-------|----------|---------|
+| `all` | Everything | `uv sync --extra all` |
+| `api` | FastAPI server | `uv sync --extra api` |
+| `ui` | Gradio UI | `uv sync --extra ui` |
+| `dev` | Development tools | `uv sync --extra dev` |
 
 ## Development Setup
 
-1. Install development dependencies:
-   ```bash
-   uv sync --extra dev
-   ```
+For contributing and local development (pre-commit, formatting, full test suite), see
+`development.md`.
 
-2. Set up pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
+## Requirements
 
-## Verification
+- Python 3.12+
+- `uv` package manager (recommended)
+- Internet connection (for dataset downloads)
 
-After installation, verify everything works:
-
-```bash
-# Run the complete pipeline
-python scripts/pipeline/run_all.py
-
-# Or run a quick test
-pytest tests/test_dataset_clinc150.py
-```
+For OpenAI features, set `OPENAI_API_KEY` in your environment or `.env` file.

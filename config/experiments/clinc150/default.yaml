@@ -1,0 +1,14 @@
+# Experiment config: CLINC150 full dataset (default).
+#
+# Thin override layered on top of:
+#   - config/base/defaults.yaml
+#   - config/base/providers.yaml
+#   - config/datasets/clinc150.yaml
+
+general:
+  run_alias: "experiment_default"
+
+model:
+  # Enable RAG‑LLM experiments using the Ollama provider (qwen2.5:14b by default),
+  # mirroring the tiny CLINC150 config so all RAG‑LLM variants run for full dataset.
+  llm_backend: "ollama"

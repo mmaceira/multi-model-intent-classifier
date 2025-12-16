@@ -6,27 +6,8 @@ This module provides helper functions used across the evaluation package.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Union
 
 import pandas as pd
-
-
-def ensure_dir(path: Union[str, Path]) -> Path:
-    """Ensure a directory exists, creating it if necessary.
-
-    Parameters
-    ----------
-    path : str or Path
-        Path to the directory
-
-    Returns
-    -------
-    Path
-        Path object pointing to the directory
-    """
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def setup_logging(verbose: bool = True) -> logging.Logger:
@@ -48,7 +29,7 @@ def setup_logging(verbose: bool = True) -> logging.Logger:
     return logger
 
 
-def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str, pd.DataFrame]]:
+def load_all_prediction_files(experiment_dir: str | Path) -> dict[str, dict[str, pd.DataFrame]]:
     """Load every CSV prediction file from model directories into a dict.
 
     Parameters
@@ -62,9 +43,9 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
         Dictionary mapping model names to another dictionary with 'train' and 'test' DataFrames.
     """
     exp = Path(experiment_dir)
-    dfs: Dict[str, Dict[str, pd.DataFrame]] = {}
+    dfs: dict[str, dict[str, pd.DataFrame]] = {}
 
-    # Find all model directories
+    # Find all model directories (now all at same depth since names are sanitized)
     model_dirs = [d for d in exp.glob("*") if d.is_dir()]
 
     for model_dir in model_dirs:
@@ -94,12 +75,13 @@ def load_all_prediction_files(experiment_dir: str | Path) -> Dict[str, Dict[str,
                 logger.info(f"Successfully loaded {split} predictions for {model_name}")
 
     if not dfs:
-        raise FileNotFoundError(f"No prediction files found in {exp}")
+        # Return empty dict instead of raising - let caller handle gracefully
+        return {}
 
     return dfs
 
 
-def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.DataFrame:
+def analyse_error_patterns(pred_dfs: dict[str, dict[str, pd.DataFrame]]) -> pd.DataFrame:
     """Return dataframe with a row per distinct (true -> pred) error."""
     frames = []
     for name, splits in pred_dfs.items():
@@ -121,7 +103,7 @@ def analyse_error_patterns(pred_dfs: Dict[str, Dict[str, pd.DataFrame]]) -> pd.D
     )
 
 
-def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min_models: int = 2):
+def consistently_misclassified(pred_dfs: dict[str, dict[str, pd.DataFrame]], min_models: int = 2):
     """Docs misclassified by >= min_models models in exactly the same way.
 
     Parameters
@@ -145,41 +127,20 @@ def consistently_misclassified(pred_dfs: Dict[str, Dict[str, pd.DataFrame]], min
             df = splits["test"]
             wrong = df[df["y_true"] != df["y_pred"]][["id", "text", "y_true", "y_pred"]].copy()
             wrong[name] = True
-            combined = wrong if combined is None else combined.merge(wrong, how="outer")
+            if combined is None:
+                combined = wrong
+            else:
+                combined = combined.merge(wrong, how="outer")
 
     if combined is None:
         return pd.DataFrame()
 
-    combined = combined.fillna(False)
+    # Fill NaN values and convert to bool, avoiding pandas deprecation warning
+    # Use infer_objects to avoid FutureWarning about downcasting
+    combined = combined.infer_objects(copy=False).fillna(False)
+    # Convert object columns to bool explicitly to avoid FutureWarning
+    for col in combined.columns:
+        if col not in ["id", "text", "y_true", "y_pred"]:
+            combined[col] = combined[col].astype(bool)
     mask = combined.drop(columns=["id", "text", "y_true", "y_pred"]).sum(1) >= min_models
     return combined[mask]
-
-
-def export_analysis_results(results: Dict[str, Any], output_dir: Union[str, Path]) -> None:
-    """Export analysis results to files.
-
-    Parameters
-    ----------
-    results : dict
-        Dictionary with analysis results
-    output_dir : str or Path
-        Directory to save results
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save error patterns
-    if not results["error_patterns"].empty:
-        results["error_patterns"].to_csv(output_dir / "error_patterns.csv", index=False)
-
-    # Save misclassified examples
-    if not results["misclassified_examples"].empty:
-        results["misclassified_examples"].to_csv(
-            output_dir / "misclassified_examples.csv", index=False
-        )
-
-    # Save text features
-    if not results["text_features"].empty:
-        results["text_features"].to_csv(output_dir / "text_features.csv", index=False)
-
-    print(f"Analysis results exported to {output_dir}")

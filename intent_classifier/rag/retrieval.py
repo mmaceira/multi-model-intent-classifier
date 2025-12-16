@@ -45,7 +45,6 @@ Example Usage:
 import logging
 import os
 import time
-from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -81,7 +80,7 @@ class Retriever:
         """
         self.store = store
 
-    def top_k(self, q_emb: np.ndarray, k: int) -> List[Dict]:
+    def top_k(self, q_emb: np.ndarray, k: int) -> list[dict]:
         """
         Retrieve the k most similar documents for a given query embedding.
 
@@ -111,7 +110,10 @@ class Retriever:
 
     @classmethod
     def from_default(
-        cls, use_openai: bool = False, embed_model: Optional[str] = None
+        cls,
+        use_openai: bool = False,
+        embed_model: str | None = None,
+        backend: str | None = None,
     ) -> "Retriever":
         """
         Create a retriever with the default index and meta files.
@@ -120,10 +122,14 @@ class Retriever:
         configuration, supporting both OpenAI and SentenceTransformer embeddings.
 
         Args:
-            use_openai (bool): Whether to use OpenAI index files (default: False)
+            use_openai (bool): Whether to use OpenAI index files (default: False).
             embed_model (Optional[str]): SBERT model name to use for embeddings.
                 If None, reads from MODEL_SBERT_MODEL_NAME env var or defaults to
-                "sentence-transformers/all-MiniLM-L6-v2". Only used when use_openai=False.
+                "sentence-transformers/all-MiniLM-L6-v2". Only used when backend is
+                "sbert" or when use_openai=False and no explicit backend is provided.
+            backend (Optional[str]): Explicit embedding backend, one of
+                "sbert", "openai", or "ollama". If provided, takes precedence over
+                use_openai when selecting index paths.
 
         Returns:
             Retriever: A configured retriever instance
@@ -135,17 +141,25 @@ class Retriever:
             >>> # Create a retriever with SentenceTransformer embeddings
             >>> retriever = Retriever.from_default(use_openai=False)
             >>>
-            >>> # Create with custom embed model
+            >>> # Create with Ollama/Qwen embeddings
+            >>> retriever = Retriever.from_default(backend="ollama")
+            >>>
+            >>> # Create with custom SBERT embed model
             >>> retriever = Retriever.from_default(
             ...     use_openai=False,
+            ...     backend="sbert",
             ...     embed_model="sentence-transformers/all-mpnet-base-v2"
             ... )
         """
-        logger.info(f"Loading {'OpenAI' if use_openai else 'SentenceTransformer'} retriever")
+        effective_backend = backend or ("openai" if use_openai else "sbert")
+        logger.info("Loading %s retriever", effective_backend)
         start_time = time.time()
 
         # Get appropriate paths based on embedder type
-        index_path, meta_path = get_index_paths(use_openai)
+        index_path, meta_path = get_index_paths(
+            use_openai=(effective_backend == "openai"),
+            backend=effective_backend,
+        )
         logger.info(f"Using index: {index_path}, meta: {meta_path}")
 
         # Get SBERT model name if not using OpenAI

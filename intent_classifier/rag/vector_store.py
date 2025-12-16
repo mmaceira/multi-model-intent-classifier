@@ -49,14 +49,15 @@ import json
 import logging
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any
 
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from intent_classifier.utils.embeddings import EmbeddingGenerator
+from intent_classifier.utils.embeddings import EmbeddingGenerator, LitellmOllamaEmbedder
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
@@ -75,11 +76,16 @@ class VectorStore:
 
     Attributes:
         index (faiss.Index): FAISS index for vector storage
-        embedder (EmbeddingGenerator): Embedding generator instance
+        embedder (EmbeddingGenerator | None): Embedding generator instance
         vectors (Dict[str, np.ndarray]): Document embeddings cache
         metadata (Dict[str, Dict]): Document metadata cache
-        _meta (List[Dict]): Legacy metadata format for backward compatibility
+        _meta (List[Dict]): Metadata format for backward compatibility
     """
+
+    embedder: EmbeddingGenerator | LitellmOllamaEmbedder | None
+    vectors: dict[str, np.ndarray]
+    metadata: dict[str, dict[str, Any]]
+    _meta: list[dict[str, Any]]
 
     def __init__(self, *args, **kwargs) -> None:
         """
@@ -111,22 +117,30 @@ class VectorStore:
 
             # Load metadata
             self._meta = []
-            with open(meta_path, "r") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 for line in f:
                     self._meta.append(json.loads(line))
 
-            # Determine embedding type from path (sbert vs openai)
-            # If path contains "sbert", use SBERT embeddings; otherwise check for OpenAI
-            use_openai_embeddings = "openai" in str(index_path).lower()
+            # Determine embedding type from path (sbert vs openai vs ollama)
+            lower_path = str(index_path).lower()
+            use_openai_embeddings = "openai" in lower_path
+            use_ollama_embeddings = "ollama" in lower_path
 
             if use_openai_embeddings:
                 # Initialize OpenAI embedder for search functionality
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                    raise OSError("OPENAI_API_KEY not set in environment")
                 self.embedder = EmbeddingGenerator(
                     api_key=api_key, model="text-embedding-3-small", batch_size=100, max_retries=3
                 )
+            elif use_ollama_embeddings:
+                # Initialize Ollama/Qwen embedder for search functionality via litellm
+                base_url = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_HOST")
+                embed_model = kwargs.get("embed_model")
+                env_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "ollama/qwen3-embedding:latest")
+                model_name: str = str(embed_model or env_model)
+                self.embedder = LitellmOllamaEmbedder(model=model_name, base_url=base_url)
             else:
                 # Use SBERT embeddings - no API key needed
                 # We'll use the static embed method when needed
@@ -144,7 +158,7 @@ class VectorStore:
             if not api_key:
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise EnvironmentError("OPENAI_API_KEY not set in environment")
+                    raise OSError("OPENAI_API_KEY not set in environment")
 
             self.embedder = EmbeddingGenerator(
                 api_key=api_key,
@@ -157,7 +171,7 @@ class VectorStore:
             self._meta = []
 
     @property
-    def meta(self) -> List[Dict[str, Any]]:
+    def meta(self) -> list[dict[str, Any]]:
         """
         Return metadata in the old format for backward compatibility.
 
@@ -176,7 +190,7 @@ class VectorStore:
         ]
 
     def add_documents(
-        self, documents: List[str], metadata: Optional[List[Dict[str, Any]]] = None
+        self, documents: list[str], metadata: list[dict[str, Any]] | None = None
     ) -> None:
         """
         Add documents to the vector store.
@@ -195,14 +209,21 @@ class VectorStore:
             >>> metadata = [{"label": "A"}, {"label": "B"}]
             >>> store.add_documents(documents, metadata)
         """
-        embeddings = self.embedder.generate_embeddings(documents)
+        if self.embedder is None:
+            raise ValueError("Embedder not initialized. Cannot generate embeddings.")
+
+        # Support both OpenAI-based and Ollama-based embedders
+        if isinstance(self.embedder, LitellmOllamaEmbedder):
+            embeddings = self.embedder.encode(documents)
+        else:
+            embeddings = self.embedder.generate_embeddings(documents)
 
         for i, (doc, embedding) in enumerate(zip(documents, embeddings, strict=False)):
             self.vectors[doc] = embedding
             if metadata:
                 self.metadata[doc] = metadata[i]
 
-    def search(self, query: Union[str, np.ndarray], k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str | np.ndarray, k: int = 5) -> list[dict[str, Any]]:
         """
         Search for similar documents.
 
@@ -229,8 +250,11 @@ class VectorStore:
         # Handle both string queries and embedding vectors
         if isinstance(query, str):
             if self.embedder is not None:
-                # Use OpenAI embedder
-                query_embedding = self.embedder.generate_embeddings([query])[0]
+                # Use configured embedder (OpenAI or Ollama)
+                if isinstance(self.embedder, LitellmOllamaEmbedder):
+                    query_embedding = self.embedder.encode([query])[0]
+                else:
+                    query_embedding = self.embedder.generate_embeddings([query])[0]
             else:
                 # Use SBERT embeddings
                 query_embedding = self.embed(self._embed_model, [query])[0]
@@ -261,10 +285,10 @@ class VectorStore:
     @staticmethod
     def build(
         emb: np.ndarray,
-        meta: List[dict],
+        meta: list[dict],
         dim: int,
-        faiss_path: Union[str, Path],
-        meta_path: Union[str, Path],
+        faiss_path: str | Path,
+        meta_path: str | Path,
     ) -> None:
         """
         Build and save a FAISS index with metadata.
@@ -313,7 +337,7 @@ class VectorStore:
         logger.info(f"Writing metadata to {meta_path}...")
         meta_start = time.time()
         # Stream metadata to disk to reduce peak RAM (instead of joining all strings)
-        with open(meta_path, "w") as f:
+        with open(meta_path, "w", encoding="utf-8") as f:
             for m in meta:
                 f.write(json.dumps(m) + "\n")
         logger.info(f"Wrote metadata in {time.time() - meta_start:.2f} seconds")
@@ -324,8 +348,8 @@ class VectorStore:
     def embed(
         model_name: str,
         docs: Sequence[str],
-        embedder: Optional[Any] = None,
-        device: Optional[str] = None,
+        embedder: Any | None = None,
+        device: str | None = None,
         batch_size: int = 32,
         show_progress: bool = True,
     ) -> np.ndarray:
@@ -386,12 +410,17 @@ class VectorStore:
         # Use SentenceTransformer
         # Determine device
         if device is None:
-            try:
-                import torch
-
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-            except ImportError:
+            # Check for environment variable to force CPU mode
+            force_cpu = os.getenv("FORCE_CPU", "").lower() in ("1", "true", "yes")
+            if force_cpu:
                 device = "cpu"
+            else:
+                try:
+                    import torch
+
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                except ImportError:
+                    device = "cpu"
 
         # Create cache key that includes device
         cache_key = f"{model_name}::{device}"

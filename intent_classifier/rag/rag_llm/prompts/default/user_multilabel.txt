@@ -1,0 +1,22 @@
+Etiquetes permeses: {allowed_labels}
+Definicions d'etiquetes:
+{defs_block}
+
+Exemples etiquetats recuperats:
+{few_shots}
+
+CLASSIFICA AQUEST MISSATGE:
+{query}
+
+Format de sortida (JSON exactament així):
+{{
+  "label": "<etiquetes separades per comes, SENSE espais>",
+  "confidence": <número 0..1>
+}}
+
+Regles:
+- Pots triar UNA O MÉS etiquetes, però NOMÉS de la llista "Etiquetes permeses".
+- Escriu-les separades per comes, sense espais (ex: "Alta,asseguranca").
+- No inventis etiquetes ni combinacions noves; copia-les exactament.
+- Si tens dubtes, prioritza les millors i posa una confiança baixa.
+- No afegeixis cap altre camp ni text.

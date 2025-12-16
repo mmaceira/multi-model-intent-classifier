@@ -1,0 +1,13 @@
+Etiquetes: {allowed_labels}
+Exemples:
+{few_shots}
+
+Missatge: {query}
+
+Retorna (JSON):
+{{
+  "label": "<etiquetes_separades_per_comes_sense_espais>",
+  "confidence": <0..1>
+}}
+
+No inventis etiquetes. Usa només les de la llista i copia-les exactament.

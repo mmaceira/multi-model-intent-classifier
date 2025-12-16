@@ -38,7 +38,7 @@ Example Usage:
 """
 
 from abc import ABC, abstractmethod
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -81,7 +81,7 @@ class RagClassifierBase(ABC):
         Returns:
             list[str]: List of predicted labels for each document
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     @abstractmethod
     def predict_proba(self, docs: Sequence[str], **kwargs) -> np.ndarray:
@@ -95,7 +95,7 @@ class RagClassifierBase(ABC):
         Returns:
             np.ndarray: Array of probability estimates for each class
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass
 
     def _majority_vote(self, neighbor_labels: Sequence[str]) -> str:
         """
@@ -113,4 +113,5 @@ class RagClassifierBase(ABC):
             'A'
         """
         vals, counts = np.unique(neighbor_labels, return_counts=True)
-        return vals[counts.argmax()]
+        result = vals[counts.argmax()]
+        return str(result)  # Convert numpy scalar to string

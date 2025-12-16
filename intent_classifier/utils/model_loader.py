@@ -1,107 +1,46 @@
 """Model Loader Utility
 
-This module provides functions to load model configurations from YAML files and
-instantiate model objects dynamically based on configuration parameters.
+This module provides functions to load model configurations from YAML files.
+Model instantiation is handled by model_factory.py to separate loading from creation.
 """
 
 import logging
+import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+import numpy as np
 import yaml
 
-from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg
-from intent_classifier.algorithms.linear_svm import LinearSVMBigrams, LinearSVMClassifier
-from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier
-from intent_classifier.algorithms.transformer_logreg import TransformerLogReg
-from intent_classifier.rag import load_centroid, load_kmajority, load_llm
-from intent_classifier.rag.adapter_sklearn import RagSklearnAdapter
+from intent_classifier.utils.model_registry import discover_and_register_models
 
 # Use module-level logger (no basicConfig - that's for entry points only)
 logger = logging.getLogger(__name__)
 
-# Dictionary mapping class names to their actual classes
-MODEL_CLASSES = {
-    "NaiveBayesClassifier": NaiveBayesClassifier,
-    "LinearSVMClassifier": LinearSVMClassifier,
-    "LinearSVMBigrams": LinearSVMBigrams,
-    "TransformerLogReg": TransformerLogReg,
-    "EmbeddingLogReg": EmbeddingLogReg,
-    "RagSklearnAdapter": RagSklearnAdapter,
-}
+# Import all algorithm classes to trigger their @register_model decorators
+# This ensures models are registered when this module is imported
+# These imports must stay here (after logger setup) to trigger registration
+from intent_classifier.algorithms.embedding_logreg import EmbeddingLogReg  # noqa: F401, E402
+from intent_classifier.algorithms.linear_svm import (  # noqa: F401, E402
+    LinearSVMBigrams,
+    LinearSVMClassifier,
+)
+from intent_classifier.algorithms.naive_bayes import NaiveBayesClassifier  # noqa: F401, E402
+from intent_classifier.algorithms.transformer_logreg import TransformerLogReg  # noqa: F401, E402
+
+# Auto-discover and register any additional models from algorithms package
+# (This is a fallback for models that might not be explicitly imported above)
+discover_and_register_models()
 
 
-def substitute_vars(value: Any, config: Dict[str, Any]) -> Any:
-    """Replace variable references in string values with their actual values from config."""
-    if isinstance(value, str) and "${" in value:
-        import re
-
-        var_pattern = r"\${([^}]+)}"
-        for var_path in re.findall(var_pattern, value):
-            if "." in var_path:
-                section, var = var_path.split(".", 1)
-                if section in config and var in config[section]:
-                    value = value.replace(f"${{{var_path}}}", str(config[section][var]))
-    return value
-
-
-def process_config_vars(config_value: Any, main_config: Dict[str, Any]) -> Any:
-    """Recursively process a configuration value to substitute variables."""
-    if isinstance(config_value, dict):
-        return {k: process_config_vars(v, main_config) for k, v in config_value.items()}
-    elif isinstance(config_value, list):
-        return [process_config_vars(v, main_config) for v in config_value]
-    elif isinstance(config_value, str):
-        return substitute_vars(config_value, main_config)
-    return config_value
-
-
-def load_rag_model(params: Dict[str, Any]) -> RagSklearnAdapter:
-    """Create a RAG model instance based on configuration parameters."""
-    # Import here to avoid circular import
-
-    method = params.get("method")
-    # Ensure top_k is an integer
-    top_k = int(params.get("top_k", 25))
-
-    logger.info(f"Initializing RAG model with method={method}, top_k={top_k}, params={params}")
-
-    if method == "kmajority":
-        use_openai = params.get("use_openai", False)
-        logger.info(f"Loading KMajority RAG model with top_k={top_k}, use_openai={use_openai}")
-        return RagSklearnAdapter(load_kmajority(top_k=top_k, use_openai=use_openai))
-
-    elif method == "centroid":
-        logger.info(f"Loading Centroid RAG model with top_k={top_k}")
-        return RagSklearnAdapter(load_centroid(top_k=top_k))
-
-    elif method == "llm":
-        model_name = params.get("model", "ollama/llama3.1:8b")
-        use_openai = params.get(
-            "use_openai", False
-        )  # Kept for compatibility, but new impl uses TF-IDF
-        min_labels = params.get("min_labels", 4)  # New parameter for minimum distinct labels
-
-        logger.info(
-            f"Loading LLM RAG model with top_k={top_k}, model={model_name}, min_labels={min_labels}"
-        )
-
-        return RagSklearnAdapter(
-            load_llm(
-                top_k=top_k,
-                model=model_name,
-                use_openai=use_openai,  # Kept for compatibility
-                min_labels=min_labels,
-            )
-        )
-
-    raise ValueError(f"Unknown RAG method: {method}")
+# Import centralized config processing functions
+from intent_classifier.utils.config_loader import process_config_vars  # noqa: E402
 
 
 def load_tuned_hyperparameters(
-    hyperparams_path: Optional[str] = None,
-    config_name: Optional[str] = None,
-) -> Dict[str, Dict[str, Any]]:
+    hyperparams_path: str | None = None,
+    config_name: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Load tuned hyperparameters from individual model files.
 
     Each model has its own file: best_{model_name}.yaml
@@ -116,18 +55,35 @@ def load_tuned_hyperparameters(
     Returns:
         Dict mapping model IDs to their tuned hyperparameters
     """
-    repo_root = Path(__file__).resolve().parents[2]
+    from intent_classifier.utils.paths import get_repo_root
+
+    repo_root = get_repo_root()
 
     # Determine config name if not provided
     if config_name is None:
         import os
 
-        config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-        config_name = Path(config_file).stem  # Remove .yaml extension
+        config_file = os.environ.get("CONFIG_FILE")
+        if config_file is None:
+            # Try to find first available dataset config as default
+            dataset_dir = repo_root / "config" / "dataset"
+            if dataset_dir.exists():
+                dataset_dirs = [d for d in dataset_dir.iterdir() if d.is_dir()]
+                if dataset_dirs:
+                    first_dataset = sorted(dataset_dirs)[0].name
+                    # Try tiny.yaml first, fallback to default.yaml
+                    if (dataset_dir / first_dataset / "tiny.yaml").exists():
+                        config_file = f"dataset/{first_dataset}/tiny.yaml"
+                    elif (dataset_dir / first_dataset / "default.yaml").exists():
+                        config_file = f"dataset/{first_dataset}/default.yaml"
+        if config_file is None:
+            config_file = "dataset/clinc150/tiny.yaml"  # Final fallback for backward compatibility
+        # Extract config name from path like "dataset/clinc150/tiny.yaml" -> "tiny"
+        config_name = Path(config_file).parts[-1].replace(".yaml", "")
 
-    # Default to config/hyperparameters/{config_name}/ directory
+    # Default to config/algorithm/hyperparameters/{config_name}/ directory
     if hyperparams_path is None:
-        hyperparams_dir = repo_root / "config" / "hyperparameters" / config_name
+        hyperparams_dir = repo_root / "config" / "algorithm" / "hyperparameters" / config_name
     else:
         hyperparams_dir = Path(hyperparams_path)
         if hyperparams_dir.is_file():
@@ -145,7 +101,7 @@ def load_tuned_hyperparameters(
     for file_path in hyperparams_dir.glob(pattern):
         try:
             model_name = file_path.stem.replace("best_", "")  # Remove "best_" prefix
-            with open(file_path) as f:
+            with open(file_path, encoding="utf-8") as f:
                 params = yaml.safe_load(f)
             if params:  # Only add if file has content
                 hyperparams[model_name] = params
@@ -166,39 +122,66 @@ def load_tuned_hyperparameters(
 
 
 def load_models_from_config(
-    models_config_path: str = "config/models_config.yaml",
-    main_config_path: str = "config/config.yaml",
-    hyperparams_path: Optional[str] = None,
-    config_name: Optional[str] = None,
-) -> Dict[str, Any]:
+    models_config_path: str = "config/algorithm/models_config.yaml",
+    main_config_path: str | None = None,
+    hyperparams_path: str | None = None,
+    config_name: str | None = None,
+) -> dict[str, Any]:
     """Load and instantiate models based on configuration.
 
     Args:
         models_config_path: Path to the models configuration file
-        main_config_path: Path to the main configuration file for variable substitution
+        main_config_path: Path to the main configuration file for variable
+                         substitution. If None, tries to discover from CONFIG_FILE
+                         env var or first available dataset.
         hyperparams_path: Path to tuned hyperparameters file. If None, hyperparameter tuning
                          results are not loaded. If file doesn't exist, defaults are used.
 
     Returns:
         Dict[str, Any]: Dictionary mapping display names to model instances
     """
+    from intent_classifier.utils.paths import get_repo_root
+
     # Resolve paths relative to repo root
-    repo_root = Path(__file__).resolve().parents[2]
-    models_config_path = repo_root / models_config_path
-    main_config_path = repo_root / main_config_path
+    repo_root = get_repo_root()
+    from intent_classifier.utils.paths import get_config_path
+
+    models_config_path_obj = repo_root / models_config_path
+
+    # Handle main_config_path discovery if not provided
+    main_config_path_obj: Path
+    if main_config_path is None:
+        # Use centralized config discovery
+        from intent_classifier.utils.config_loader import discover_config_file
+
+        config_file = discover_config_file()
+        main_config_path_obj = get_config_path(config_file)
+    else:
+        # Use get_config_path to handle paths that already start with "config/"
+        main_config_path_obj = get_config_path(main_config_path)
 
     # Load configurations
-    with open(models_config_path) as f:
+    with open(models_config_path_obj, encoding="utf-8") as f:
         models_config = yaml.safe_load(f)
 
-    with open(main_config_path) as f:
-        main_config = yaml.safe_load(f)
+    # Convert main_config_path (absolute Path from get_config_path) to relative string
+    # load_config expects paths starting with "config/" relative to repo root
+    from intent_classifier.utils.config_loader import (
+        load_config,
+        parse_config_path,
+        path_to_config_file_str,
+    )
 
-    # Determine config name from main_config_path if not provided
+    # Use centralized helper to convert Path to config file string format
+    config_file_str = path_to_config_file_str(main_config_path_obj)
+
+    # Load main config using centralized loader to get merged LLM config
+    # We disable variable substitution here and apply it later with process_config_vars
+    main_config = load_config(config_file=config_file_str, apply_variable_substitution=False)
+
+    # Determine config name from config_file_str if not provided
     if config_name is None:
-        config_name = Path(
-            main_config_path
-        ).stem  # e.g., "config_tiny_dataset" from "config_tiny_dataset.yaml"
+        _, config_name = parse_config_path(config_file_str)
 
     # Load tuned hyperparameters if path is provided
     tuned_hyperparams = {}
@@ -224,93 +207,61 @@ def load_models_from_config(
     models = {}
 
     # Process each model configuration
-    for model_id, model_config in models_config.get("models", {}).items():
+    for _model_id, model_config in models_config.get("models", {}).items():
         # Skip disabled models
         if not model_config.get("enabled", True):
             continue
 
-        # Get model details
-        class_name = model_config.get("class")
-        display_name = model_config.get("name", model_id)
-        params = process_config_vars(model_config.get("params", {}), main_config)
+        # Process config vars in params (before passing to factory)
+        model_config["params"] = process_config_vars(model_config.get("params", {}), main_config)
 
-        # Override with tuned hyperparameters if available
-        # Map model_id to hyperparameter key (they might differ)
-        hyperparam_key = model_id
+    # Build mapping from model_id to hyperparameter key
+    model_id_to_hyperparam_key = {}
+    for model_id in models_config.get("models", {}).keys():
         # Handle special mappings
         if model_id == "naive_bayes":
-            hyperparam_key = "naive_bayes"
+            model_id_to_hyperparam_key[model_id] = "naive_bayes"
         elif model_id == "linear_svm":
-            hyperparam_key = "linear_svm"
+            model_id_to_hyperparam_key[model_id] = "linear_svm"
         elif model_id == "linear_svm_bigrams":
-            hyperparam_key = "linear_svm_bigrams"
+            model_id_to_hyperparam_key[model_id] = "linear_svm_bigrams"
         elif model_id == "transformer_logreg":
-            hyperparam_key = "transformer_logreg"
+            model_id_to_hyperparam_key[model_id] = "transformer_logreg"
         elif model_id == "embedding_logreg":
-            hyperparam_key = "embedding_logreg"
+            model_id_to_hyperparam_key[model_id] = "embedding_logreg"
         elif model_id == "rag_kmajority":
-            hyperparam_key = "rag_kmajority"
+            model_id_to_hyperparam_key[model_id] = "rag_kmajority"
         elif model_id == "rag_centroid":
-            hyperparam_key = "rag_centroid"
-        elif model_id in ("rag_llm", "rag_llm_local", "rag_llm_openai"):
+            model_id_to_hyperparam_key[model_id] = "rag_centroid"
+        elif model_id in (
+            "rag_llm",
+            "rag_llm_local",
+            "rag_llm_local_short",
+            "rag_llm_local_n8n",
+            "rag_llm_openai",
+        ):
             # Support both old single rag_llm and new separate local/openai variants
-            hyperparam_key = "rag_llm"
-
-        if hyperparam_key in tuned_hyperparams:
-            tuned_params = tuned_hyperparams[hyperparam_key]
-            # Remove f1 score if present (it's metadata, not a hyperparameter)
-            tuned_params = {k: v for k, v in tuned_params.items() if k != "f1"}
-
-            # Convert C to Cs for LogReg models (they expect Cs as a sequence)
-            if class_name in ("TransformerLogReg", "EmbeddingLogReg") and "C" in tuned_params:
-                tuned_params["Cs"] = [tuned_params.pop("C")]
-
-            logger.info(f"Using tuned hyperparameters for {display_name}: {tuned_params}")
-            # Merge tuned params with config params (tuned params take precedence)
-            params = {**params, **tuned_params}
-
-        # Special handling for RagSklearnAdapter
-        if class_name == "RagSklearnAdapter":
-            logger.info(
-                f"Initializing {display_name} (class={class_name}) with parameters: {params}"
-            )
-            try:
-                models[display_name] = load_rag_model(params)
-            except Exception as e:
-                logger.warning(f"Failed to initialize {display_name}: {e}. Skipping this model.")
-                continue
+            model_id_to_hyperparam_key[model_id] = "rag_llm"
         else:
-            # Standard model instantiation
-            model_class = MODEL_CLASSES.get(class_name)
-            if model_class:
-                logger.info(
-                    f"Initializing {display_name} (class={class_name}) with parameters: {params}"
-                )
-                try:
-                    models[display_name] = model_class(**params)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to initialize {display_name}: {e}. Skipping this model."
-                    )
-                    continue
-            else:
-                known_classes = ", ".join(MODEL_CLASSES.keys())
-                logger.warning(
-                    f"Unknown model class '{class_name}' for model '{model_id}'. "
-                    f"Known classes: {known_classes}"
-                )
+            # Default: use model_id as key
+            model_id_to_hyperparam_key[model_id] = model_id
 
-    print(f"Loaded {len(models)} models from configuration:")
-    for model_name in models:
-        print(f"  - {model_name}")
+    # Use factory to create model instances
+    from intent_classifier.utils.model_factory import create_models_from_config
+
+    models = create_models_from_config(
+        models_config=models_config,
+        tuned_hyperparams=tuned_hyperparams,
+        model_id_to_hyperparam_key=model_id_to_hyperparam_key,
+    )
 
     return models
 
 
 def load_persisted_model(
     model_identifier: str,
-    models_dir: Optional[Path] = None,
-    embeddings_dir: Optional[Path] = None,
+    models_dir: Path | None = None,
+    embeddings_dir: Path | None = None,
 ) -> Any:
     """Load a persisted model from disk (for API/inference use).
 
@@ -346,25 +297,54 @@ def load_persisted_model(
     else:
         embeddings_dir = Path(embeddings_dir).resolve()
 
-    # Model info mapping (same as API loader)
+    # Model info mapping (same as API loader, kept in sync with models_config.yaml)
     MODELS_INFO = {
+        # Text classification models
         "naive_bayes": {"name": "Naive Bayes", "dir": "Naive Bayes", "type": "classifier"},
         "linear_svm": {"name": "Linear SVM", "dir": "Linear SVM", "type": "classifier"},
-        "tfidf_svm": {"name": "TF-IDF + SVM", "dir": "TF-IDF bigrams + SVM", "type": "classifier"},
-        "minilm_logreg": {
+        "linear_svm_bigrams": {
+            "name": "TF-IDF bigrams + SVM",
+            "dir": "TF-IDF bigrams + SVM",
+            "type": "classifier",
+        },
+        "transformer_logreg": {
             "name": "MiniLM + LogReg",
             "dir": "MiniLM + LogReg",
             "type": "classifier",
         },
-        "rag_centroid": {"name": "RAG CentroidNN", "dir": "RAG-CentroidNN", "type": "rag"},
-        "rag_kmajority": {"name": "RAG k-Majority", "dir": "RAG-kMajority", "type": "rag"},
+        "embedding_logreg": {
+            "name": "Embedding + LogReg",
+            "dir": "Embedding + LogReg",
+            "type": "classifier",
+        },
+        # RAG-based models
+        "rag_kmajority": {
+            "name": "RAG-kMajority",
+            "dir": "RAG-kMajority",
+            "type": "rag",
+        },
+        "rag_centroid": {
+            "name": "RAG-CentroidNN",
+            "dir": "RAG-CentroidNN",
+            "type": "rag",
+        },
         "rag_llm_local": {
-            "name": "RAG LLM (Local)",
-            "dir": "RAG-LLM (local-embeddings)",
+            "name": "RAG-LLM (local-embeddings, default prompt)",
+            "dir": "RAG-LLM (local-embeddings, default prompt)",
+            "type": "rag",
+        },
+        "rag_llm_local_short": {
+            "name": "RAG-LLM (local-embeddings, short prompt)",
+            "dir": "RAG-LLM (local-embeddings, short prompt)",
+            "type": "rag",
+        },
+        "rag_llm_local_n8n": {
+            "name": "RAG-LLM (local-embeddings, n8n prompt)",
+            "dir": "RAG-LLM (local-embeddings, n8n prompt)",
             "type": "rag",
         },
         "rag_llm_openai": {
-            "name": "RAG LLM (OpenAI)",
+            "name": "RAG-LLM (OpenAI-embeddings)",
             "dir": "RAG-LLM (OpenAI-embeddings)",
             "type": "rag",
         },
@@ -435,7 +415,7 @@ def load_persisted_model(
         # Load passages from meta.jsonl
         passages = []
         if meta_path.exists():
-            with open(meta_path, "r") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 for line in f:
                     try:
                         meta = json.loads(line)
@@ -451,7 +431,7 @@ def load_persisted_model(
                 if model_path.suffix == ".pkl":
                     import cloudpickle
 
-                    with open(model_path, "rb") as f:
+                    with open(str(model_path), "rb") as f:  # type: ignore[assignment]
                         classifier_obj = cloudpickle.load(f)
                 else:
                     classifier_obj = joblib.load(model_path)
@@ -467,9 +447,17 @@ def load_persisted_model(
                         rag_model = load_centroid(use_openai="openai" in model_identifier)
                     else:  # LLM-based RAG
                         if "openai" in model_identifier:
-                            from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+                            from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-                            embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                            api_key = os.getenv("OPENAI_API_KEY")
+                            if not api_key:
+                                raise ValueError(
+                                    "OPENAI_API_KEY environment variable must be set "
+                                    "for OpenAI embeddings"
+                                )
+                            embedder = EmbeddingGenerator(
+                                api_key=api_key, model="text-embedding-3-small", batch_size=50
+                            )
                             rag_model = load_llm(
                                 top_k=5,
                                 model="ollama/llama3.1:8b",
@@ -478,7 +466,7 @@ def load_persisted_model(
                             )
                         else:
 
-                            def embedder(texts):
+                            def embedder(texts: list[str]) -> np.ndarray:  # type: ignore[misc]
                                 return VectorStore.embed(
                                     "sentence-transformers/all-MiniLM-L6-v2", texts
                                 )
@@ -503,7 +491,7 @@ def load_persisted_model(
         if model_path.suffix == ".pkl":
             import cloudpickle
 
-            with open(model_path, "rb") as f:
+            with open(str(model_path), "rb") as f:  # type: ignore[assignment]
                 artefact = cloudpickle.load(f)
         else:
             artefact = joblib.load(model_path)
@@ -511,7 +499,7 @@ def load_persisted_model(
         # Fallback to cloudpickle
         import cloudpickle
 
-        with open(model_path, "rb") as f:
+        with open(str(model_path), "rb") as f:  # type: ignore[assignment]
             artefact = cloudpickle.load(f)
 
     # Wrap with vectorizer if needed
@@ -526,7 +514,7 @@ def load_persisted_model(
                 if vec_path.suffix == ".pkl":
                     import cloudpickle
 
-                    with open(vec_path, "rb") as f:
+                    with open(str(vec_path), "rb") as f:  # type: ignore[assignment]
                         vectorizer = cloudpickle.load(f)
                 else:
                     vectorizer = joblib.load(vec_path)

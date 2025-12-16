@@ -35,12 +35,16 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, ParamSpec, TypeVar, cast
 
 import numpy as np
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # Module-level logger for this module itself
 _module_logger = logging.getLogger(__name__)
@@ -56,7 +60,7 @@ class MethodLogger:
     _instance = None
     _lock = threading.Lock()
 
-    def __init__(self, log_dir: Optional[Path] = None, enabled: bool = True):
+    def __init__(self, log_dir: Path | None = None, enabled: bool = True):
         """
         Initialize the method logger.
 
@@ -68,7 +72,7 @@ class MethodLogger:
         """
         self.enabled = enabled
         self.log_dir = log_dir or self._get_log_dir_from_config()
-        self._file_locks: Dict[str, threading.Lock] = {}
+        self._file_locks: dict[str, threading.Lock] = {}
 
         if self.enabled and self.log_dir:
             self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +83,7 @@ class MethodLogger:
             _module_logger.warning("Method Logger: No log directory configured, logging disabled")
 
     @classmethod
-    def get_instance(cls, log_dir: Optional[Path] = None, enabled: bool = True) -> "MethodLogger":
+    def get_instance(cls, log_dir: Path | None = None, enabled: bool = True) -> "MethodLogger":
         """
         Get or create the singleton logger instance.
 
@@ -96,8 +100,16 @@ class MethodLogger:
                     cls._instance = cls(log_dir=log_dir, enabled=enabled)
         return cls._instance
 
+    def disable(self) -> None:
+        """Disable logging."""
+        self.enabled = False
+
+    def enable(self) -> None:
+        """Enable logging."""
+        self.enabled = True
+
     @staticmethod
-    def _get_log_dir_from_config() -> Optional[Path]:
+    def _get_log_dir_from_config() -> Path | None:
         """Get log directory from config for saving logs."""
         try:
             # Try to get predictions_dir from config
@@ -145,7 +157,7 @@ class MethodLogger:
         filename = f"{log_type}_{timestamp}.jsonl"
         return self.log_dir / filename
 
-    def _write_log_entry(self, log_type: str, entry: Dict[str, Any]) -> None:
+    def _write_log_entry(self, log_type: str, entry: dict[str, Any]) -> None:
         """
         Write a log entry to the appropriate log file.
 
@@ -194,11 +206,11 @@ class MethodLogger:
     def log_method_call(
         self,
         method_name: str,
-        class_name: Optional[str] = None,
-        inputs: Optional[Dict[str, Any]] = None,
-        output: Optional[Any] = None,
-        duration: Optional[float] = None,
-        error: Optional[Exception] = None,
+        class_name: str | None = None,
+        inputs: dict[str, Any] | None = None,
+        output: Any | None = None,
+        duration: float | None = None,
+        error: Exception | None = None,
     ) -> None:
         """
         Log a method call with inputs and output.
@@ -211,7 +223,7 @@ class MethodLogger:
             duration: Time taken in seconds
             error: Exception if the call failed
         """
-        entry = {
+        entry: dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "method": method_name,
         }
@@ -243,7 +255,7 @@ class MethodLogger:
         self,
         input: Any,
         output: Any,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log a prediction (input and output).
@@ -268,8 +280,8 @@ class MethodLogger:
         self,
         method_name: str,
         error: Exception,
-        inputs: Optional[Dict[str, Any]] = None,
-        class_name: Optional[str] = None,
+        inputs: dict[str, Any] | None = None,
+        class_name: str | None = None,
     ) -> None:
         """
         Log an error.
@@ -298,7 +310,7 @@ class MethodLogger:
         self._write_log_entry("errors", entry)
 
 
-def log_method(logger: Optional[MethodLogger] = None):
+def log_method(logger: MethodLogger | None = None) -> Any:
     """
     Decorator to automatically log method calls (inputs, outputs, errors).
 
@@ -318,9 +330,9 @@ def log_method(logger: Optional[MethodLogger] = None):
         Decorator function
     """
 
-    def decorator(func):
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal logger
             if logger is None:
                 logger = MethodLogger.get_instance()
@@ -370,7 +382,7 @@ def log_method(logger: Optional[MethodLogger] = None):
                     error=error,
                 )
 
-        return wrapper
+        return cast(Callable[P, R], wrapper)
 
     # Support both @log_method and @log_method() usage
     # If called without parentheses, func is passed directly
@@ -386,7 +398,7 @@ def log_method(logger: Optional[MethodLogger] = None):
         return decorator
 
 
-def get_logger(log_dir: Optional[Path] = None, enabled: bool = True) -> MethodLogger:
+def get_logger(log_dir: Path | None = None, enabled: bool = True) -> MethodLogger:
     """
     Get or create a method logger instance.
 
@@ -397,4 +409,5 @@ def get_logger(log_dir: Optional[Path] = None, enabled: bool = True) -> MethodLo
     Returns:
         MethodLogger: Logger instance
     """
-    return MethodLogger.get_instance(log_dir=log_dir, enabled=enabled)
+    instance = MethodLogger.get_instance(log_dir=log_dir, enabled=enabled)
+    return instance

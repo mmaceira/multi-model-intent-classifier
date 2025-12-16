@@ -1,36 +1,58 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
-        exclude: '.*\.lock$'
-      - id: check-merge-conflict
+    # Ruff: Fast Python linter and formatter (replaces Black + Flake8)
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.14.9
+      hooks:
+          - id: ruff
+            args: ["--fix"]
+          - id: ruff-format
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
+    # Standard pre-commit hooks for common file issues
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: end-of-file-fixer
+          - id: trailing-whitespace
+          - id: mixed-line-ending
+          - id: check-merge-conflict
+          - id: check-yaml
+          - id: check-toml
+          - id: check-json
+          - id: check-added-large-files
 
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-        language_version: python3
+    # Commitizen: commit message validation (keep; remove noisy branch gate)
+    - repo: https://github.com/commitizen-tools/commitizen
+      rev: v4.10.0
+      hooks:
+          - id: commitizen
+            stages: [commit-msg]
+      # Remove/disable this to avoid failures when upstream isn't set
+      # - id: commitizen-branch
+      #   args: ["--rev-range", "origin/main..HEAD"]
+      #   stages: [pre-push]
 
-  - repo: local
-    hooks:
-      - id: commit-message-check
-        name: "Enforce commit message format"
-        entry: python scripts/check_commit_message.py
-        language: system
-        stages: [commit-msg]
-      - id: check-env-file
-        name: "Prevent committing .env files"
-        entry: python scripts/check_env_file.py
-        language: system
-        stages: [pre-commit]
+    # Mypy: only the package (strict), not scripts/tests (lenient via pyproject overrides)
+    - repo: https://github.com/pre-commit/mirrors-mypy
+      rev: v1.19.0
+      hooks:
+          - id: mypy
+            args:
+              - "--explicit-package-bases"
+            files: ^intent_classifier/.*\.py$
+            additional_dependencies: []
+            # If you truly use these in type context, add them back explicitly:
+            # additional_dependencies:
+            #   - typer
+            #   - rich
+            #   - loguru
+            #   - python-dotenv
+
+    # Project-specific hooks
+    - repo: local
+      hooks:
+          - id: check-env-file
+            name: "Prevent committing .env files"
+            entry: python scripts/check_env_file.py
+            language: system
+            stages: [pre-commit]
+            files: ^\.env

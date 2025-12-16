@@ -1,97 +1,72 @@
-g## Running Experiments
+# Running Experiments
 
-This guide focuses on **how to run the pipeline**. For background on data splits, configuration, and algorithms, see `pipeline.md`, `experiments.md`, and `configuration.md`.
+## Overview
 
-## Quick start
+How to run the training pipeline. For background on data splits and pipeline steps, see `pipeline.md`. For dataset details, see `experiments.md`.
 
-The CLINC150 dataset is downloaded automatically from HuggingFace on first run.
+## Quickstart
 
 ```bash
 # Install dependencies
 uv sync --extra all
 
-# (Optional) Set up Ollama for RAG-LLM models
-ollama serve
-ollama pull llama3.1:8b
+# Run full pipeline (single-label)
+DATASET=clinc150 VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 
-# Tiny end-to-end experiment
-CONFIG_FILE=config/config_tiny_dataset.yaml python scripts/pipeline/run_all.py --tune --save-model artifacts/model.pkl
+# Run full pipeline (multi-label)
+DATASET=nlu_plus VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 ```
 
-## Full pipeline vs. individual steps
+Datasets download automatically from HuggingFace/GitHub.
 
-Run the **full pipeline**:
+## Commands
+
+### Full Pipeline
 
 ```bash
-# Using the entry point (after installation)
-intent-train
+# Using entry point
+DATASET=clinc150 VARIANT=tiny \
+  uv run intent-train
 
-# Or directly with Python
-python scripts/pipeline/run_all.py
+# Or directly
+DATASET=clinc150 VARIANT=tiny \
+  uv run python scripts/pipeline/run_all.py
 ```
 
-This executes all pipeline steps in sequence (data loading → analysis → embeddings → training → prediction → evaluation).
-
-Run **individual steps** (advanced):
+### Individual Steps
 
 ```bash
-python scripts/pipeline/00_data_loading.py
-python scripts/pipeline/01_exploratory_analysis.py
-python scripts/pipeline/02_build_embeddings.py
-python scripts/pipeline/03_model_training.py
-python scripts/pipeline/04_model_prediction.py
-python scripts/pipeline/05_model_evaluation.py
+uv run python scripts/pipeline/00_data_loading.py
+uv run python scripts/pipeline/01_exploratory_analysis.py
+uv run python scripts/pipeline/02_build_embeddings.py
+uv run python scripts/pipeline/03_model_training.py
+uv run python scripts/pipeline/04_model_prediction.py
+uv run python scripts/pipeline/05_model_evaluation.py
 ```
 
-Each step expects outputs from previous steps; keep the order above. See `pipeline.md` for what each script does.
+## Configuration
 
-## Basic Usage in Code
-
-```python
-from intent_classifier.datasets.dataset import get_dataset
-
-# Load CLINC150 dataset
-X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(dataset_name="clinc150")
-
-# Use with any classifier
-from intent_classifier.algorithms.linear_svm import LinearSVMClassifier
-classifier = LinearSVMClassifier()
-classifier.fit(X_train, y_train)
-predictions = classifier.predict(X_test)
-```
-
-## Choosing a configuration
-
-Preconfigured experiment files:
-
-- `config/config.yaml` – default full CLINC150 run.
-- `config/config_full_dataset.yaml` – explicit full‑dataset config with its own `run_name`.
-- `config/config_10_classes.yaml` – 10‑class subset (faster, still realistic).
-- `config/config_25_classes.yaml` – 25‑class subset.
-- `config/config_tiny_dataset.yaml` – very small smoke‑test config.
-
-Use a different configuration file by setting `CONFIG_FILE`:
+Preconfigured configs:
+- `config/experiments/clinc150/default.yaml` - Full CLINC150
+- `config/experiments/clinc150/tiny.yaml` - Quick test
+- `config/experiments/nlu_plus/default.yaml` - Full NLU++
+- `config/experiments/nlu_plus/tiny.yaml` - Quick test
 
 ```bash
-CONFIG_FILE=config/config_25_classes.yaml python scripts/pipeline/run_all.py
+DATASET=clinc150 VARIANT=default \
+  uv run python scripts/pipeline/run_all.py
 ```
 
-See `experiments.md` and `configuration.md` for what each config changes (class counts, sample caps, OOS behavior, etc.).
+## Outputs
 
-## Hyperparameters, models, and providers
+All outputs live under `output/runs/<label_type>/<dataset>/<variant>/`:
+- `dataset/` - Statistics, label summaries, and dataset metadata
+- `features/` - Embeddings and other feature artefacts
+- `models/` - Trained models
+- `eval/` - Per‑model evaluation artefacts
+- `compare/` - Cross‑model summaries and comparison plots
+- `meta/` - Reproducibility package (resolved config, env, git info, manifest)
 
-- **Hyperparameter tuning**: how to run tuning and how tuned values are loaded is described in `hyperparameter_tuning.md`.
-- **Which models are trained**: controlled via `config/models_config.yaml` (see `configuration.md` for structure and examples).
-- **Embedding and LLM providers**: SBERT vs. OpenAI embeddings and Ollama vs. OpenAI/Anthropic LLMs are covered in `llm_providers.md`.
-
-## Outputs and where to look
-
-All outputs are saved in `output/{run_name}/`, where `run_name` comes from your main config:
-
-- `data_exploration/` – dataset statistics and visualizations.
-- `embeddings/` – FAISS indices and metadata.
-- `models/` – trained model files.
-- `predictions/` – model predictions.
-- `results/` – evaluation metrics and comparison plots.
-
-Resource tips (batch sizes, BLAS threads, RAG‑LLM settings) and failure scenarios are covered in more detail in the README troubleshooting section.
+See `output_schema.md` for the full layout and `config.md` for config layering and selection.

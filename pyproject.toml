@@ -1,67 +1,70 @@
 [project]
 name = "multi-model-intent-classifier"
 version = "0.1.0"
-description = "A production-ready NLP pipeline for automated intent classification and semantic search, built on the CLINC150 dataset."
+description = "Production-grade NLP pipeline for intent classification and semantic search (CLINC150)."
 authors = [{ name = "Marc Maceira" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "backoff~=2.2.1",
-    "cloudpickle~=3.0.0",
-    "cryptography>=41.0.0",
-    "datasets>=2.0.0",
-    "email-validator>=2.0.0",
-    "faiss-cpu==1.11.0",                 # Pin for ABI compatibility
-    "litellm[proxy]>=1.0.0",
-    "nest-asyncio~=1.6.0",
-    "numpy==2.2.5",                      # Pin for compatibility
-    "openai~=1.77.0",
-    "pandas~=2.2.3",
-    "pydantic~=2.11.4",
-    "python-dotenv~=1.1.0",
-    "pyyaml",
-    "scikit-learn==1.6.1",               # Pin for compatibility
-    "sentence-transformers~=4.1.0",
-    "tqdm~=4.67.1",
-    "matplotlib~=3.10.1",
-    "seaborn~=0.13.2",
-    "dataframe_image~=0.2.7",
+    # Runtime
+    "backoff>=2.2,<3",
+    "cloudpickle>=3.0,<4",
+    "cryptography>=41,<43",
+    "datasets>=2,<3",
+    "email-validator>=2,<3",
+    "faiss-cpu==1.11.0",                   # Hard pin: ABI/compat
+    "litellm[proxy]>=1,<2",
+    "nest-asyncio>=1.6,<2",
+    "numpy>=2.2,<3",                       # Avoid over-pin; let resolver choose
+    "openai>=1.77,<2",
+    "pandas>=2.2,<3",
+    "pydantic>=2.11,<3",
+    "python-dotenv>=1.0,<2",
+    "pyyaml>=6,<7",
+    "scikit-learn>=1.5,<2",                # Keep within major; sklearn is sensitive
+    "sentence-transformers>=3,<4",
+    "tqdm>=4.67,<5",
+    "matplotlib>=3.8,<4",
+    "seaborn>=0.13,<1",
+    "dataframe_image>=0.2.7,<0.3",
 ]
 
 [project.scripts]
-intent-train = "scripts.pipeline.run_all:main"
-intent-classify = "scripts.classify_cli:main"
-rag-cli = "scripts.rag_cli:main"
-api-serve = "scripts.api.main_api:cli"
+intent-train   = "scripts.pipeline.run_all:main"
+intent-classify= "intent_classifier.cli.classify:main"
+intent-tune    = "intent_classifier.cli.tune:main"
+rag-explore    = "intent_classifier.cli.rag_explore:main"
+api-serve      = "intent_classifier.api.server:cli"
 
 [project.optional-dependencies]
-
 api = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.9,<0.1",
 ]
 ui = [
-    "gradio>=5.0,<6",
+    "gradio>=5,<6",
 ]
+convert = []
 dev = [
     "pre-commit>=3.7,<4",
     "pytest>=8.3,<9",
     "pytest-cov>=5,<6",
     "ruff>=0.6,<1",
-    "black>=24.0,<25",
+    "black>=24,<25",
+    "mypy>=1.10,<2",
+    "types-PyYAML>=6.0.12,<7",   # type stubs for pyyaml
+    "pandas-stubs>=2.2.0,<3",
+    "types-tqdm>=4.0.0,<5",
 ]
-# Install all optional dependencies (combines all extras)
+tune = [
+    "ray[tune]>=2.0,<3",
+]
 all = [
-    "fastapi>=0.115,<1",
-    "uvicorn[standard]>=0.30,<1",
-    "python-multipart>=0.0.9",
-    "gradio>=5.0,<6",
-    "pre-commit>=3.7,<4",
-    "pytest>=8.3,<9",
-    "pytest-cov>=5,<6",
-    "ruff>=0.6,<1",
-    "black>=24.0,<25",
+    "multi-model-intent-classifier[api]",
+    "multi-model-intent-classifier[ui]",
+    "multi-model-intent-classifier[dev]",
+    "multi-model-intent-classifier[tune]",
 ]
 
 [build-system]
@@ -71,7 +74,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["intent_classifier*", "scripts*"]
-exclude = ["setup*", "tests*"]
+exclude = ["tests*", "setup*"]
+
+# ---------- Formatting / Linting ----------
 
 [tool.black]
 line-length = 100
@@ -82,13 +87,116 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["E", "F", "I", "B"]
+# High-signal core only (trimmed to cut false positives/noise)
+select = [
+  "E", "F",        # pycodestyle/pyflakes
+  "I",             # import sorting
+  "B",             # flake8-bugbear (real bugs)
+  "UP",            # pyupgrade
+  # (Deliberately removing C90/ARG/SIM for now)
+]
+ignore = []
+
+# Keep __init__ files quiet for re-exports, package wiring, etc.
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # imported but unused (re-exports)
+"scripts/*.py" = ["E402"]  # import at top of file (CLIs sometimes init env before imports)
+"tests/**/*.py" = ["E402"]  # same for tests
 
 [tool.ruff.lint.isort]
 known-first-party = ["intent_classifier"]
 combine-as-imports = true
 
+[tool.ruff.lint.mccabe]
+# Reduce "C901 too complex"; keep it reasonable
+max-complexity = 15
+
+# ---------- Tests ----------
+
 [tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+norecursedirs = [".venv", "venv", "node_modules", "scripts/dev"]
 markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+  "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]
+
+# ---------- Typing (stricter, with minimal exceptions) ----------
+
+[tool.mypy]
+files = ["intent_classifier"]
+python_version = "3.12"
+disallow_untyped_defs = true
+disallow_any_generics = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unused_configs = true
+strict_equality = true
+follow_imports = "silent"
+
+# --- Third-party imports missing in the pre-commit venv ---
+[[tool.mypy.overrides]]
+module = [
+  "pydantic", "pydantic.*",
+  "yaml", "yaml.*",
+  "cloudpickle", "cloudpickle.*",
+  "fastapi", "fastapi.*",
+  "fastapi.middleware.cors", "fastapi.middleware.cors.*",
+  "mlflow", "mlflow.*",
+  "torch", "torch.*",
+  "numpy", "numpy.*",
+  "pandas", "pandas.*",
+  "matplotlib", "matplotlib.*", "matplotlib.pyplot", "matplotlib.pyplot.*",
+  "seaborn", "seaborn.*",
+  "scipy", "scipy.*", "scipy.special", "scipy.special.*",
+  "datasets", "datasets.*",
+  "joblib", "joblib.*",
+  "dataframe_image", "dataframe_image.*",
+  "tqdm", "tqdm.*",
+  "litellm", "litellm.*",
+  "dotenv", "dotenv.*",
+  "faiss", "faiss.*",
+  "openai", "openai.*",
+  "prometheus_fastapi_instrumentator", "prometheus_fastapi_instrumentator.*",
+  "sentence_transformers", "sentence_transformers.*",
+  "sklearn", "sklearn.*",
+  "ray", "ray.*",
+  "uvicorn", "uvicorn.*",
+]
+ignore_missing_imports = true
+
+# --- Keep CLIs/tests lenient (already scoped out by hook) ---
+[[tool.mypy.overrides]]
+module = ["scripts.*"]
+disallow_untyped_defs = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+warn_return_any = false
+
+# --- De-scope or relax high-noise subpackages for now ---
+[[tool.mypy.overrides]]
+module = [
+  "intent_classifier.exploration",
+  "intent_classifier.evaluation.visualization",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "intent_classifier.evaluation.*",
+  "intent_classifier.datasets.*",
+  "intent_classifier.algorithms.*",
+  "intent_classifier.hparam.*",
+  "intent_classifier.rag.*",
+]
+disallow_untyped_defs = false
+disallow_any_generics = false
+warn_return_any = false
+
+[dependency-groups]
+dev = []

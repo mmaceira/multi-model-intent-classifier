@@ -1,0 +1,11 @@
+Etiquetes permeses: {allowed_labels}
+Definicions:
+{defs_block}
+
+Exemples:
+{few_shots}
+
+# Correu a NETEJAR i CLASSIFICAR
+{query}
+
+Retorna només el JSON amb el format especificat.

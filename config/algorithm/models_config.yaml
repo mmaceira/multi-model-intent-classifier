@@ -1,0 +1,165 @@
+# Model Selection Configuration
+# This file defines which models to train in the experiment
+
+models:
+  # Text Classification Models
+  naive_bayes:
+    enabled: true
+    name: "Naive Bayes"
+    class: "NaiveBayesClassifier"
+
+  linear_svm:
+    enabled: true
+    name: "Linear SVM"
+    class: "LinearSVMClassifier"
+    params:
+      # Calibration: enabled by default for reliable probability estimates
+      # Uncalibrated SVM scores are NOT true probabilities - use calibration for production
+      calibrate: true  # Default: true - enables CalibratedClassifierCV
+      calibration_method: "sigmoid"  # Options: "sigmoid" (default) or "isotonic"
+
+  linear_svm_bigrams:
+    enabled: true
+    name: "TF-IDF bigrams + SVM"
+    class: "LinearSVMBigrams"
+    params:
+      # Calibration: enabled by default for reliable probability estimates
+      # Uncalibrated SVM scores are NOT true probabilities - use calibration for production
+      calibrate: true  # Default: true - enables CalibratedClassifierCV
+      calibration_method: "sigmoid"  # Options: "sigmoid" (default) or "isotonic"
+
+  transformer_logreg:
+    enabled: true
+    name: "MiniLM + LogReg"
+    class: "TransformerLogReg"
+    params:
+      n_jobs: 2  # Capped for full dataset stability (default was -1, which oversubscribes RAM/cores)
+      cv: 3  # Reduced from 5 for full dataset stability
+
+  embedding_logreg:
+    enabled: true
+    name: "Embedding + LogReg (SBERT)"
+    class: "EmbeddingLogReg"
+    params:
+      # Embedding configuration:
+      # - backend: Selected via model.embedding_backend in the main config
+      # - model: Resolved embedding model id (SBERT/OpenAI/Ollama)
+      backend: "${resolved.embedding_backend}"
+      model: "${resolved.embedding_model}"
+
+  embedding_logreg_qwen:
+    enabled: true
+    name: "Embedding + LogReg (Qwen/Ollama)"
+    class: "EmbeddingLogReg"
+    params:
+      # Force Ollama/Qwen embeddings via litellm + Ollama, independent of the
+      # global embedding backend. This ensures both training and evaluation use
+      # the same Ollama/Qwen embedding model.
+      backend: "ollama"
+      # Explicit Qwen embedding model served via Ollama.
+      model: "ollama/qwen3-embedding:latest"
+
+  # RAG-based models
+  rag_kmajority:
+    enabled: true
+    name: "RAG-kMajority (SBERT)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "kmajority"
+      top_k: "${model.rag_top_k}"
+      # Embedding backend is derived from the FAISS index; config does not need to
+      # specify backend or model here.
+
+  rag_kmajority_qwen:
+    enabled: true
+    name: "RAG-kMajority (Qwen/Ollama)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "kmajority"
+      top_k: "${model.rag_top_k}"
+      # Retriever will pick up the Ollama/Qwen index; classifier will still use
+      # the same FAISS-backed store, so no additional flags are needed here.
+
+  rag_centroid:
+    enabled: true
+    name: "RAG-CentroidNN"
+    class: "RagSklearnAdapter"
+    params:
+      method: "centroid"
+      top_k: "${model.rag_top_k}"
+
+  rag_llm_local:
+    enabled: true  # TF-IDF retrieval + LLM (default prompt)
+    name: "RAG-LLM (TF-IDF, default prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # LLM backend/model are resolved via providers.* and resolved.* in the main config.
+      model: "${resolved.llm_model}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
+      # Prompt configuration references named styles; templates are managed centrally.
+      prompt:
+        style: "default"
+
+  rag_llm_local_short:
+    enabled: true  # TF-IDF retrieval + LLM (short prompt)
+    name: "RAG-LLM (TF-IDF, short prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${resolved.llm_model}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
+      prompt:
+        style: "short"
+
+  rag_llm_local_n8n:
+    enabled: true  # TF-IDF retrieval + LLM (n8n prompt)
+    name: "RAG-LLM (TF-IDF, n8n prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${resolved.llm_model}"
+      # TF-IDF retrieval: backend should be null/None (not resolved.llm_backend)
+      backend: null
+      prompt:
+        style: "n8n_prompt"
+
+  rag_llm_openai:
+    enabled: false  # Disabled - too slow for full dataset. Enable for quick testing only.
+    name: "RAG-LLM (OpenAI-embeddings)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      # Explicit OpenAI override for experimentation
+      model: "gpt-4o-mini"
+      backend: "openai"
+
+  rag_llm_sbert_embeddings:
+    enabled: true
+    name: "RAG-LLM (SBERT embeddings, default prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${resolved.llm_model}"
+      backend: "sbert"
+      prompt:
+        style: "default"
+
+  rag_llm_ollama_embeddings:
+    enabled: true
+    name: "RAG-LLM (Qwen embeddings, default prompt)"
+    class: "RagSklearnAdapter"
+    params:
+      method: "llm"
+      top_k: "${model.rag_top_k}"
+      model: "${resolved.llm_model}"
+      backend: "ollama"
+      prompt:
+        style: "default"

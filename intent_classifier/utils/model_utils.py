@@ -4,7 +4,9 @@ This module provides utility functions for working with serialized models in dif
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
+
+from intent_classifier.utils.slugify import slugify_model_id
 
 # Standard model file names to check
 ALLOWED_MODEL_FILENAMES = [
@@ -17,7 +19,7 @@ ALLOWED_MODEL_FILENAMES = [
 ]
 
 
-def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[str]:
+def find_model_file(model_dir: str | Path, model_name: str) -> str | None:
     """Find a model file in the specified directory under the model name subdirectory.
 
     This function checks for various common model file formats (pkl, joblib) and
@@ -25,7 +27,7 @@ def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[st
 
     Args:
         model_dir: Base directory containing model subdirectories
-        model_name: Name of the model subdirectory
+        model_name: Name of the model subdirectory (will be sanitized for filesystem use)
 
     Returns:
         Path to the model file as a string, or None if no model file is found
@@ -34,7 +36,9 @@ def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[st
         >>> path = find_model_file("models", "naive_bayes")
         >>> # Will look for models/naive_bayes/model.pkl, models/naive_bayes/model.joblib, etc.
     """
-    base_dir = Path(model_dir) / model_name
+    # Slugify model name to match how directories are created
+    safe_dir_name = slugify_model_id(model_name)
+    base_dir = Path(model_dir) / safe_dir_name
 
     if not base_dir.exists():
         return None
@@ -47,32 +51,7 @@ def find_model_file(model_dir: Union[str, Path], model_name: str) -> Optional[st
     return None
 
 
-def scan_model_directory(model_dir: Union[str, Path]) -> List[str]:
-    """Scan a directory for model subdirectories containing model files.
-
-    Args:
-        model_dir: Base directory to scan
-
-    Returns:
-        List of model names (subdirectory names) that contain valid model files
-    """
-    base_dir = Path(model_dir)
-    if not base_dir.exists():
-        return []
-
-    model_names = []
-
-    for item in base_dir.iterdir():
-        if item.is_dir():
-            for filename in ALLOWED_MODEL_FILENAMES:
-                if (item / filename).exists():
-                    model_names.append(item.name)
-                    break
-
-    return model_names
-
-
-def load_model_paths(models: Dict[str, Any], model_dir: Union[str, Path]) -> Dict[str, str]:
+def load_model_paths(models: dict[str, Any], model_dir: str | Path) -> dict[str, str]:
     """Load model paths from model directory for all models in the provided dictionary.
 
     This function takes a dictionary of models (as returned by load_models_from_config)
@@ -92,7 +71,7 @@ def load_model_paths(models: Dict[str, Any], model_dir: Union[str, Path]) -> Dic
         >>> # Result can be used with run_prediction
     """
     model_paths = {}
-    for name in models.keys():
+    for name in models:
         path = find_model_file(model_dir, name)
         if path:
             model_paths[name] = path

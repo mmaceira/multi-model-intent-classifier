@@ -29,11 +29,14 @@ import gradio as gr
 import yaml
 from sentence_transformers import SentenceTransformer
 
+from intent_classifier.utils.paths import get_config_path
+
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-config_path = project_root / "config" / config_file
+# Use centralized path resolution so both "config/..." and absolute paths work.
+config_file = os.environ.get("CONFIG_FILE", "config/experiments/clinc150/tiny.yaml")
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
@@ -53,12 +56,16 @@ def substitute_vars(value: str, cfg: dict) -> str:
 
 
 # Resolve paths from config
-embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
-embeddings_path = project_root / embeddings_path
+embeddings_path_str = substitute_vars(config["paths"]["embeddings_dir"], config)
+embeddings_path = project_root / embeddings_path_str
+
+# Allow overriding the embeddings root when launching the demo
+_default_embeddings_root = str(embeddings_path)
+EMBEDDINGS_ROOT = os.environ.get("EMBEDDINGS_PATH", _default_embeddings_root)
 
 # Default paths
-DEFAULT_INDEX_PATH = str(embeddings_path / "sbert" / "index.faiss")
-DEFAULT_META_PATH = str(embeddings_path / "sbert" / "meta.jsonl")
+DEFAULT_INDEX_PATH = str(Path(EMBEDDINGS_ROOT) / "sbert" / "index.faiss")
+DEFAULT_META_PATH = str(Path(EMBEDDINGS_ROOT) / "sbert" / "meta.jsonl")
 DEFAULT_MODEL_NAME = config.get("model", {}).get(
     "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
 )
@@ -69,7 +76,7 @@ def load_index_and_meta(index_path: str, meta_path: str):
     try:
         index = faiss.read_index(index_path)
         meta = []
-        with open(meta_path, "r") as f:
+        with open(meta_path) as f:
             for line in f:
                 meta.append(json.loads(line))
         return index, meta
@@ -114,7 +121,7 @@ def search_similar_documents(
 
         return "\n\n".join(output)
     except Exception as e:
-        return f"Error during search: {str(e)}"
+        return f"Error during search: {e!s}"
 
 
 def create_demo():

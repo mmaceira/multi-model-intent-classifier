@@ -1,0 +1,33 @@
+## Prompt styles used by RAG/LLM components.
+##
+## The concrete prompt templates live under
+## `intent_classifier/rag/rag_llm/prompts/{style}/...`. This file defines
+## the stable style identifiers that experiments and models can reference.
+
+prompts:
+  default:
+    description: "Full instructions with rich context and examples for production runs."
+    styles:
+      system_singlelabel: "intent_classifier/rag/rag_llm/prompts/default/system_singlelabel.txt"
+      user_singlelabel: "intent_classifier/rag/rag_llm/prompts/default/user_singlelabel.txt"
+      system_multilabel: "intent_classifier/rag/rag_llm/prompts/default/system_multilabel.txt"
+      user_multilabel: "intent_classifier/rag/rag_llm/prompts/default/user_multilabel.txt"
+    style_id: "default"
+
+  short:
+    description: "Concise instructions for faster/cheaper inference."
+    styles:
+      system_singlelabel: "intent_classifier/rag/rag_llm/prompts/short/system_singlelabel.txt"
+      user_singlelabel: "intent_classifier/rag/rag_llm/prompts/short/user_singlelabel.txt"
+      system_multilabel: "intent_classifier/rag/rag_llm/prompts/short/system_multilabel.txt"
+      user_multilabel: "intent_classifier/rag/rag_llm/prompts/short/user_multilabel.txt"
+    style_id: "short"
+
+  n8n_prompt:
+    description: "Email cleaning + intent classification (Catalan) tuned for n8n flows."
+    styles:
+      system_singlelabel: "intent_classifier/rag/rag_llm/prompts/n8n_prompt/system_singlelabel.txt"
+      user_singlelabel: "intent_classifier/rag/rag_llm/prompts/n8n_prompt/user_singlelabel.txt"
+      system_multilabel: "intent_classifier/rag/rag_llm/prompts/n8n_prompt/system_multilabel.txt"
+      user_multilabel: "intent_classifier/rag/rag_llm/prompts/n8n_prompt/user_multilabel.txt"
+    style_id: "n8n_prompt"

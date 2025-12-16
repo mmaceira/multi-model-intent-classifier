@@ -1,0 +1,1 @@
+Classificador multi-etiqueta. Retorna NOMÉS JSON.

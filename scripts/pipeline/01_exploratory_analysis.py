@@ -1,25 +1,26 @@
 #!/usr/bin/env python
 """
-CLINC150 Intent Classification - Exploratory Data Analysis
+Intent Classification - Exploratory Data Analysis
 
-This script performs detailed exploratory data analysis on the CLINC150 intent
-classification dataset. We'll analyze various aspects of the data to better
-understand its characteristics and potential challenges.
+This script performs detailed exploratory data analysis on intent classification
+datasets. It analyzes various aspects of the data to better understand its
+characteristics and potential challenges.
 """
 
-import logging
 import os
 import sys
-import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.warnings_config import configure_logging
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -40,22 +41,23 @@ from intent_classifier.exploration import (  # noqa: E402
 )
 
 # Configure logging and warnings
-warnings.filterwarnings("ignore")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+configure_logging(level="INFO", suppress_warnings=True)
 
 
 def main():
     """Main function to perform exploratory data analysis."""
 
+    dataset_name = config_vars.get("DATASET_NAME", "clinc150")
     print("=" * 60)
-    print("CLINC150 Intent Classification - Exploratory Data Analysis")
+    print(f"Intent Classification - Exploratory Data Analysis ({dataset_name})")
     print("=" * 60)
 
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=dataset_name,
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -74,6 +76,25 @@ def main():
     )
     print(f"Test set contains {len(X_test)} utterances")
 
+    # Print examples of X and y
+    print("\n" + "=" * 60)
+    print("Data Examples")
+    print("=" * 60)
+    print("\nSample training examples (X and y):")
+    from intent_classifier.utils.label_utils import is_multilabel
+
+    is_multilabel_data = is_multilabel(y_train)
+    num_examples = min(5, len(X_train))
+    for i in range(num_examples):
+        print(f"\nExample {i + 1}:")
+        print(f"  X: {X_train[i][:200]}{'...' if len(X_train[i]) > 200 else ''}")
+        if is_multilabel_data:
+            print(f"  y: {y_train[i]}")
+        else:
+            print(f"  y: {y_train[i]}")
+    if len(X_train) > num_examples:
+        print(f"\n... and {len(X_train) - num_examples} more examples")
+
     # 0. Dataset Overview Statistics
     print("\n" + "=" * 60)
     print("0. Dataset Overview")
@@ -81,24 +102,44 @@ def main():
 
     from collections import Counter
 
-    train_class_counts = Counter(y_train)
-    test_class_counts = Counter(y_test)
+    from intent_classifier.utils.label_utils import is_multilabel
+
+    # Handle multi-label data for statistics
+    if is_multilabel(y_train):
+        # Multi-label: flatten all tags for counting
+        train_labels_flat = []
+        for label_list in y_train:
+            train_labels_flat.extend(label_list)
+        test_labels_flat = []
+        for label_list in y_test:
+            test_labels_flat.extend(label_list)
+        train_class_counts = Counter(train_labels_flat)
+        test_class_counts = Counter(test_labels_flat)
+        train_classes_set = set(train_labels_flat)
+        test_classes_set = set(test_labels_flat)
+    else:
+        # Single-label: use as-is
+        train_class_counts = Counter(y_train)
+        test_class_counts = Counter(y_test)
+        train_classes_set = set(y_train)
+        test_classes_set = set(y_test)
 
     # Create summary statistics
     summary_stats = {
         "dataset_name": config_vars.get("DATASET_NAME", "clinc150"),
         "use_oos": config_vars.get("DATASET_USE_OOS", False),
+        "multilabel": config_vars.get("DATASET_MULTILABEL", False),
         "max_classes": config_vars.get("DATASET_MAX_CLASSES"),
         "max_train_samples": config_vars.get("DATASET_MAX_TRAIN_SAMPLES"),
         "max_test_samples": config_vars.get("DATASET_MAX_TEST_SAMPLES"),
         "total_classes": len(classes),
         "train_samples": len(X_train),
         "test_samples": len(X_test),
-        "train_classes": len(set(y_train)),
-        "test_classes": len(set(y_test)),
-        "classes_in_both": len(set(y_train) & set(y_test)),
-        "classes_only_train": len(set(y_train) - set(y_test)),
-        "classes_only_test": len(set(y_test) - set(y_train)),
+        "train_classes": len(train_classes_set),
+        "test_classes": len(test_classes_set),
+        "classes_in_both": len(train_classes_set & test_classes_set),
+        "classes_only_train": len(train_classes_set - test_classes_set),
+        "classes_only_test": len(test_classes_set - train_classes_set),
         "min_samples_per_class_train": (
             min(train_class_counts.values()) if train_class_counts else 0
         ),
@@ -155,8 +196,21 @@ def main():
     print("=" * 60)
     print("\nAnalyzing the distribution of intents in our dataset to understand class imbalance...")
 
+    # For multi-label data, flatten labels first (count all tags across all samples)
+    from intent_classifier.utils.label_utils import is_multilabel
+
+    if is_multilabel(y_train):
+        # Multi-label: flatten all tags for frequency analysis
+        flattened_labels = []
+        for label_list in y_train:
+            flattened_labels.extend(label_list)
+        labels_for_analysis = flattened_labels
+    else:
+        # Single-label: use as-is
+        labels_for_analysis = y_train
+
     class_stats = class_frequency(
-        labels=y_train,
+        labels=labels_for_analysis,
         plot=True,
         save_path=os.path.join(DATA_EXPLORATION_DIR, "class_distribution.png"),
         top_n=len(classes),  # Show all intents

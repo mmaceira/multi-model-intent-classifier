@@ -1,0 +1,54 @@
+### Run Overview
+
+- **Run ID**: `{run_id}`
+- **Dataset**: `{dataset_name}`
+- **Variant**: `{variant_name}`
+- **Label type**: `{label_type}`
+- **Multilabel**: `{multilabel}`
+
+### Dataset Summary
+
+- **Train samples**: `{train_samples}`
+- **Test samples**: `{test_samples}`
+- **Total classes**: `{total_classes}`
+- **Classes in train**: `{train_classes}`
+- **Classes in test**: `{test_classes}`
+- **Classes in both splits**: `{classes_in_both}`
+
+Additional statistics (min/max/mean per-class counts) are available in `dataset/dataset_summary.csv`.
+
+### Models in this Run
+
+{models_section}
+
+Each model links to a dedicated model card under `models/<model_id>/model_card.md`.
+
+### Top Metrics Snapshot
+
+The table below summarises the main test-set metrics for all models in this run
+using the cross-model summary in `compare/summary_metrics.csv`.
+
+{metrics_table}
+
+### Configuration & Pipeline
+
+- **Embedding backend**: `{embedding_backend}`
+- **LLM backend**: `{llm_backend}`
+- **RAG top-k**: `{rag_top_k}`
+- **Prompt style**: `{prompt_style}`
+
+Key artefact locations (relative to the run root `output/runs/{run_id}`):
+
+- **Dataset analysis**: `dataset/`
+- **Features / embeddings**: `features/`
+- **Trained models**: `models/`
+- **Per-model evaluation artefacts**: `eval/`
+- **Cross-model comparison**: `compare/`
+- **LLM / RAG logs**: `llm_logs/`
+- **Meta & reproducibility**: `meta/`
+
+### Notes & Caveats
+
+- **Class imbalance**: Check `dataset/train_test_class_comparison.csv` for skewed intents.
+- **Low-support labels**: Metrics for rare intents can be unstable; favour macro/weighted scores.
+- **OOS handling**: If `use_oos` is enabled, out-of-scope examples are included as a special label.

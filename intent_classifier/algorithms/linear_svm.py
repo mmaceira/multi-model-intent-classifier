@@ -16,13 +16,15 @@ import numpy as np
 from scipy.special import softmax
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.svm import LinearSVC
 
 from intent_classifier.model import TextClassifier
+from intent_classifier.utils.model_registry import register_model
 
 
+@register_model("LinearSVMClassifier")
 class LinearSVMClassifier(TextClassifier):
-    _expects_vectors = False
     """TF-IDF + Linear SVM classifier.
 
     This class implements a text classifier using TF-IDF features and
@@ -38,6 +40,8 @@ class LinearSVMClassifier(TextClassifier):
         >>> clf.fit(X_train, y_train)
         >>> y_pred = clf.predict(X_test)
     """
+
+    _expects_vectors = False
 
     def __init__(
         self,
@@ -75,24 +79,48 @@ class LinearSVMClassifier(TextClassifier):
         vectorizer = TfidfVectorizer(max_features=max_features, stop_words="english")
         super().__init__(vectorizer)
 
-        # Initialize classifier
-        self.clf = LinearSVC(C=C, class_weight=class_weight)
+        # Initialize base classifier
+        # Note: For multi-label, this will be wrapped with OneVsRestClassifier in _fit_model()
+        self._base_clf = LinearSVC(C=C, class_weight=class_weight)
+        self.clf = None  # Will be set in _fit_model() based on label format (single vs multi-label)
         self.classes_ = None
-        self._calibrated_clf = None
+        self._calibrated_clf = None  # Calibrated classifier (only for single-label)
 
     def _fit_model(self, X_vec, y):
-        """Train the SVM classifier.
+        """Train the SVM classifier (bigrams variant).
 
         Args:
-            X_vec: Vectorized text features
-            y: Labels
+            X_vec: Vectorized text features with shape (n_samples, n_features)
+            y: Target labels in sklearn format:
+                - Single-label: array of shape (n_samples,) with string labels
+                - Multi-label: binary matrix of shape (n_samples, n_classes) with 0/1 values
         """
+        # ========================================================================
+        # STEP 1: Wrap base classifier for multi-label support if needed
+        # ========================================================================
+        # LinearSVC doesn't natively support multi-label, so we wrap it with
+        # OneVsRestClassifier which trains one binary classifier per class
+        if self._is_multilabel:
+            # MULTI-LABEL PATH: Wrap with OneVsRestClassifier
+            self.clf = OneVsRestClassifier(self._base_clf)
+        else:
+            # SINGLE-LABEL PATH: Use base classifier directly
+            self.clf = self._base_clf
+
+        # ========================================================================
+        # STEP 2: Train the classifier
+        # ========================================================================
         self.clf.fit(X_vec, y)
-        # Keep scikit‑learn compatibility
+
+        # Keep scikit‑learn compatibility (for API compatibility)
         self.classes_ = getattr(self.clf, "classes_", None)
 
-        # Fit calibrated classifier if calibration is enabled
-        if self.calibrate:
+        # ========================================================================
+        # STEP 3: Fit calibrated classifier for probability estimation (single-label only)
+        # ========================================================================
+        # Note: Calibration is only supported for single-label classification
+        # Multi-label uses OneVsRestClassifier's built-in probability estimates
+        if self.calibrate and not self._is_multilabel:
             self._calibrated_clf = CalibratedClassifierCV(
                 self.clf, method=self.calibration_method, cv=3
             )
@@ -162,8 +190,8 @@ class LinearSVMClassifier(TextClassifier):
         return probabilities
 
 
+@register_model("LinearSVMBigrams")
 class LinearSVMBigrams(TextClassifier):
-    _expects_vectors = False
     """TF-IDF with bigrams + Linear SVM classifier.
 
     This class extends the basic LinearSVMClassifier by using both
@@ -179,6 +207,8 @@ class LinearSVMBigrams(TextClassifier):
         >>> clf.fit(X_train, y_train)
         >>> y_pred = clf.predict(X_test)
     """
+
+    _expects_vectors = False
 
     def __init__(
         self,
@@ -218,24 +248,48 @@ class LinearSVMBigrams(TextClassifier):
         )
         super().__init__(vectorizer)
 
-        # Initialize classifier
-        self.clf = LinearSVC(C=C, class_weight=class_weight)
+        # Initialize base classifier
+        # Note: For multi-label, this will be wrapped with OneVsRestClassifier in _fit_model()
+        self._base_clf = LinearSVC(C=C, class_weight=class_weight)
+        self.clf = None  # Will be set in _fit_model() based on label format (single vs multi-label)
         self.classes_ = None
-        self._calibrated_clf = None
+        self._calibrated_clf = None  # Calibrated classifier (only for single-label)
 
     def _fit_model(self, X_vec, y):
-        """Train the SVM classifier.
+        """Train the SVM classifier (bigrams variant).
 
         Args:
-            X_vec: Vectorized text features
-            y: Labels
+            X_vec: Vectorized text features with shape (n_samples, n_features)
+            y: Target labels in sklearn format:
+                - Single-label: array of shape (n_samples,) with string labels
+                - Multi-label: binary matrix of shape (n_samples, n_classes) with 0/1 values
         """
+        # ========================================================================
+        # STEP 1: Wrap base classifier for multi-label support if needed
+        # ========================================================================
+        # LinearSVC doesn't natively support multi-label, so we wrap it with
+        # OneVsRestClassifier which trains one binary classifier per class
+        if self._is_multilabel:
+            # MULTI-LABEL PATH: Wrap with OneVsRestClassifier
+            self.clf = OneVsRestClassifier(self._base_clf)
+        else:
+            # SINGLE-LABEL PATH: Use base classifier directly
+            self.clf = self._base_clf
+
+        # ========================================================================
+        # STEP 2: Train the classifier
+        # ========================================================================
         self.clf.fit(X_vec, y)
-        # Keep scikit‑learn compatibility
+
+        # Keep scikit‑learn compatibility (for API compatibility)
         self.classes_ = getattr(self.clf, "classes_", None)
 
-        # Fit calibrated classifier if calibration is enabled
-        if self.calibrate:
+        # ========================================================================
+        # STEP 3: Fit calibrated classifier for probability estimation (single-label only)
+        # ========================================================================
+        # Note: Calibration is only supported for single-label classification
+        # Multi-label uses OneVsRestClassifier's built-in probability estimates
+        if self.calibrate and not self._is_multilabel:
             self._calibrated_clf = CalibratedClassifierCV(
                 self.clf, method=self.calibration_method, cv=3
             )

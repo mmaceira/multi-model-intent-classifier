@@ -1,0 +1,47 @@
+# Dataset‑level configuration for NLU+ multi‑label benchmark.
+#
+# Experiment‑specific overrides live under
+# `config/experiments/nlu_plus/{variant}.yaml`.
+
+dataset:
+  name: "nlu_plus"
+  use_oos: false
+  multilabel: true
+
+loader:
+  # Dataset loader configuration for NLU++
+  # This section defines how to load the dataset from its source.
+
+  source:
+    type: "github_json"  # Options: huggingface, github_json, csv, local_json
+    base_url: "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/master/nlupp/data"
+    domains: ["banking", "hotels"]  # Subdirectories to load from
+    file_pattern: "fold{fold_num}.json"  # Pattern for files to load
+    fold_range: [0, 19]  # Range of fold numbers (inclusive)
+
+  # Field mappings - how to extract text and labels from the data
+  fields:
+    text: ["text", "utterance"]  # Try these field names in order
+    label: ["intents", "intent", "label"]  # Try these field names in order (multilabel)
+
+  # Dataset characteristics
+  multilabel: true  # Multi-label dataset
+  has_oos: false
+
+  # Split configuration
+  splits:
+    type: "create"  # Need to create train/val/test splits from combined data
+    test_size: 0.2
+    val_size: 0.1  # Relative to remaining data after test split
+    stratify: false  # Can't stratify multilabel data
+
+  # Optional filters and processing
+  filters:
+    min_samples_per_label: 5  # Filter out labels with < 5 samples
+
+  # Label processing
+  label_processing:
+    # Ensure labels are always lists (for multilabel)
+    ensure_list: true
+    # Convert non-list labels to single-item lists
+    normalize_to_list: true

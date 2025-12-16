@@ -10,8 +10,12 @@ Functions:
 
 import logging
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple, Type, Union
+from typing import Any, ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def with_retry(
@@ -19,9 +23,9 @@ def with_retry(
     initial_delay: float = 1.0,
     max_delay: float = 10.0,
     backoff_factor: float = 2.0,
-    exceptions: Union[Type[Exception], Tuple[Type[Exception], ...]] = Exception,
-    logger: Optional[logging.Logger] = None,
-) -> Callable:
+    exceptions: type[Exception] | tuple[type[Exception], ...] = Exception,
+    logger: logging.Logger | None = None,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator that adds retry logic to a function.
 
     This decorator implements exponential backoff retry logic for functions
@@ -80,11 +84,11 @@ def with_retry(
     ...     pass
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             delay = initial_delay
-            last_exception = None
+            last_exception: BaseException | None = None
 
             for attempt in range(max_retries + 1):
                 try:
@@ -95,19 +99,21 @@ def with_retry(
                         if logger:
                             logger.error(
                                 f"Function {func.__name__} failed after {max_retries} retries. "
-                                f"Last error: {str(e)}"
+                                f"Last error: {e!s}"
                             )
                         raise
 
                     if logger:
                         logger.warning(
-                            f"Retry {attempt + 1}/{max_retries + 1} for {func.__name__}: {str(e)}"
+                            f"Retry {attempt + 1}/{max_retries + 1} for {func.__name__}: {e!s}"
                         )
 
                     time.sleep(delay)
                     delay = min(delay * backoff_factor, max_delay)
 
-            raise last_exception  # This should never be reached due to the raise in the loop
+            if last_exception is not None:
+                raise last_exception  # This should never be reached due to the raise in the loop
+            raise RuntimeError("Unexpected: retry loop completed without exception or return")
 
         return wrapper
 

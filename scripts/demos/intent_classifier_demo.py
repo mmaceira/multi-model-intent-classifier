@@ -27,7 +27,7 @@ import json
 import os
 import pickle
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import faiss
 import gradio as gr
@@ -35,7 +35,8 @@ import joblib
 import numpy as np
 import yaml
 
-from intent_classifier.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_model_file
+from intent_classifier.utils.model_utils import find_model_file
+from intent_classifier.utils.paths import get_config_path
 
 # --------------------------------------------------------------------------- #
 # 0. Project root & imports                                                   #
@@ -44,13 +45,14 @@ from intent_classifier.utils.model_utils import ALLOWED_MODEL_FILENAMES, find_mo
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-config_path = project_root / "config" / config_file
+# Use centralized path resolution so both "config/..." and absolute paths work.
+config_file = os.environ.get("CONFIG_FILE", "config/experiments/clinc150/tiny.yaml")
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
 
-def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+def substitute_vars(value: Any, cfg: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config."""
     if isinstance(value, str) and "${" in value:
         import re
@@ -69,14 +71,18 @@ run_name = config["general"]["run_name"]
 models_path = substitute_vars(config["paths"]["models_dir"], config)
 embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
 
-# Convert to absolute paths
-DEFAULT_MODELS_PATH = str(project_root / models_path)
-DEFAULT_EMBEDDINGS_PATH = str(project_root / embeddings_path)
+# Convert to absolute paths, but allow environment overrides when launching the demo
+_default_models_path = str(project_root / models_path)
+_default_embeddings_path = str(project_root / embeddings_path)
+
+DEFAULT_MODELS_PATH = os.environ.get("MODELS_PATH", _default_models_path)
+DEFAULT_EMBEDDINGS_PATH = os.environ.get("EMBEDDINGS_PATH", _default_embeddings_path)
 
 # --------------------------------------------------------------------------- #
-# 1. Model‑info table                                                         #
+# 1. Model‑info table (kept in sync with config/algorithm/models_config.yaml) #
 # --------------------------------------------------------------------------- #
 MODELS_INFO = {
+    # Text classification models
     "naive_bayes": {
         "name": "Naive Bayes",
         "description": (
@@ -89,55 +95,87 @@ MODELS_INFO = {
     "linear_svm": {
         "name": "Linear SVM",
         "description": (
-            "Support Vector Machine with linear kernel. " "Good balance of accuracy and speed."
+            "Support Vector Machine with linear kernel. Good balance of accuracy and speed."
         ),
         "dir": "Linear SVM",
         "type": "classifier",
     },
-    "tfidf_svm": {
-        "name": "TF-IDF + SVM",
+    "linear_svm_bigrams": {
+        "name": "TF-IDF bigrams + SVM",
         "description": (
-            "SVM classifier using TF-IDF bigram features. "
-            "Strong performance on intent classification."
+            "Linear SVM trained on TF-IDF bigram features. "
+            "Stronger performance for nuanced intent expressions."
         ),
         "dir": "TF-IDF bigrams + SVM",
         "type": "classifier",
     },
-    "minilm_logreg": {
+    "transformer_logreg": {
         "name": "MiniLM + LogReg",
         "description": (
-            "Transformer embeddings with Logistic Regression. "
-            "Leverages semantic understanding from MiniLM."
+            "MiniLM transformer embeddings with Logistic Regression. "
+            "High-accuracy semantic intent classification."
         ),
         "dir": "MiniLM + LogReg",
         "type": "classifier",
     },
-    "rag_centroid": {
-        "name": "RAG CentroidNN",
+    "embedding_logreg": {
+        "name": "Embedding + LogReg",
         "description": (
-            "Retrieval Augmented Generation using centroid-based " "nearest neighbors search."
+            "Generic embedding backend (SBERT/OpenAI) with Logistic Regression. "
+            "Use for flexible, backend-agnostic intent classification."
         ),
-        "dir": "RAG-CentroidNN",
-        "type": "rag",
+        "dir": "Embedding + LogReg",
+        "type": "classifier",
     },
+    # RAG-based models
     "rag_kmajority": {
-        "name": "RAG k-Majority",
+        "name": "RAG-kMajority",
         "description": "RAG model with k-majority voting to determine the most relevant intents.",
         "dir": "RAG-kMajority",
         "type": "rag",
     },
+    "rag_centroid": {
+        "name": "RAG-CentroidNN",
+        "description": (
+            "Retrieval Augmented Generation using centroid-based nearest neighbors search."
+        ),
+        "dir": "RAG-CentroidNN",
+        "type": "rag",
+    },
     "rag_llm_local": {
-        "name": "RAG LLM (Local)",
-        "description": "RAG model using locally computed embeddings for document retrieval.",
-        "dir": "RAG-LLM (local-embeddings)",
+        "name": "RAG-LLM (TF-IDF, default prompt)",
+        "description": "RAG-LLM using TF-IDF retrieval and the default LLM prompt.",
+        "dir": "RAG-LLM (TF-IDF, default prompt)",
+        "type": "rag",
+    },
+    "rag_llm_local_short": {
+        "name": "RAG-LLM (TF-IDF, short prompt)",
+        "description": "RAG-LLM using TF-IDF retrieval and a concise LLM prompt.",
+        "dir": "RAG-LLM (TF-IDF, short prompt)",
+        "type": "rag",
+    },
+    "rag_llm_local_n8n": {
+        "name": "RAG-LLM (TF-IDF, n8n prompt)",
+        "description": "RAG-LLM using TF-IDF retrieval and the n8n-style email prompt.",
+        "dir": "RAG-LLM (TF-IDF, n8n prompt)",
         "type": "rag",
     },
     "rag_llm_openai": {
-        "name": "RAG LLM (OpenAI)",
-        "description": (
-            "RAG model using OpenAI embeddings for improved semantic search capabilities."
-        ),
+        "name": "RAG-LLM (OpenAI-embeddings)",
+        "description": ("RAG model using OpenAI embeddings and an OpenAI LLM for classification."),
         "dir": "RAG-LLM (OpenAI-embeddings)",
+        "type": "rag",
+    },
+    "rag_llm_sbert_embeddings": {
+        "name": "RAG-LLM (SBERT embeddings, default prompt)",
+        "description": "RAG-LLM using SBERT FAISS embeddings and the default LLM prompt.",
+        "dir": "RAG-LLM (SBERT embeddings, default prompt)",
+        "type": "rag",
+    },
+    "rag_llm_ollama_embeddings": {
+        "name": "RAG-LLM (Qwen embeddings, default prompt)",
+        "description": "RAG-LLM using Qwen/Ollama FAISS embeddings and the default LLM prompt.",
+        "dir": "RAG-LLM (Qwen embeddings, default prompt)",
         "type": "rag",
     },
 }
@@ -153,7 +191,7 @@ class DictModelWrapper:
     training code that persisted ``{'vectorizer': v, 'classifier': clf}``
     instead of an actual ``Pipeline`` object."""
 
-    def __init__(self, obj: Dict[str, Any]):
+    def __init__(self, obj: dict[str, Any]):
         # Heuristically locate components
         vec = obj.get("vectorizer") or obj.get("tfidf") or obj.get("vect")
         clf = obj.get("classifier") or obj.get("model") or obj.get("clf")
@@ -161,7 +199,7 @@ class DictModelWrapper:
         if vec is None or clf is None:
             raise ValueError(
                 "Cannot wrap dictionary model – expected keys like "
-                "`vectorizer` + `classifier`, got: %s" % list(obj.keys())
+                f"`vectorizer` + `classifier`, got: {list(obj.keys())}"
             )
         self._vectorizer = vec
         self._classifier = clf
@@ -169,11 +207,11 @@ class DictModelWrapper:
         self.classes_ = getattr(clf, "classes_", None)
 
     # --- scikit‑learn‑style API ------------------------------------------- #
-    def predict(self, texts: List[str]):
+    def predict(self, texts: list[str]):
         X = self._vectorizer.transform(texts)
         return self._classifier.predict(X)
 
-    def predict_proba(self, texts: List[str]):
+    def predict_proba(self, texts: list[str]):
         if hasattr(self._classifier, "predict_proba"):
             X = self._vectorizer.transform(texts)
             return self._classifier.predict_proba(X)
@@ -184,23 +222,14 @@ class DictModelWrapper:
         return getattr(self._classifier, item)
 
 
-def _resolve_model_file(model_dir: Path) -> Optional[Path]:
-    """Return the first existing model file in *model_dir*."""
-    for fname in ALLOWED_MODEL_FILENAMES:
-        f = model_dir / fname
-        if f.exists():
-            return f
-    return None
-
-
 # Simple cache so we don't re‑load models all the time
-_CACHE: Dict[str, Any] = {}
+_CACHE: dict[str, Any] = {}
 
 
-def scan_models_directory(models_path: str | os.PathLike) -> Dict[str, Dict[str, Any]]:
+def scan_models_directory(models_path: str | os.PathLike) -> dict[str, dict[str, Any]]:
     """Return a mapping *model_id → info dict* for every model that is actually
     available on disk (accepts both *.joblib* and *.pkl*)."""
-    models: Dict[str, Dict[str, Any]] = {}
+    models: dict[str, dict[str, Any]] = {}
     root = Path(models_path).expanduser().resolve()
     if not root.exists():
         print(f"[scan_models_directory] models_path does not exist: {root}")
@@ -268,7 +297,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
         # Load passages from meta.jsonl
         passages = []
         if meta_path.exists():
-            with open(meta_path, "r") as f:
+            with open(meta_path) as f:
                 for line in f:
                     try:
                         meta = json.loads(line)
@@ -288,7 +317,6 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                 # If this is a RagSklearnAdapter with no rag component, initialize it
                 if hasattr(classifier_obj, "rag") and classifier_obj.rag is None:
                     print(f"[load_model] Initializing RAG component for {model_id}")
-                    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
                     from intent_classifier.rag import (
                         load_centroid,
                         load_kmajority,
@@ -296,6 +324,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         set_artifacts_dir,
                     )
                     from intent_classifier.rag.vector_store import VectorStore
+                    from intent_classifier.utils.embeddings import EmbeddingGenerator
 
                     # Set embeddings directory before loading RAG models
                     set_artifacts_dir(embeddings_path, embeddings_path)
@@ -316,7 +345,15 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         )
                     else:  # LLM-based RAG
                         if "openai" in model_id:
-                            embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                            api_key = os.getenv("OPENAI_API_KEY")
+                            if not api_key:
+                                raise ValueError(
+                                    "OPENAI_API_KEY environment variable must be set "
+                                    "for OpenAI embeddings"
+                                )
+                            embedder = EmbeddingGenerator(
+                                api_key=api_key, model="text-embedding-3-small", batch_size=50
+                            )
                             rag_model = load_llm(
                                 top_k=top_k,
                                 model=config.get("model", {}).get(
@@ -329,7 +366,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                         else:
                             # For local embeddings, use the same model that was used
                             # to create the index
-                            def embedder(texts):
+                            def local_embedder(texts):
                                 return VectorStore.embed(
                                     config.get("model", {}).get(
                                         "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
@@ -342,7 +379,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
                                 model=config.get("model", {}).get(
                                     "llm_model", "ollama/llama3.1:8b"
                                 ),
-                                embedder=embedder,
+                                embedder=local_embedder,
                                 use_openai=False,
                                 artifacts_dir=embeddings_path,
                             )
@@ -366,7 +403,7 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
     except Exception as err_joblib:
         print("[load_model] joblib load failed – falling back to pickle:", err_joblib)
         with model_path.open("rb") as f:
-            obj = pickle.load(f)
+            obj = pickle.load(f)  # type: ignore[arg-type]
 
     obj = _wrap_loaded(obj)
     _CACHE[cache_key] = obj
@@ -379,11 +416,22 @@ def load_model(model_id: str, models_path: str, embeddings_path: str) -> Any:
 
 
 def _format_top_probas(model, probas: np.ndarray, top: int = 3) -> str:
+    """Return a markdown list of top-k intent names with probabilities."""
     classes = getattr(model, "classes_", None)
     if classes is None:
         return ""
+
+    # Ensure we always work with a list of strings
+    if hasattr(classes, "tolist"):
+        classes = classes.tolist()
+    classes = [str(c) for c in classes]
+
     idx = np.argsort(probas)[-top:][::-1]
-    return "\n".join(f"- {classes[i]}: {probas[i]:.2%}" for i in idx)
+    lines = []
+    for i in idx:
+        label = classes[i] if i < len(classes) else f"class_{i}"
+        lines.append(f"- {label}: {probas[i]:.2%}")
+    return "\n".join(lines)
 
 
 def predict(
@@ -410,49 +458,52 @@ def predict(
     m_type = MODELS_INFO[model_choice]["type"]
     if m_type == "rag":
         # -------- Retrieval‑Augmented Generation ---------------------------- #
-        model["index"]
-        passages: List[str] = model["passages"]
-        clf = model["model"]  # optional
+        passages: list[str] = model.get("passages") or []
+        clf = model.get("model")
 
         # Get classification if available
-        classification = ""
-        if clf is not None:
-            try:
-                if hasattr(clf, "predict"):
-                    label = clf.predict([text])[0]
-                    classification = f"**Predicted intent:** {label}\n\n"
+        result_lines: list[str] = []
+        try:
+            if clf is not None and hasattr(clf, "predict"):
+                raw_pred = clf.predict([text])
+                label = raw_pred[0] if raw_pred is not None else ""
+                # Normalize possible list/array outputs to a single label string
+                if isinstance(label, (list, tuple)):
+                    label = label[0] if label else ""
+                result_lines.append(f"**Predicted intent:** {label}")
 
-                    if hasattr(clf, "predict_proba"):
-                        probas = clf.predict_proba([text])[0]
-                        max_proba = max(probas)
-                        classification += f"**Confidence:** {max_proba:.2%}\n\n"
+                if hasattr(clf, "predict_proba"):
+                    probas = clf.predict_proba([text])[0]
+                    max_proba = float(np.max(probas))
+                    result_lines.append(f"**Confidence:** {max_proba:.2%}")
+                    result_lines.append("")
+                    # Top‑k labeled intents
+                    result_lines.append("**Top predictions:**")
+                    result_lines.append(_format_top_probas(clf, probas, top=3))
+                    result_lines.append("")
+        except Exception as e:  # pragma: no cover - defensive
+            print(f"[predict] RAG classifier failed: {e}")
+            import traceback
 
-                        if hasattr(clf, "classes_"):
-                            classes = clf.classes_
-                            top_indices = probas.argsort()[-3:][::-1]
-
-                            classification += "**Top predictions:**\n"
-                            for idx in top_indices:
-                                classification += f"- {classes[idx]}: {probas[idx]:.2%}\n"
-                            classification += "\n"
-            except Exception as e:
-                print(f"[predict] RAG classifier failed: {e}")
-                import traceback
-
-                traceback.print_exc()
+            traceback.print_exc()
 
         # Get retrieved documents
         retrieved = passages[:top_k] if passages else []
         documents = "\n\n".join(f"• {p[:400]}..." for p in retrieved) or "No documents found."
 
         # Combine classification and documents
-        answer = f"{classification}**Retrieved Similar Utterances:**\n\n{documents}"
-        return answer
+        result_lines.append("**Retrieved Similar Utterances:**")
+        result_lines.append("")
+        result_lines.append(documents)
+        return "\n".join(result_lines)
 
     # -------------------- Plain classification ----------------------------- #
     try:
         pred = model.predict([text])
         label = pred[0] if pred is not None else "unknown"
+        # Normalize potential list/array outputs to a single label string
+        if isinstance(label, (list, tuple)):
+            label = label[0] if label else "unknown"
 
         result_lines = [f"**Predicted intent:** {label}"]
         if hasattr(model, "predict_proba"):
@@ -461,6 +512,7 @@ def predict(
                 probas = probas[0]
                 result_lines.append(f"**Confidence:** {probas.max():.2%}")
                 result_lines.append("")
+                result_lines.append("**Top predictions:**")
                 result_lines.append(_format_top_probas(model, probas, 3))
 
         return "\n".join(result_lines)
@@ -517,9 +569,9 @@ to **retrieve similar training utterances**.
                     choices=[
                         (
                             (
-                                f'📊 {info["name"]}'
+                                f"📊 {info['name']}"
                                 if info["type"] == "classifier"
-                                else f'🔍 {info["name"]}'
+                                else f"🔍 {info['name']}"
                             ),
                             mid,
                         )
@@ -539,12 +591,12 @@ to **retrieve similar training utterances**.
                     default_path = available_models.get("naive_bayes", {}).get("path", "Not found")
 
                     initial_description = f"""
-                    ## {default_info['name']}
+                    ## {default_info["name"]}
 
                     **Type:** {default_type}
 
                     **Description:**
-                    {default_info['description']}
+                    {default_info["description"]}
 
                     **Model File:** `{os.path.basename(default_path)}`
                     """
@@ -588,12 +640,12 @@ to **retrieve similar training utterances**.
                 model_path = available_models.get(model_id, {}).get("path", "Not found")
 
                 description = f"""
-                ## {info['name']}
+                ## {info["name"]}
 
                 **Type:** {type_text}
 
                 **Description:**
-                {info['description']}
+                {info["description"]}
 
                 **Model File:** `{os.path.basename(model_path)}`
                 """

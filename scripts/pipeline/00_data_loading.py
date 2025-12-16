@@ -1,29 +1,20 @@
 #!/usr/bin/env python
 """
-CLINC150 Intent Classification - Data Loading
+Intent Classification - Data Loading
 
-This script handles the initial data loading and preprocessing for the CLINC150
-intent classification task. We'll be using the CLINC150 dataset, a collection of
-user utterances labeled with intent categories.
-
-Dataset Overview:
-The CLINC150 dataset is a collection of user utterances that have been labeled
-with intent categories. Key features:
-- 150 in-scope intents across 10 domains (banking, credit cards, work, etc.)
-- Real-world user queries and commands
-- Out-of-scope (OOS) examples available as an optional class
-- Benchmark dataset for intent classification research
+This script handles the initial data loading and preprocessing for intent
+classification tasks. It supports multiple datasets configured via config files.
 """
 
-import logging
 import os
 import sys
-import warnings
-from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root
+from intent_classifier.utils.warnings_config import configure_logging
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -38,22 +29,23 @@ from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.exploration import class_frequency, length_distribution  # noqa: E402
 
 # Configure logging and warnings
-warnings.filterwarnings("ignore")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+configure_logging(level="INFO", suppress_warnings=True)
 
 
 def main():
     """Main function to load and validate the dataset."""
 
+    dataset_name = config_vars.get("DATASET_NAME", "clinc150")
     print("=" * 60)
-    print("CLINC150 Intent Classification - Data Loading")
+    print(f"Intent Classification - Data Loading ({dataset_name})")
     print("=" * 60)
 
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -66,10 +58,7 @@ def main():
     X_train_merged = X_train + X_val
     y_train_merged = y_train + y_val
 
-    print(
-        f"Loaded {len(X_train)} training, {len(X_val)} validation, "
-        f"{len(X_test)} test utterances"
-    )
+    print(f"Loaded {len(X_train)} training, {len(X_val)} validation, {len(X_test)} test utterances")
     print(
         f"Total training (train+val merged for analysis): "
         f"{len(X_train_merged)} utterances with {len(classes)} intent classes"
@@ -82,8 +71,21 @@ def main():
     print("\nExamining the distribution of intents and utterance lengths...")
 
     # Intent distribution plot
+    # For multi-label data, flatten labels first (count all tags across all samples)
+    from intent_classifier.utils.label_utils import is_multilabel
+
+    if is_multilabel(y_train_merged):
+        # Multi-label: flatten all tags for frequency analysis
+        flattened_labels = []
+        for label_list in y_train_merged:
+            flattened_labels.extend(label_list)
+        labels_for_analysis = flattened_labels
+    else:
+        # Single-label: use as-is
+        labels_for_analysis = y_train_merged
+
     class_frequency(
-        y_train_merged,
+        labels_for_analysis,
         top_n=20,
         plot=True,
         save_path=os.path.join(DATA_EXPLORATION_DIR, "class_distribution_validation.png"),

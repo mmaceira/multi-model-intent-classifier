@@ -7,28 +7,28 @@ comprehensive evaluation metrics and visualizations.
 """
 
 import sys
-from pathlib import Path
 
-# Infer repo root from the location of this file
-repo_root = Path(__file__).resolve().parents[2]
-# Add repo root to path for config imports (config is not part of the installed package)
+# Import path utilities
+from intent_classifier.utils.paths import get_repo_root
+
+# Get repo root and add to path for config imports (config is not part of the installed package)
+repo_root = get_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 # Import config setup
-from config.notebook_setup import (  # noqa: E402
-    PREDICTIONS_DIR,
-    RESULTS_DIR,
-    config_vars,
-)
+from config.notebook_setup import PREDICTIONS_DIR, RESULTS_DIR, config_vars  # noqa: E402
 
 # Import dataset and evaluation modules
 from intent_classifier.datasets.dataset import get_dataset  # noqa: E402
 from intent_classifier.evaluation import display_detailed_results, run_evaluations  # noqa: E402
+from intent_classifier.utils.method_logger import get_logger  # noqa: E402
 from intent_classifier.utils.model_loader import load_models_from_config  # noqa: E402
 
 
 def main():
+    # Disable method logging during evaluation
+    get_logger().disable()
     """Main function to evaluate models."""
 
     print("=" * 60)
@@ -38,8 +38,9 @@ def main():
     # Load dataset
     print("\nLoading dataset...")
     X_train, y_train, X_val, y_val, X_test, y_test, classes = get_dataset(
-        dataset_name="clinc150",
+        dataset_name=config_vars.get("DATASET_NAME", "clinc150"),
         use_oos=config_vars.get("DATASET_USE_OOS", False),
+        multilabel=config_vars.get("DATASET_MULTILABEL", False),
         max_classes=config_vars.get("DATASET_MAX_CLASSES", None),
         max_train_samples=config_vars.get("DATASET_MAX_TRAIN_SAMPLES", None),
         max_test_samples=config_vars.get("DATASET_MAX_TEST_SAMPLES", None),
@@ -80,7 +81,8 @@ def main():
         results = run_evaluations(
             models,
             artefacts_root=PREDICTIONS_DIR,
-            output_dir=RESULTS_DIR,
+            eval_dir=PREDICTIONS_DIR,  # Per-model metrics go to eval/<model_id>/
+            compare_dir=RESULTS_DIR,  # Summary metrics go to compare/
             verbose=True,
         )
         if not results:
@@ -97,23 +99,38 @@ def main():
     print("=" * 60)
 
     # Define the desired model order
-    # Note: Use actual model names from configuration
-    # (may include suffixes like "(local-embeddings)")
+    # Note: Use actual model names from configuration and prediction directories
+    # so that all trained variants appear in the comparison tables.
     model_order = [
         "Naive Bayes",
         "Linear SVM",
         "TF-IDF bigrams + SVM",
         "MiniLM + LogReg",
-        "Embedding + LogReg",
+        # Embedding-based baselines
+        "Embedding + LogReg (SBERT)",
+        "Embedding + LogReg (Qwen/Ollama)",
+        # RAG baselines (embedding-backed)
         "RAG-CentroidNN",
-        "RAG-kMajority",
-        "RAG-LLM (local-embeddings)",  # RAG-LLM with local SBERT embeddings
-        "RAG-LLM (OpenAI-embeddings)",  # RAG-LLM with OpenAI embeddings
+        "RAG-kMajority (SBERT)",
+        "RAG-kMajority (Qwen/Ollama)",
+        # RAG‑LLM (TF‑IDF, then embedding-backed retrieval)
+        "RAG-LLM (TF-IDF, default prompt)",
+        "RAG-LLM (SBERT embeddings, default prompt)",
+        "RAG-LLM (Qwen embeddings, default prompt)",
+        "RAG-LLM (TF-IDF, short prompt)",
+        "RAG-LLM (TF-IDF, n8n prompt)",
+        # Optional RAG‑LLM with OpenAI embeddings
+        "RAG-LLM (OpenAI-embeddings)",
     ]
 
     # Display results in the specified order
     try:
-        display_detailed_results(results, model_order=model_order, output_dir=RESULTS_DIR)
+        display_detailed_results(
+            results,
+            model_order=model_order,
+            output_dir=RESULTS_DIR,
+            predictions_dir=PREDICTIONS_DIR,  # Pass predictions dir for timing data
+        )
         print("✅ Comparison plots generated successfully")
     except Exception as e:
         print(f"⚠️  Warning: Error generating comparison plots: {e}")

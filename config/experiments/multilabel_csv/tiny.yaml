@@ -1,0 +1,26 @@
+# Experiment config: CSV-based tiny multi-label subset.
+#
+# Thin override layered on top of:
+#   - config/base/defaults.yaml
+#   - config/base/providers.yaml
+#   - config/datasets/multilabel_csv.yaml
+#
+general:
+  run_alias: "tiny"
+
+dataset:
+  # Tiny CSV-based multilabel experiment for quick tests
+  multilabel: true
+  min_samples_per_label: 10
+  max_train_samples: 200
+  max_val_samples: 50
+  max_test_samples: 50
+
+model:
+  # Enable RAG‑LLM experiments using the Ollama provider (qwen2.5:14b by default),
+  # matching other tiny experiments so all RAG‑LLM variants can resolve
+  # `resolved.llm_model` and run end‑to‑end.
+  llm_backend: "ollama"
+
+  # Use a smaller neighborhood for RAG-style models in tiny runs
+  rag_top_k: 5

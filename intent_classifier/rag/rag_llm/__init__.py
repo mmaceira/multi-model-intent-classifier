@@ -46,6 +46,12 @@ Example usage:
     ```
 """
 
-from .classifier import Example, RagLLM, Retriever, _load_examples, classify_single
+from .classifier import (
+    Example,
+    RagLLM,
+    TfIdfRetriever as Retriever,
+    _load_examples,
+    classify_single,
+)
 
 __all__ = ["RagLLM", "Example", "Retriever", "classify_single", "_load_examples"]

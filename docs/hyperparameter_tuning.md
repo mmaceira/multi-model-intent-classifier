@@ -1,89 +1,83 @@
-## Hyperparameter Tuning
+# Hyperparameter Tuning
 
-This project includes a simple, configurable hyperparameter tuning script that follows standard ML practice: **tune on validation, evaluate on test only at the end**.
+## Overview
 
-## What the tuner does
+Hyperparameter tuning uses Ray Tune for distributed hyperparameter optimization. Tuning runs on the validation set, with evaluation on the test set only (ML best practice).
 
-The script `scripts/tune_hyperparams.py` searches over hyperparameters for the main models using the validation set:
+## Installation
 
-- **Naive Bayes**: tunes `alpha` (smoothing).
-- **Linear SVM / SVM bigrams**: tunes `C` (regularization strength).
-- **Transformer LogReg**: tunes `C` for the logistic regression on MiniLM embeddings.
-- **Embedding LogReg**: tunes `C` for the logistic regression on flexible embeddings (SBERT / OpenAI).
-- **RAG k‑majority / RAG LLM**: tunes `top_k` (neighbors).
-- **RAG centroid**: typically evaluated with a default configuration.
-
-## How to run tuning
-
-**Tune all models for a given config:**
+Hyperparameter tuning requires Ray Tune. Install the `tune` extra:
 
 ```bash
-python scripts/tune_hyperparams.py --config config/config.yaml --all
+uv sync --extra tune
 ```
 
-You can increase `--num-samples` to explore more configurations:
+When running tuning, use `--active` so Ray workers reuse the current env (prevents `ray` missing inside worker venvs):
 
 ```bash
-python scripts/tune_hyperparams.py --config config/config.yaml --all --num-samples 50
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
 ```
 
-**Tune a specific model:**
+## Quickstart
 
 ```bash
-python scripts/tune_hyperparams.py --config config/config.yaml --algo nb
-python scripts/tune_hyperparams.py --config config/config.yaml --algo svm
-python scripts/tune_hyperparams.py --config config/config.yaml --algo embedding_logreg
+# Tune all models (default behavior)
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
+
+# Tune all models explicitly
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo all
+
+# Tune specific model
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo nb
 ```
 
-For embedding models that can use OpenAI, set `OPENAI_API_KEY` and toggle the corresponding config flags as usual.
-
-## How tuned values are used
-
-Tuned hyperparameters are **loaded automatically** by the training pipeline:
-
-1. Run tuning (optional but recommended):
+## Commands
 
 ```bash
-python scripts/tune_hyperparams.py --config config/config.yaml --all
+# Tune all models (default)
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml
+
+# Tune all models with more samples
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo all --num-samples 50
+
+# Tune specific model
+uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml --algo svm
+
+# Tune with custom output directory
+uv run --active intent-tune --config config/experiments/nlu_plus/tiny.yaml --algo svm --num-samples 50 --output-dir output/custom_tune
 ```
 
-2. Run training:
+## What Gets Tuned
 
+- **Naive Bayes**: `alpha` (smoothing)
+- **Linear SVM**: `C` (regularization)
+- **Transformer LogReg**: `C` for logistic regression
+- **Embedding LogReg**: `C` for logistic regression
+- **RAG k-majority/LLM**: `top_k` (neighbors)
+
+## Usage
+
+Tuned hyperparameters are loaded automatically by the training pipeline:
+
+1. Install Ray Tune (see Installation above)
+2. Run tuning: `uv run --active intent-tune --config config/experiments/clinc150/tiny.yaml` (tunes all models by default)
+3. Run training: `CONFIG_FILE=config/experiments/clinc150/tiny.yaml uv run intent-train`
+
+The `--tune` flag on `intent-train` will also run hyperparameter tuning before training:
 ```bash
-python scripts/pipeline/run_all.py
+CONFIG_FILE=config/experiments/clinc150/tiny.yaml uv run intent-train --tune
 ```
 
-The model loader looks for per‑model files under `config/hyperparameters/{config_name}/`. If present, those values override defaults; otherwise, it falls back to the values from your config files.
+## Storage
 
-## Where results are stored
+Best hyperparameters are stored in:
 
-For each config (e.g. `config_tiny_dataset.yaml`), best hyperparameters are written as small YAML files:
+- `config/algorithm/hyperparameters/{config_name}/best_{model_name}.yaml` – **used by the training pipeline**
+- `output/hyperparams_tune/{config_name}/best_{model_name}.yaml` – reference copy from Ray Tune
 
-- **Primary (used by training)**:
-  - `config/hyperparameters/{config_name}/best_{model_name}.yaml`
-- **Secondary (reference only)**:
-  - `output/hyperparams_tune/{config_name}/best_{model_name}.yaml`
+For the tiny CLINC150 config:
 
-Using `{config_name}` in the path keeps hyperparameters from different experiments isolated.
+- `config_name` is `tiny`
+- The training pipeline (via `CONFIG_FILE=config/experiments/clinc150/tiny.yaml`) writes models, predictions, and results under `output/runs/singlelabel/clinc150/tiny/`.
 
-## Versioning tuned hyperparameters
-
-Hyperparameter YAMLs in `config/hyperparameters/` are:
-
-- Small, reproducible, and safe to commit.
-- Useful documentation of what was actually used in experiments.
-
-Typical flow to commit:
-
-```bash
-git add config/hyperparameters/*/
-git commit -m "Add tuned hyperparameters"
-```
-
-Files under `output/` remain experiment artifacts and are usually ignored by git.
-
-## Best practices
-
-- **Tune before final training** for each important config.
-- **Never use the test set during tuning**; it is reserved for final evaluation only.
-- **Keep configs separate**: tuned values are stored per config name, matching how you structure experiments in `config/`.
+Files in `config/algorithm/hyperparameters/` should be committed to git.

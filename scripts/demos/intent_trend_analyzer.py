@@ -26,7 +26,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import faiss
 import gradio as gr
@@ -34,6 +34,8 @@ import numpy as np
 import yaml
 from litellm import completion
 from sentence_transformers import SentenceTransformer
+
+from intent_classifier.utils.paths import get_config_path
 
 # Configure logging
 logging.basicConfig(
@@ -45,13 +47,14 @@ logging.basicConfig(
 project_root = Path(__file__).resolve().parent.parent.parent
 
 # Load config to get default paths (respect CONFIG_FILE environment variable)
-config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-config_path = project_root / "config" / config_file
+# Use centralized path resolution so both "config/..." and absolute paths work.
+config_file = os.environ.get("CONFIG_FILE", "config/experiments/clinc150/tiny.yaml")
+config_path = get_config_path(config_file)
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
 
-def substitute_vars(value: Any, cfg: Dict[str, Any]) -> Any:
+def substitute_vars(value: Any, cfg: dict[str, Any]) -> Any:
     """Replace variable references in string values with their actual values from config."""
     if isinstance(value, str) and "${" in value:
         import re
@@ -70,13 +73,16 @@ run_name = config["general"]["run_name"]
 embeddings_path = substitute_vars(config["paths"]["embeddings_dir"], config)
 embeddings_path = str(project_root / embeddings_path)
 
+# Allow overriding the embeddings root when launching the demo
+EMBEDDINGS_ROOT = os.environ.get("EMBEDDINGS_PATH", embeddings_path)
+
 # Default configuration
 DEFAULT_CONFIG = {
     "model_name": config.get("model", {}).get(
         "sbert_model_name", "sentence-transformers/all-MiniLM-L6-v2"
     ),
-    "index_path": str(Path(embeddings_path) / "sbert" / "index.faiss"),
-    "meta_path": str(Path(embeddings_path) / "sbert" / "meta.jsonl"),
+    "index_path": str(Path(EMBEDDINGS_ROOT) / "sbert" / "index.faiss"),
+    "meta_path": str(Path(EMBEDDINGS_ROOT) / "sbert" / "meta.jsonl"),
     "top_k": 5,
     "max_tokens": 512,
     "relevance_labels": ("high", "medium", "low"),
@@ -88,7 +94,7 @@ DEFAULT_CONFIG = {
 
 
 class IntentTrendAnalyzer:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or DEFAULT_CONFIG
         self._initialize_resources()
 
@@ -113,13 +119,13 @@ class IntentTrendAnalyzer:
         except Exception as e:
             raise Exception(f"Error loading index or metadata: {e}") from e
 
-    def _embed_and_normalize(self, texts: List[str]) -> np.ndarray:
+    def _embed_and_normalize(self, texts: list[str]) -> np.ndarray:
         """Embed texts and normalize vectors."""
         emb = self.model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
         faiss.normalize_L2(emb)
         return emb
 
-    def _classify_relevance(self, query: str, doc: str) -> Tuple[str, str]:
+    def _classify_relevance(self, query: str, doc: str) -> tuple[str, str]:
         """Classify relevance of a document to the query using LLM."""
         system = (
             "You are an expert assistant. Label how relevant this previous user "
@@ -172,7 +178,7 @@ class IntentTrendAnalyzer:
                 relevance = "low"
             return relevance, cleaned.replace("\n", " ")
 
-    def analyze_intent_trend(self, utterance: str, k: int = None) -> str:
+    def analyze_intent_trend(self, utterance: str, k: int | None = None) -> str:
         """Analyze intent trends for a given utterance."""
         k = k or self.config["top_k"]
 
@@ -255,7 +261,7 @@ retrieving similar utterances and asking an LLM to comment on relevance and tren
 - **Prerequisites**
   - Run the training pipeline up to embeddings (`python scripts/pipeline/02_build_embeddings.py`).
   - Ensure the FAISS index and metadata paths below point to that experiment run.
-  - Have an LLM backend configured in `config/config.yaml` (defaults to `ollama/llama3.1:8b`).
+  - Have an LLM backend configured in your config file (defaults to `ollama/llama3.1:8b`).
 - **How to use**
   1. Verify or adjust the FAISS index and metadata paths.
   2. Optionally change how many similar utterances to retrieve.

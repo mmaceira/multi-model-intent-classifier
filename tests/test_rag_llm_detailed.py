@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from intent_classifier.rag.rag_llm import classifier as rag_llm
 
 
-def _build_examples() -> List[rag_llm.Example]:
+def _build_examples() -> list[rag_llm.Example]:
     """Helper dataset with multiple intents for deterministic retrieval tests."""
     return [
         rag_llm.Example("Book me a flight to London tomorrow", "travel"),
@@ -19,9 +19,9 @@ def _build_examples() -> List[rag_llm.Example]:
     ]
 
 
-def _retriever(examples: Iterable[rag_llm.Example] | None = None) -> rag_llm.Retriever:
+def _retriever(examples: Iterable[rag_llm.Example] | None = None) -> rag_llm.TfIdfRetriever:
     """Convenience wrapper that creates a retriever from helper data."""
-    return rag_llm.Retriever(list(examples) if examples else _build_examples())
+    return rag_llm.TfIdfRetriever(list(examples) if examples else _build_examples())
 
 
 def test_retrieval_enforces_min_labels_and_similarity_order():

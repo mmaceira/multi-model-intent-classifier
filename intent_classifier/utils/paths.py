@@ -13,7 +13,6 @@ Example:
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def get_repo_root() -> Path:
@@ -62,7 +61,7 @@ def get_repo_root() -> Path:
 
 
 # Cache the repo root
-_REPO_ROOT: Optional[Path] = None
+_REPO_ROOT: Path | None = None
 
 
 def _get_repo_root_cached() -> Path:
@@ -73,13 +72,34 @@ def _get_repo_root_cached() -> Path:
     return _REPO_ROOT
 
 
-def get_config_dir() -> Path:
-    """Get the config directory path.
+def get_config_path(config_file: str | Path) -> Path:
+    """Get the path to a config file.
+
+    Args:
+        config_file: Config file path. Must be:
+                    - Absolute path, or
+                    - Path starting with "config/" (relative to repo root)
+                    Examples: "config/experiments/clinc150/tiny.yaml"
 
     Returns:
-        Path to config directory
+        Path to config file
+
+    Raises:
+        ValueError: If config_file doesn't start with "config/" and isn't absolute
     """
-    return _get_repo_root_cached() / "config"
+    config_file = Path(config_file)
+    if config_file.is_absolute():
+        return config_file
+
+    config_file_str = str(config_file)
+    if not config_file_str.startswith("config/"):
+        raise ValueError(
+            "Config file path must start with 'config/' or be absolute. "
+            f"Got: {config_file_str}. "
+            "Example: config/experiments/clinc150/tiny.yaml"
+        )
+
+    return _get_repo_root_cached() / config_file_str
 
 
 def get_output_dir(experiment_name: str = "default") -> Path:
@@ -94,7 +114,7 @@ def get_output_dir(experiment_name: str = "default") -> Path:
     return _get_repo_root_cached() / "output" / experiment_name
 
 
-def get_models_dir(experiment_name: Optional[str] = None) -> Path:
+def get_models_dir(experiment_name: str | None = None) -> Path:
     """Get the models directory path.
 
     Args:
@@ -110,7 +130,7 @@ def get_models_dir(experiment_name: Optional[str] = None) -> Path:
     return _get_repo_root_cached() / "models"
 
 
-def get_embeddings_dir(experiment_name: Optional[str] = None) -> Path:
+def get_embeddings_dir(experiment_name: str | None = None) -> Path:
     """Get the embeddings directory path.
 
     Args:
@@ -126,36 +146,33 @@ def get_embeddings_dir(experiment_name: Optional[str] = None) -> Path:
     return _get_repo_root_cached() / "embeddings"
 
 
-def get_data_dir() -> Path:
-    """Get the data directory path.
+def compute_paths(run_id: str, root: str | Path = "output/runs") -> dict[str, str]:
+    """Compute canonical paths for a given run_id.
 
-    Returns:
-        Path to data directory
+    The layout is:
+        output/runs/{run_id}/
+          meta/
+          dataset/
+          features/
+          models/
+          eval/
+          compare/
+            figures/
+          llm_logs/
+
+    Returns plain string paths relative to the repository root; callers can
+    wrap them in ``Path`` objects where needed.
     """
-    return _get_repo_root_cached() / "data"
-
-
-def resolve_path(path: str | Path, base: Optional[Path] = None) -> Path:
-    """Resolve a path relative to a base directory.
-
-    If path is absolute, returns it as-is.
-    If path is relative and base is provided, resolves relative to base.
-    If path is relative and base is None, resolves relative to repo root.
-
-    Args:
-        path: Path to resolve (can be string or Path)
-        base: Base directory for relative paths. If None, uses repo root.
-
-    Returns:
-        Resolved absolute Path
-    """
-    path = Path(path)
-    if path.is_absolute():
-        return path.resolve()
-
-    if base is None:
-        base = _get_repo_root_cached()
-    else:
-        base = Path(base).resolve()
-
-    return (base / path).resolve()
+    root_str = str(root).rstrip("/")
+    base = f"{root_str}/{run_id}"
+    return {
+        "run_dir": base,
+        "meta_dir": f"{base}/meta",
+        "dataset_dir": f"{base}/dataset",
+        "features_dir": f"{base}/features",
+        "models_dir": f"{base}/models",
+        "eval_dir": f"{base}/eval",
+        "compare_dir": f"{base}/compare",
+        "llm_logs_dir": f"{base}/llm_logs",
+        "figures_dir": f"{base}/compare/figures",
+    }

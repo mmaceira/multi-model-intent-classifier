@@ -59,7 +59,7 @@ Example Usage:
     >>> probabilities = classifier.predict_proba(documents)
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from scipy.special import softmax
@@ -70,8 +70,10 @@ from .vector_store import VectorStore
 
 
 class CentroidNN(RagClassifierBase):
+    """RAG classifier using centroid-based nearest neighbor search."""
+
     def __init__(self, centroids: dict[str, np.ndarray]):
-        super().__init__(centroids.keys())
+        super().__init__(list(centroids.keys()))
         self.centroids = {k: v / np.linalg.norm(v) for k, v in centroids.items()}
 
     @classmethod
@@ -89,17 +91,22 @@ class CentroidNN(RagClassifierBase):
             if not label:
                 continue
 
+            # Handle multi-label: if label is a list, add vector to each tag's centroid
+            labels_to_process = label if isinstance(label, list) else [label]
+
             # Reconstruct vector from FAISS index
             # The index position corresponds to the metadata position
             try:
-                vector = index.reconstruct(i)
-                by_lbl.setdefault(label, []).append(np.array(vector, dtype=np.float32))
+                vector = np.array(index.reconstruct(i), dtype=np.float32)
+                # Add vector to centroids for each tag in the label
+                for lbl in labels_to_process:
+                    by_lbl.setdefault(lbl, []).append(vector)
             except Exception:
                 # Skip if vector reconstruction fails
                 continue
 
-        # Compute centroids for each label
-        cents = {k: np.mean(v, axis=0) for k, v in by_lbl.items()}
+        # Compute centroids for each label/tag
+        cents = {k: np.mean(v, axis=0) for k, v in by_lbl.items() if v}
         return cls(cents)
 
     def predict(self, docs: Sequence[str], **_):

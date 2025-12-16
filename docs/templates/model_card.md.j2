@@ -1,0 +1,46 @@
+### Model Card — `{model_display_name}`
+
+- **Model ID**: `{model_id}`
+- **Algorithm family**: `{algorithm_family}`
+- **Role in this run**: `{role}`
+
+### What this model does
+
+{description}
+
+### Inputs & Features
+
+- **Text input**: `{text_input}`
+- **Features**: `{features}`
+
+### Key Hyperparameters
+
+{hyperparameters}
+
+### Complexity & Latency
+
+- **Expected complexity**: `{complexity}`
+- **Typical latency**: `{latency}`
+
+If timing logs are available, detailed numbers live under `eval/{model_id}/` and
+`llm_logs/` for RAG‑LLM variants.
+
+### Metrics Snapshot
+
+{metrics_snippet}
+
+See `compare/summary_metrics.csv` and per-model evaluation artefacts under
+`eval/{model_id}/` for full metric tables and error analysis.
+
+### Failure Modes & Caveats
+
+{failure_modes}
+
+### Reproducibility
+
+- **Run ID**: `{run_id}`
+- **Config**: `{config_path}`
+- **Dataset**: `{dataset_name}`
+
+Use the same config, dataset, and model ID together with the project README
+to reproduce this model and its metrics.

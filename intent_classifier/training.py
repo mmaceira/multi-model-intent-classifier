@@ -4,27 +4,31 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any
 
 import cloudpickle
 from sklearn.base import clone as safe_clone
 
+from intent_classifier.utils.embeddings import EmbeddingServiceError
 from intent_classifier.utils.file_ops import ensure_dir
+from intent_classifier.utils.method_logger import get_logger
+from intent_classifier.utils.slugify import slugify_model_id
 
 
 def run_training(
-    models: Dict[str, Any],
+    models: dict[str, Any],
     *,
     X_train: Sequence[str],
     y_train: Sequence[Any],
-    X_val: Optional[Sequence[str]] = None,
-    y_val: Optional[Sequence[Any]] = None,
-    output_dir: Union[str, Path] = "artefacts",
+    X_val: Sequence[str] | None = None,
+    y_val: Sequence[Any] | None = None,
+    output_dir: str | Path = "artefacts",
     save_models: bool = True,
     save_train_predictions: bool = True,
     verbose: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Fit models and persist training artifacts.
 
     This is the main training pipeline that handles model fitting and artifact persistence.
@@ -60,12 +64,15 @@ def run_training(
           validation set. The validation set is provided for models that support early stopping
           or for future extensibility.
     """
+    # Disable method logging during training
+    get_logger().disable()
+
     # Validate validation set consistency
     if (X_val is None) != (y_val is None):
         raise ValueError("X_val and y_val must both be provided or both be None")
     output_dir = ensure_dir(output_dir)
-    fitted: Dict[str, Any] = {}
-    training_times: Dict[str, float] = {}
+    fitted: dict[str, Any] = {}
+    training_times: dict[str, float] = {}
 
     # Optional MLflow integration
     use_mlflow = bool(os.getenv("MLFLOW_TRACKING_URI"))
@@ -147,15 +154,20 @@ def run_training(
             if verbose:
                 print(f"\n✅ Algorithm '{name}' training completed successfully")
                 print(
-                    f"   Time taken: {execution_time:.2f} seconds ({execution_time/60:.2f} minutes)"
+                    f"   Time taken: {execution_time:.2f} seconds "
+                    f"({execution_time / 60:.2f} minutes)"
                 )
                 if idx < total_models:
                     print(f"   Progress: {idx}/{total_models} algorithms completed\n")
 
-            model_dir = ensure_dir(output_dir / name)
+            # Slugify model name for filesystem use (consistent with finalize)
+            safe_dir_name = slugify_model_id(name)
+            model_dir = ensure_dir(output_dir / safe_dir_name)
 
             # Save individual execution time
-            with open(model_dir / f"{name}_execution_time.txt", "w") as f:
+            # Use a filesystem‑safe file name (model names may contain "/" etc.)
+            safe_name = slugify_model_id(name)
+            with open(model_dir / f"{safe_name}_execution_time.txt", "w", encoding="utf-8") as f:
                 f.write(f"Training time: {execution_time:.2f} seconds")
 
             # Log to MLflow if enabled
@@ -184,14 +196,30 @@ def run_training(
                 with open(model_dir / "model.pkl", "wb") as f:
                     cloudpickle.dump(estimator, f)
 
+        except EmbeddingServiceError as e:
+            # Recoverable path: external embedding backend (e.g. Ollama) is unavailable.
+            # We log and **skip** this model while continuing with the rest.
+            if verbose:
+                print(
+                    f"\n⚠️  Skipping algorithm '{name}' due to embedding backend error: {e}",
+                    flush=True,
+                )
+                print(
+                    f"   Progress: {idx - 1}/{total_models} algorithms completed before skip\n",
+                    flush=True,
+                )
+            continue
         except Exception as e:
             if verbose:
                 print(f"\n❌ Error training algorithm '{name}': {e}", flush=True)
-                print(f"   Progress: {idx-1}/{total_models} algorithms completed before error\n")
+                print(
+                    f"   Progress: {idx - 1}/{total_models} algorithms completed before error\n",
+                    flush=True,
+                )
             raise
 
     # Save all training times to a single file
-    with open(output_dir / "training_times.txt", "w") as f:
+    with open(output_dir / "training_times.txt", "w", encoding="utf-8") as f:
         for name, time_taken in training_times.items():
             f.write(f"{name}: {time_taken:.2f} seconds\n")
 
@@ -213,10 +241,10 @@ def run_training(
         print("=" * 60)
         print(f"Total algorithms trained: {len(fitted)}/{total_models}")
         total_time = sum(training_times.values())
-        print(f"Total training time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+        print(f"Total training time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)")
         print("\nPer-algorithm training times:")
         for name, time_taken in sorted(training_times.items(), key=lambda x: x[1], reverse=True):
-            print(f"  - {name}: {time_taken:.2f}s ({time_taken/60:.2f}min)")
+            print(f"  - {name}: {time_taken:.2f}s ({time_taken / 60:.2f}min)")
         print("=" * 60)
 
     return fitted

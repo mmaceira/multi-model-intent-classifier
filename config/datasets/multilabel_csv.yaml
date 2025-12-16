@@ -1,0 +1,50 @@
+dataset:
+  name: "multilabel_csv"
+  use_oos: false
+  multilabel: true
+
+loader:
+  # Dataset loader configuration for a CSV-based multilabel dataset
+  # This section defines how to load the dataset from its source.
+
+  source:
+    type: "csv"  # Options: huggingface, github_json, csv, local_json
+    path: "data/multilabel_dataset.csv"
+    delimiter: ","
+    encoding: "utf-8"
+
+  # Field mappings - how to extract text and labels from the data
+  fields:
+    text: ["name", "description"]  # Combine name and description for text
+    label: ["tags"]  # tags is comma-separated multilabel (only use tags, not category)
+    # Special option: combine multiple text fields
+    combine_text_fields: true  # If true, combine all found text fields with space
+
+  # Dataset characteristics
+  multilabel: true  # Multi-label dataset
+  has_oos: false
+
+  # Split configuration
+  splits:
+    type: "create"  # Need to create train/val/test splits from combined data
+    test_size: 0.2
+    val_size: 0.1  # Relative to remaining data after test split
+    stratify: false  # Can't stratify multilabel data
+
+  # Optional filters and processing
+  filters:
+    # NOTE: We keep all normalized labels, regardless of frequency.
+    # Time-like labels (2025, desembre, novembre, etc.) are removed by normalize_labels().
+    # min_samples_per_label is disabled when normalize_labels is enabled.
+    # min_samples_per_label: 10  # Disabled - we keep all normalized labels
+
+  # Label processing
+  label_processing:
+    # Ensure labels are always lists (for multilabel)
+    ensure_list: true
+    # Convert non-list labels to single-item lists
+    normalize_to_list: true
+    # Split comma-separated strings (e.g., "tag1,tag2" -> ["tag1", "tag2"])
+    split_comma_separated: true
+    # Apply label normalization (merge similar labels, skip time labels)
+    normalize_labels: true

@@ -1,0 +1,18 @@
+# Experiment config: NLU+ full multi‑label dataset (default).
+#
+# Relies on:
+#   - config/base/defaults.yaml
+#   - config/base/providers.yaml
+#   - config/datasets/nlu_plus.yaml
+
+general:
+  run_alias: "experiment_nlu_plus"
+
+dataset:
+  # Full NLU++ multilabel experiment; limits are inherited from base defaults (no caps).
+  multilabel: true
+
+model:
+  # Enable RAG‑LLM experiments using the Ollama provider (qwen2.5:14b by default),
+  # so all RAG‑LLM variants can use `resolved.llm_model` for this experiment.
+  llm_backend: "ollama"

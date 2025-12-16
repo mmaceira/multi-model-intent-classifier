@@ -49,10 +49,31 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional, Union
 
+# Module-level path attributes (initialized by _apply_paths)
+# Initialize with placeholder values that will be overwritten
+_EMBEDDINGS_DIR: Path = Path()
+_ARTIFACTS_DIR: Path = Path()
+_OPENAI_DIR: Path = Path()
+_SBERT_DIR: Path = Path()
+_OLLAMA_DIR: Path = Path()
+_OPENAI_INDEX: Path = Path()
+_SBERT_INDEX: Path = Path()
+_OLLAMA_INDEX: Path = Path()
+_OPENAI_META: Path = Path()
+_SBERT_META: Path = Path()
+_OLLAMA_META: Path = Path()
+_DEFAULT_INDEX: Path = Path()
+_DEFAULT_META: Path = Path()
+OPENAI_ARTIFACTS: Path = Path()
+SBERT_ARTIFACTS: Path = Path()
+OLLAMA_ARTIFACTS: Path = Path()
+
 
 def _resolve_repo_root() -> Path:
     """Best-effort repository root discovery."""
-    return Path(__file__).resolve().parents[2]
+    from intent_classifier.utils.paths import get_repo_root
+
+    return get_repo_root()
 
 
 def _resolve_default_embeddings_dir() -> Path:
@@ -63,11 +84,12 @@ def _resolve_default_embeddings_dir() -> Path:
     return _resolve_repo_root() / "embeddings"
 
 
-def _apply_paths(base_embeddings: Path, base_artifacts: Optional[Path] = None) -> None:
+def _apply_paths(base_embeddings: Path, base_artifacts: Path | None = None) -> None:
     """Update module-level path references."""
     global _EMBEDDINGS_DIR, _ARTIFACTS_DIR
-    global _SBERT_DIR, _OPENAI_DIR, OPENAI_ARTIFACTS, SBERT_ARTIFACTS
-    global _SBERT_INDEX, _SBERT_META, _OPENAI_INDEX, _OPENAI_META
+    global _SBERT_DIR, _OPENAI_DIR, _OLLAMA_DIR
+    global OPENAI_ARTIFACTS, SBERT_ARTIFACTS, OLLAMA_ARTIFACTS
+    global _SBERT_INDEX, _SBERT_META, _OPENAI_INDEX, _OPENAI_META, _OLLAMA_INDEX, _OLLAMA_META
     global _DEFAULT_INDEX, _DEFAULT_META
 
     _EMBEDDINGS_DIR = Path(base_embeddings)
@@ -75,13 +97,18 @@ def _apply_paths(base_embeddings: Path, base_artifacts: Optional[Path] = None) -
 
     _SBERT_DIR = _EMBEDDINGS_DIR / "sbert"
     _OPENAI_DIR = _EMBEDDINGS_DIR / "openai"
+    _OLLAMA_DIR = _EMBEDDINGS_DIR / "ollama"
+
     OPENAI_ARTIFACTS = _OPENAI_DIR
     SBERT_ARTIFACTS = _SBERT_DIR
+    OLLAMA_ARTIFACTS = _OLLAMA_DIR
 
     _SBERT_INDEX = _SBERT_DIR / "index.faiss"
     _SBERT_META = _SBERT_DIR / "meta.jsonl"
     _OPENAI_INDEX = _OPENAI_DIR / "index.faiss"
     _OPENAI_META = _OPENAI_DIR / "meta.jsonl"
+    _OLLAMA_INDEX = _OLLAMA_DIR / "index.faiss"
+    _OLLAMA_META = _OLLAMA_DIR / "meta.jsonl"
 
     _DEFAULT_INDEX = _SBERT_INDEX
     _DEFAULT_META = _SBERT_META
@@ -90,9 +117,7 @@ def _apply_paths(base_embeddings: Path, base_artifacts: Optional[Path] = None) -
 _apply_paths(_resolve_default_embeddings_dir())
 
 
-def set_artifacts_dir(
-    artifacts_dir: Union[str, Path], embeddings_dir: Optional[Union[str, Path]] = None
-) -> None:
+def set_artifacts_dir(artifacts_dir: str | Path, embeddings_dir: str | Path | None = None) -> None:
     """Set the artifacts/embeddings directory path and update derived paths."""
     base_artifacts = Path(artifacts_dir)
     base_embeddings = Path(embeddings_dir) if embeddings_dir is not None else base_artifacts
@@ -101,8 +126,8 @@ def set_artifacts_dir(
 
 @contextmanager
 def _temporary_dirs(
-    artifacts_dir: Optional[Union[str, Path]] = None,
-    embeddings_dir: Optional[Union[str, Path]] = None,
+    artifacts_dir: str | Path | None = None,
+    embeddings_dir: str | Path | None = None,
 ):
     """Temporarily override the active directories."""
     if artifacts_dir is None and embeddings_dir is None:
@@ -119,8 +144,9 @@ def _temporary_dirs(
 
 def get_index_paths(
     use_openai: bool = False,
-    artifacts_dir: Optional[Union[str, Path]] = None,
-    embeddings_dir: Optional[Union[str, Path]] = None,
+    artifacts_dir: str | Path | None = None,
+    embeddings_dir: str | Path | None = None,
+    backend: str | None = None,
 ) -> tuple[Path, Path]:
     """Get the appropriate index and meta paths based on embedder type.
 
@@ -128,42 +154,64 @@ def get_index_paths(
         use_openai: Whether to use OpenAI embeddings
         artifacts_dir: Optional alternative artifacts directory
         embeddings_dir: Optional alternative embeddings directory
+        backend: Optional explicit backend selector ("sbert", "openai", "ollama").
+            If provided, takes precedence over use_openai when choosing paths.
 
     Returns:
         Tuple of (index_path, meta_path)
     """
     # Use provided artifacts_dir and embeddings_dir if given
     with _temporary_dirs(artifacts_dir, embeddings_dir):
-        return _get_index_paths_internal(use_openai)
+        return _get_index_paths_internal(use_openai, backend=backend)
 
 
-def _get_index_paths_internal(use_openai: bool) -> tuple[Path, Path]:
-    """Internal implementation of get_index_paths without artifacts_dir handling"""
+def _get_index_paths_internal(use_openai: bool, backend: str | None = None) -> tuple[Path, Path]:
+    """Internal implementation of get_index_paths without artifacts_dir handling.
+
+    The ``backend`` parameter allows selecting between specific embedding backends
+    (\"sbert\", \"openai\", \"ollama\"). The ``use_openai`` flag is kept for
+    backward compatibility and is treated as a shortcut for ``backend=\"openai\"``.
+    """
     # Ensure directories exist
     _SBERT_DIR.mkdir(parents=True, exist_ok=True)
     _OPENAI_DIR.mkdir(parents=True, exist_ok=True)
+    _OLLAMA_DIR.mkdir(parents=True, exist_ok=True)
 
-    if use_openai:
+    effective_backend = backend
+    if effective_backend is None:
+        effective_backend = "openai" if use_openai else "sbert"
+
+    if effective_backend == "openai":
         # Check if OpenAI index exists, otherwise fall back to SBERT
         if _OPENAI_INDEX.exists() and _OPENAI_META.exists():
             return _OPENAI_INDEX, _OPENAI_META
-        else:
-            # If OpenAI files don't exist, use SBERT (after warning)
-            import logging
+        import logging
 
-            logging.warning(
-                f"OpenAI index files not found at {_OPENAI_INDEX}. "
-                f"Falling back to SentenceTransformer index at {_SBERT_INDEX}. "
-                f"Run build_index.py with --use_openai to create OpenAI index files."
-            )
-            return _get_index_paths_internal(False)
+        logging.warning(
+            f"OpenAI index files not found at {_OPENAI_INDEX}. "
+            f"Falling back to SentenceTransformer index at {_SBERT_INDEX}. "
+            f"Run build_index.py with --use_openai to create OpenAI index files."
+        )
+        return _get_index_paths_internal(False, backend="sbert")
 
-    # Use SBERT paths
+    if effective_backend == "ollama":
+        # Prefer Ollama/Qwen index, fall back to SBERT if missing
+        if _OLLAMA_INDEX.exists() and _OLLAMA_META.exists():
+            return _OLLAMA_INDEX, _OLLAMA_META
+        import logging
+
+        logging.warning(
+            f"Ollama index files not found at {_OLLAMA_INDEX}. "
+            f"Falling back to SentenceTransformer index at {_SBERT_INDEX}. "
+            f"Run 02_build_embeddings.py to create Ollama/Qwen index files."
+        )
+        return _get_index_paths_internal(False, backend="sbert")
+
+    # Default to SBERT paths
     if _SBERT_INDEX.exists() and _SBERT_META.exists():
         return _SBERT_INDEX, _SBERT_META
-    else:
-        # Default to SBERT paths (which may not exist yet)
-        return _SBERT_INDEX, _SBERT_META
+    # Default to SBERT paths even if they do not exist yet (builder will create them)
+    return _SBERT_INDEX, _SBERT_META
 
 
 def _lazy_load(mod: str, cls: str, **kwargs: Any):
@@ -171,9 +219,7 @@ def _lazy_load(mod: str, cls: str, **kwargs: Any):
     return getattr(module, cls).load_default(**kwargs)
 
 
-def load_kmajority(
-    use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
-):
+def load_kmajority(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load K-Majority RAG model
 
     Args:
@@ -189,9 +235,7 @@ def load_kmajority(
         return _lazy_load("rag_kmajority", "RagKMajority", **cfg)
 
 
-def load_centroid(
-    use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
-):
+def load_centroid(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load Centroid NN model
 
     Args:
@@ -207,13 +251,23 @@ def load_centroid(
         return _lazy_load("centroid_nn", "CentroidNN", **cfg)
 
 
-def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
+def load_llm(
+    use_openai: bool | None = None,
+    artifacts_dir: str | Path | None = None,
+    backend: str | None = None,
+    **cfg,
+):
     """Load RAG LLM model
 
     Args:
-        use_openai: Whether to use OpenAI embeddings
-        artifacts_dir: Optional alternative artifacts directory
-        **cfg: Additional config parameters (can include log_dir for saving prompts/responses)
+        use_openai: Whether to use OpenAI embeddings.
+        artifacts_dir: Optional alternative artifacts directory.
+        backend: Optional embedding backend selector for retrieval
+                 (\"sbert\", \"ollama\", \"openai\"). If provided, this is
+                 forwarded to RagLLM so it can choose between TF-IDF and
+                 embedding-backed retrieval while keeping the same interface.
+        **cfg: Additional config parameters (can include log_dir for saving
+               prompts/responses, prompt_style, etc.)
 
     Returns:
         A RagLLM instance
@@ -223,21 +277,33 @@ def load_llm(use_openai: bool = None, artifacts_dir: Optional[Union[str, Path]] 
             embedder_class_name = (
                 cfg["embedder"].__class__.__name__ if hasattr(cfg["embedder"], "__class__") else ""
             )
-            use_openai = embedder_class_name == "OpenAIEmbedder"
+            use_openai = embedder_class_name in ("OpenAIEmbedder", "EmbeddingGenerator")
 
         if use_openai is not None:
             cfg["use_openai"] = use_openai
             if use_openai and "embedder" not in cfg:
                 os.environ["USE_OPENAI_EMBEDDINGS"] = "1"
-                from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
+                from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-                cfg["embedder"] = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "OPENAI_API_KEY environment variable must be set for OpenAI embeddings"
+                    )
+                cfg["embedder"] = EmbeddingGenerator(
+                    api_key=api_key, model="text-embedding-3-small", batch_size=50
+                )
+
+        # Forward backend selector (if any) to RagLLM.load_default so it can
+        # choose between TF-IDF and embedding-backed retrieval.
+        if backend is not None:
+            cfg["backend"] = backend
 
         return _lazy_load("rag_llm", "RagLLM", **cfg)
 
 
 def load_optimized_llm(
-    use_openai_embeddings: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg
+    use_openai_embeddings: bool = False, artifacts_dir: str | Path | None = None, **cfg
 ):
     """Load an optimized LLM model with optional OpenAI embeddings."""
     with _temporary_dirs(artifacts_dir):
@@ -245,7 +311,7 @@ def load_optimized_llm(
         return _lazy_load("rag_llm", "RagLLM", **cfg)
 
 
-def load_hybrid(use_openai: bool = False, artifacts_dir: Optional[Union[str, Path]] = None, **cfg):
+def load_hybrid(use_openai: bool = False, artifacts_dir: str | Path | None = None, **cfg):
     """Load Hybrid RAG model
 
     Args:

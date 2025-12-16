@@ -1,0 +1,29 @@
+## Provider configuration (LLM + embeddings)
+##
+## This is the single source of truth for provider endpoints and default
+## model identifiers. The central config loader normalises this into a
+## `providers.*` block and a `resolved.*` section in code.
+
+providers:
+  ollama:
+    # Ollama API endpoint URL.
+    # - Can be set here, or via OLLAMA_API_BASE / OLLAMA_HOST / MODEL_OLLAMA_ENDPOINT
+    # - If not set, defaults to http://localhost:11434
+    # - For a remote server, override via env var, e.g.:
+    #     export MODEL_OLLAMA_ENDPOINT="http://<your-ollama-host>:11434"
+    endpoint: "http://localhost:11434"
+
+    # Default Ollama model for RAG‑LLM classification.
+    # Examples: "llama3.1:8b", "ollama/llama3.1:8b", "ollama/qwen2.5:14b"
+    llm_default: "ollama/qwen2.5:14b"
+
+    # Default Ollama model for embeddings (used via litellm + Ollama).
+    # Typically an embedding‑optimised model such as qwen3‑embedding.
+    embed_default: "ollama/qwen3-embedding:latest"
+
+  openai:
+    # Default OpenAI model for embeddings.
+    embed_default: "text-embedding-3-small"
+
+    # Default OpenAI chat/LLM model (if using OpenAI as LLM backend).
+    llm_default: "gpt-4o-mini"

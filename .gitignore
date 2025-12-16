@@ -76,6 +76,7 @@ htmlcov/
 # IDEs and editors
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
@@ -104,6 +105,20 @@ output/
 !output/hyperparams_tune/
 !output/hyperparams_tune/*.yaml
 # Hyperparameters are stored in config/hyperparameters/ and should be committed
+
+# Dataset configs - only keep nlu_plus and clinc150 (public datasets)
+# Private datasets can be added to config/dataset/ or config/datasets/ and will be ignored
+# Each dataset should have a loader.yaml config file that defines how to load it
+config/dataset/*
+!config/dataset/nlu_plus/
+!config/dataset/nlu_plus/**
+!config/dataset/clinc150/
+!config/dataset/clinc150/**
+# Exclude private datasets from new structure (config/datasets/)
+config/datasets/*
+!config/datasets/nlu_plus.yaml
+!config/datasets/clinc150.yaml
+
 *.csv
 !tests/**/*.csv
 *.png
@@ -117,6 +132,9 @@ output/
 *.log
 logs/
 *.log.*
+
+# Runtime method call and prediction logs
+method_logs/
 
 # Cache
 .cache/

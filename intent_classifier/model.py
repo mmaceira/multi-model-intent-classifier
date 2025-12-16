@@ -59,11 +59,19 @@ Example Usage:
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from typing import Any, Dict
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator
+
+from intent_classifier.utils.label_utils import (
+    binarize_labels,
+    is_multilabel,
+    multilabel_predictions_from_binary,
+    to_multilabel_format,
+)
+from intent_classifier.utils.types import VectorizerProtocol
 
 
 class TextClassifier(ABC, BaseEstimator):
@@ -76,7 +84,8 @@ class TextClassifier(ABC, BaseEstimator):
 
     Attributes:
         vectorizer: Text vectorization component that converts raw text to feature vectors.
-                   Must implement either a transform() method or be callable.
+                   Must implement either a transform() method (VectorizerProtocol) or be callable.
+                   Type: Union[VectorizerProtocol, Callable[[Sequence[str]], np.ndarray]]
         _is_fitted: Boolean flag indicating whether the model has been trained.
         _expects_vectors: Class attribute (set on the class, not instance) indicating whether
                          the classifier expects pre-vectorized input. Set to False for classifiers
@@ -124,12 +133,15 @@ class TextClassifier(ABC, BaseEstimator):
         array([0])
     """
 
-    def __init__(self, vectorizer: Any) -> None:
+    def __init__(
+        self, vectorizer: VectorizerProtocol | Callable[[Sequence[str]], np.ndarray]
+    ) -> None:
         """Initialize the text classifier.
 
         Args:
-            vectorizer: Text vectorization component that converts raw text to feature vectors.
-                       Must implement either a transform() method or be callable.
+            vectorizer: Text vectorization component that converts raw text to
+                       feature vectors. Must implement either a transform()
+                       method (VectorizerProtocol) or be callable.
 
         Notes:
             For BaseEstimator compatibility, parameters should be stored as attributes with
@@ -140,8 +152,15 @@ class TextClassifier(ABC, BaseEstimator):
         self._vectorizer = vectorizer
         self._is_fitted = False
 
+        # Multi-label support attributes (set during fit())
+        self._is_multilabel = False  # True if model was trained with multi-label data
+        self._label_binarizer = None  # MultiLabelBinarizer instance (for multi-label only)
+        self._classes = (
+            None  # All unique class labels (numpy array for single-label, list for multi-label)
+        )
+
     @property
-    def vectorizer(self) -> Any:
+    def vectorizer(self) -> VectorizerProtocol | Callable[[Sequence[str]], np.ndarray]:
         """Get the vectorizer instance.
 
         Returns:
@@ -153,7 +172,7 @@ class TextClassifier(ABC, BaseEstimator):
         """
         return self._vectorizer
 
-    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         This method is required by scikit-learn's BaseEstimator interface and
@@ -171,7 +190,7 @@ class TextClassifier(ABC, BaseEstimator):
         # Get parameters from constructor (__init__ method)
         import inspect
 
-        init_signature = inspect.signature(self.__init__)
+        init_signature = inspect.signature(type(self).__init__)
 
         for parameter_name in init_signature.parameters:
             if parameter_name != "self" and hasattr(self, parameter_name):
@@ -240,12 +259,52 @@ class TextClassifier(ABC, BaseEstimator):
         if len(X_raw) != len(y):
             raise ValueError("X_raw and y must have the same length")
 
-        # Fit vectorizer if it has a fit method
+        # ========================================================================
+        # STEP 1: Detect label format (single-label vs multi-label)
+        # ========================================================================
+        # Auto-detect format from input data:
+        # - Single-label: y = ["class1", "class2", "class1"]  (list of strings)
+        # - Multi-label: y = [["class1"], ["class2"], ["class1", "class2"]]  (list of lists)
+        self._is_multilabel = is_multilabel(y)
+
+        # ========================================================================
+        # STEP 2: Convert labels to format expected by sklearn models
+        # ========================================================================
+        if self._is_multilabel:
+            # MULTI-LABEL PATH:
+            # 1. Ensure multi-label format (list of lists)
+            y_multilabel = to_multilabel_format(y)
+            # 2. Convert to binary matrix for sklearn (n_samples x n_classes, 0/1 values)
+            y_binary, self._label_binarizer = binarize_labels(y_multilabel)
+            # 3. Store classes from binarizer
+            if self._label_binarizer is not None:
+                self._classes = self._label_binarizer.classes_
+            else:
+                raise RuntimeError("Label binarizer not created")
+            # 4. Pass binary matrix to model training
+            y_for_training = y_binary
+        else:
+            # SINGLE-LABEL PATH:
+            # 1. Convert to numpy array (sklearn expects array for single-label)
+            y_for_training = np.asarray(y)
+            # 2. Extract unique classes
+            self._classes = np.unique(y_for_training)
+
+        # ========================================================================
+        # STEP 3: Vectorize text and train model
+        # ========================================================================
+        # Fit vectorizer if it has a fit method (e.g., TF-IDF needs vocabulary)
         if hasattr(self._vectorizer, "fit"):
             self._vectorizer.fit(X_raw)
 
+        # Convert text to feature vectors
         X_vec = self.vectorize(X_raw)
-        self._fit_model(X_vec, y)
+
+        # Train the model (subclass implements _fit_model)
+        # For single-label: y_for_training is array of shape (n_samples,)
+        # For multi-label: y_for_training is binary matrix of shape (n_samples, n_classes)
+        self._fit_model(X_vec, y_for_training)
+
         self._is_fitted = True
         return self
 
@@ -282,10 +341,76 @@ class TextClassifier(ABC, BaseEstimator):
             raise ValueError("Input data cannot be empty")
 
         try:
+            # ========================================================================
+            # STEP 1: Vectorize text and get raw predictions from model
+            # ========================================================================
             X_vec = self.vectorize(X_raw)
-            return self._predict_model(X_vec)
+            predictions_raw = self._predict_model(X_vec)
+
+            # ========================================================================
+            # STEP 2: Convert predictions back to original label format
+            # ========================================================================
+            if self._is_multilabel:
+                # MULTI-LABEL PATH:
+                # Model returns binary matrix (n_samples x n_classes, 0/1 values)
+                # Convert back to multi-label format (list of lists)
+                if isinstance(predictions_raw, np.ndarray) and predictions_raw.ndim == 2:
+                    # Binary matrix format: convert to list of lists
+                    if self._classes is None or len(self._classes) == 0:
+                        raise ValueError(
+                            "Model._classes is not initialized. This should not happen. "
+                            "Make sure the model was properly trained with multilabel data."
+                        )
+                    predictions = multilabel_predictions_from_binary(predictions_raw, self._classes)
+                elif isinstance(predictions_raw, np.ndarray) and predictions_raw.ndim == 1:
+                    # 1D array - this shouldn't happen for multilabel, but handle it
+                    # If it's integer indices, we can't convert without classes
+                    if self._classes is None or len(self._classes) == 0:
+                        raise ValueError(
+                            "Model._classes is not initialized. Cannot convert "
+                            "1D predictions to multilabel format."
+                        )
+                    # Convert 1D array to 2D binary matrix (assuming indices)
+                    # This is a fallback - shouldn't normally happen
+                    n_samples = len(predictions_raw)
+                    n_classes = len(self._classes)
+                    binary_matrix = np.zeros((n_samples, n_classes), dtype=int)
+                    for i, idx in enumerate(predictions_raw):
+                        if 0 <= int(idx) < n_classes:
+                            binary_matrix[i, int(idx)] = 1
+                    predictions = multilabel_predictions_from_binary(binary_matrix, self._classes)
+                else:
+                    # Fallback: if predictions_raw is not 2D, it might be in wrong format
+                    # Check if it's a 1D array of integers (indices) - this shouldn't happen
+                    if isinstance(predictions_raw, np.ndarray) and predictions_raw.ndim == 1:
+                        if self._classes is None or len(self._classes) == 0:
+                            raise ValueError(
+                                "Model._classes is not initialized. Cannot "
+                                "convert 1D predictions to multilabel format."
+                            )
+                        # Convert 1D array of indices to 2D binary matrix
+                        n_samples = len(predictions_raw)
+                        n_classes = len(self._classes)
+                        binary_matrix = np.zeros((n_samples, n_classes), dtype=int)
+                        for i, idx in enumerate(predictions_raw):
+                            idx_int = int(idx)
+                            if 0 <= idx_int < n_classes:
+                                binary_matrix[i, idx_int] = 1
+                        predictions = multilabel_predictions_from_binary(
+                            binary_matrix, self._classes
+                        )
+                    else:
+                        # Fallback: wrap single predictions in lists
+                        predictions = to_multilabel_format(predictions_raw)
+            else:
+                # SINGLE-LABEL PATH:
+                # Model returns array of single labels (n_samples,)
+                # Return as numpy array for consistency
+                predictions = np.asarray(predictions_raw)
+
+            return predictions
         except Exception as e:
-            raise RuntimeError(f"Prediction failed: {str(e)}") from e
+            raise RuntimeError(f"Prediction failed: {e!s}") from e
 
     def vectorize(self, texts: Sequence[str]) -> np.ndarray:
         """Convert raw text to feature vectors.
@@ -325,7 +450,11 @@ class TextClassifier(ABC, BaseEstimator):
 
         Args:
             X_vec: Array of vectorized text features with shape (n_samples, n_features).
-            y: Array of target labels with shape (n_samples,).
+            y: Target labels in format expected by sklearn:
+                - Single-label: numpy array of shape (n_samples,) with string labels
+                  Example: array(["class1", "class2", "class1"])
+                - Multi-label: binary matrix of shape (n_samples, n_classes) with 0/1 values
+                  Example: array([[1, 0], [0, 1], [1, 1]])  (3 samples, 2 classes)
 
         Returns:
             None
@@ -335,6 +464,8 @@ class TextClassifier(ABC, BaseEstimator):
             - Should store trained model parameters as instance attributes
             - May raise appropriate exceptions for training failures
             - Should not modify X_vec or y (treat as read-only)
+            - Format conversion (single-label <-> multi-label) is handled by base class
+            - Check self._is_multilabel to determine which format y is in
         """
         raise NotImplementedError("Subclasses must implement _fit_model")
 
@@ -349,12 +480,18 @@ class TextClassifier(ABC, BaseEstimator):
             X_vec: Array of vectorized text features with shape (n_samples, n_features).
 
         Returns:
-            Array of predicted labels with shape (n_samples,).
+            Predictions in format expected by sklearn:
+            - Single-label: numpy array of shape (n_samples,) with string labels
+              Example: array(["class1", "class2", "class1"])
+            - Multi-label: binary matrix of shape (n_samples, n_classes) with 0/1 values
+              Example: array([[1, 0], [0, 1], [1, 1]])  (3 samples, 2 classes)
 
         Notes:
             - Implementation should handle any model-specific prediction logic
-            - Should return numpy array of predicted labels
+            - Should return numpy array (format depends on self._is_multilabel)
             - Should not modify X_vec (treat as read-only)
             - May raise appropriate exceptions for prediction failures
+            - Format conversion (binary matrix <-> list of lists) is handled by base class
+            - Check self._is_multilabel to determine which format to return
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass

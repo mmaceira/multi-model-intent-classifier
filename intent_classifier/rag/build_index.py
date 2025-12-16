@@ -1,96 +1,43 @@
-# NOTE: Embedding generation is handled by `scripts/pipeline/02_build_embeddings.py`.
-# This script now only builds indices if precomputed embeddings are supplied.
-# ----- Patched for OpenAI embedding support -----
-from __future__ import annotations
-
-import os
-
-# Add the parent directory to Python path to ensure imports work correctly
-
-try:
-    from intent_classifier.embeddings.openai_embedder import OpenAIEmbedder
-except ImportError:
-    # Fall back to relative import if absolute import fails
-    from ..embeddings.openai_embedder import OpenAIEmbedder
-
 """
 Build Index Module
 
 This module provides functionality for building FAISS indices for the RAG
 (Retrieval-Augmented Generation) system. It supports both SentenceTransformer
-and OpenAI embeddings, with options for backward compatibility and parallel
-index building.
+and OpenAI embeddings.
+
+Note: Embedding generation is handled by `scripts/pipeline/02_build_embeddings.py`.
+This module builds FAISS indices from precomputed embeddings or generates embeddings
+on-the-fly for index building.
 
 Key Features:
 - FAISS index building
-- Support for multiple embedding types
-- Parallel index building
-- Embedding generation
+- Support for multiple embedding types (SBERT, OpenAI)
 - Metadata management
 
-Classes:
-- None (Module-level functions only)
-
-Functions:
-- _load_precomputed_embeddings: Load precomputed embeddings from file
-- _load_csv: Load data from CSV file
-- _load_clinc150: Load CLINC150 dataset
-- main: Main entry point for building indices
+Public Functions:
+- main: Main entry point for building indices (CLI)
 - build_openai_index: Build index using OpenAI embeddings
-- load_embedder: Load appropriate embedder based on configuration
-
-Dependencies:
-- argparse
-- csv
-- json
-- numpy
-- tqdm
-- pathlib
-- os
-- sys
-- faiss
-- sentence_transformers
-- openai
 
 Example Usage:
     >>> # Build indices using default settings
-    >>> python build_index.py
+    >>> python -m intent_classifier.rag.build_index
 
     >>> # Build indices with custom settings
-    >>> python build_index.py --use_openai --build_both
+    >>> python -m intent_classifier.rag.build_index --use_openai --build_both
 """
+
+from __future__ import annotations
 
 import argparse  # noqa: E402
 import csv  # noqa: E402
-import json  # noqa: E402
-from typing import List  # noqa: E402
-
-import numpy as np  # noqa: E402
+import os
+from pathlib import Path  # noqa: E402
 
 from . import _ARTIFACTS_DIR, _EMBEDDINGS_DIR, _OPENAI_DIR, _SBERT_DIR  # noqa: E402
 from .vector_store import VectorStore  # noqa: E402
 
-
-# ---------- Helper to load precomputed embeddings ----------
-def _load_precomputed_embeddings(meta_path):
-    if not meta_path.exists():
-        raise FileNotFoundError(
-            f"Precomputed embeddings not found at {meta_path}. "
-            "Run `scripts/pipeline/02_build_embeddings.py` first."
-        )
-    vectors = []
-    meta = []
-    with open(meta_path) as fh:
-        for line in fh:
-            rec = json.loads(line)
-            vectors.append(rec["vector"])
-            meta.append(rec)
-    emb = np.array(vectors, dtype="float32")
-    return emb, meta
-
-
+# Constants
 DEFAULT_EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_SOURCE = "clinc150"
 
 # Create the base artifacts and embeddings directories
 _ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -100,20 +47,32 @@ _EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 _SBERT_DIR.mkdir(parents=True, exist_ok=True)
 _OPENAI_DIR.mkdir(parents=True, exist_ok=True)
 
-# New paths in separate directories
+# Paths for SBERT and OpenAI indices
 DEFAULT_SBERT_FAISS_PATH = _SBERT_DIR / "index.faiss"
 DEFAULT_SBERT_META_PATH = _SBERT_DIR / "meta.jsonl"
 DEFAULT_OPENAI_FAISS_PATH = _OPENAI_DIR / "index.faiss"
 DEFAULT_OPENAI_META_PATH = _OPENAI_DIR / "meta.jsonl"
 
-# Default to SentenceTransformer embeddings
+# Default paths (SBERT)
 DEFAULT_FAISS_PATH = DEFAULT_SBERT_FAISS_PATH
 DEFAULT_META_PATH = DEFAULT_SBERT_META_PATH
 
 
-def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
+# Helper functions
+def _get_default_source() -> str:
+    """Get default dataset source by discovering available datasets."""
+    from intent_classifier.utils.config_loader import get_first_available_dataset
+
+    dataset = get_first_available_dataset()
+    return dataset if dataset is not None else "clinc150"  # Fallback for backward compatibility
+
+
+DEFAULT_SOURCE = _get_default_source()
+
+
+def _load_csv(csv_path: str) -> tuple[list[str], list[str], list[int]]:
     texts, labels, years = [], [], []
-    with open(csv_path) as f:
+    with open(csv_path, encoding="utf-8") as f:
         for row in csv.DictReader(f):
             texts.append(row["text"])
             labels.append(row["label"])
@@ -121,23 +80,56 @@ def _load_csv(csv_path: str) -> tuple[List[str], List[str], List[int]]:
     return texts, labels, years
 
 
-def _load_clinc150() -> tuple[list, list, list]:
+def _load_dataset(dataset_name: str) -> tuple[list, list, list]:
+    """Load a dataset by name.
+
+    Args:
+        dataset_name: Name of the dataset to load
+
+    Returns:
+        Tuple of (texts, labels, years) where years are placeholders (0)
+    """
     from intent_classifier.datasets.dataset import get_dataset
 
-    X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name="clinc150")
+    X_train, y_train, X_val, y_val, _, _, _ = get_dataset(dataset_name=dataset_name)
     # Merge validation into training
     X_train = X_train + X_val
+    # Handle both single-label (list of strings) and multi-label (list of lists) formats
+    if y_train and isinstance(y_train[0], list):
+        # Multi-label: convert to string representation for compatibility
+        y_train = [", ".join(labels) if labels else "" for labels in y_train]
+    if y_val and isinstance(y_val[0], list):
+        y_val = [", ".join(labels) if labels else "" for labels in y_val]
     y_train = y_train + y_val
-    # CLINC150 doesn't have years, use placeholder
+    # Datasets don't have years, use placeholder
     return X_train, y_train, [0] * len(X_train)
 
 
-def main():
+def main() -> None:
+    # Discover available datasets for choices
+    available_datasets = []
+    try:
+        from intent_classifier.utils.paths import get_repo_root
+
+        repo_root = get_repo_root()
+        dataset_dir = repo_root / "config" / "dataset"
+        if dataset_dir.exists():
+            available_datasets = sorted([d.name for d in dataset_dir.iterdir() if d.is_dir()])
+    except Exception:
+        pass
+    if not available_datasets:
+        available_datasets = ["clinc150"]  # Fallback
+
     p = argparse.ArgumentParser(description="Build FAISS index for RAG")
     p.add_argument("--emb_model", default=DEFAULT_EMB_MODEL)
     src = p.add_mutually_exclusive_group()
     src.add_argument("--train_csv")
-    src.add_argument("--source", default=DEFAULT_SOURCE, choices=["clinc150"])
+    src.add_argument(
+        "--source",
+        default=DEFAULT_SOURCE,
+        choices=available_datasets,
+        help=f"Dataset source (available: {', '.join(available_datasets)})",
+    )
     p.add_argument("--faiss_path", default=str(DEFAULT_FAISS_PATH))
     p.add_argument("--meta_path", default=str(DEFAULT_META_PATH))
     p.add_argument("--use_openai", action="store_true", help="Use OpenAI embeddings")
@@ -147,7 +139,7 @@ def main():
     if args.train_csv:
         texts, labels, years = _load_csv(args.train_csv)
     else:
-        texts, labels, years = _load_clinc150()
+        texts, labels, years = _load_dataset(args.source)
 
     # Set appropriate paths based on the specified model
     # The paths now refer to our new directory structure
@@ -171,7 +163,7 @@ def main():
         print(f"Embedding {len(texts)} documents with {args.emb_model}…")
         emb = VectorStore.embed(args.emb_model, texts)
 
-        meta: List[dict] = []
+        meta: list[dict] = []
         for i, (t, label_val, y, v) in enumerate(zip(texts, labels, years, emb, strict=False)):
             meta.append({"id": i, "label": label_val, "year": y, "text": t, "vector": v.tolist()})
 
@@ -182,8 +174,12 @@ def main():
 
 
 def build_openai_index(
-    texts, labels, years, faiss_path=DEFAULT_OPENAI_FAISS_PATH, meta_path=DEFAULT_OPENAI_META_PATH
-):
+    texts: list[str],
+    labels: list[str],
+    years: list[int],
+    faiss_path: Path = DEFAULT_OPENAI_FAISS_PATH,
+    meta_path: Path = DEFAULT_OPENAI_META_PATH,
+) -> None:
     """Build a FAISS index using OpenAI embeddings.
 
     Args:
@@ -199,15 +195,22 @@ def build_openai_index(
     faiss_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Initialize OpenAI embedder
-    openai_embedder = OpenAIEmbedder(model="text-embedding-3-small", batch_size=50)
+    from intent_classifier.utils.embeddings import EmbeddingGenerator
 
-    # Generate embeddings (encode() now returns numpy array directly)
-    emb = openai_embedder.encode(texts).astype("float32")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable must be set for OpenAI embeddings")
+    openai_embedder = EmbeddingGenerator(
+        api_key=api_key, model="text-embedding-3-small", batch_size=50
+    )
+
+    # Generate embeddings
+    emb = openai_embedder.generate_embeddings(texts).astype("float32")
 
     print(f"Generated {len(emb)} OpenAI embeddings with dimension {emb.shape[1]}")
 
     # Create metadata
-    meta: List[dict] = []
+    meta: list[dict] = []
     for i, (t, label_val, y, v) in enumerate(zip(texts, labels, years, emb, strict=False)):
         meta.append({"id": i, "label": label_val, "year": y, "text": t, "vector": v.tolist()})
 
@@ -218,29 +221,3 @@ def build_openai_index(
 
 if __name__ == "__main__":
     main()
-
-
-def load_embedder(model_name: str = None, use_openai: bool = False, batch_size: int = 100):
-    """
-    Load either a local SBERT model (CPU) or OpenAI remote embedder.
-
-    Parameters
-    ----------
-    model_name
-        Local transformer model name.
-    use_openai
-        When True, route to OpenAI. Can also be toggled with env var USE_OPENAI_EMBEDDINGS=1.
-    batch_size
-        Batch size for OpenAI requests.
-    """
-    if use_openai or os.getenv("USE_OPENAI_EMBEDDINGS") == "1":
-        print("Using OpenAI embeddings endpoint...")
-        return OpenAIEmbedder(batch_size=batch_size)
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        return SentenceTransformer(model_name or "all-MiniLM-L6-v2")
-    except ImportError as e:
-        raise RuntimeError(
-            "SentenceTransformer not installed; install or set USE_OPENAI_EMBEDDINGS=1"
-        ) from e

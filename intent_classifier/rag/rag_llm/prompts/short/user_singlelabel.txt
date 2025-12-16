@@ -1,0 +1,7 @@
+Labels: {allowed_labels}
+Examples:
+{few_shots}
+
+Query: {query}
+
+Return: {{ "label": "<label>", "confidence": 0.0-1.0 }}
