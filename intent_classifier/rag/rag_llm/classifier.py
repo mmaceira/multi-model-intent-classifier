@@ -720,7 +720,7 @@ def _load_examples(
     The dataset to use is primarily determined from the active experiment
     configuration (via ``load_config_with_metadata``). This avoids any
     hard-coded fallback to CLINC150 when running experiments on other
-    datasets such as ``tandem_go`` or ``multilabel_csv``.
+    datasets such as ``multilabel_csv``.
     """
     from intent_classifier.datasets.dataset import get_dataset
     from intent_classifier.utils.config_loader import (
